@@ -1,0 +1,164 @@
+{% extends "base.html" %}
+
+{% block title %}{{ product.prod_name }} - Lookalike{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+    <!-- Product Image -->
+    <div class="col-md-6">
+        <div class="position-relative">
+            <img src="{{ product.img_hdfs_path }}" class="img-fluid rounded shadow-sm w-100"
+                alt="{{ product.prod_name }}" onerror="this.src='https://placehold.co/600x600?text=No+Image'">
+            <button id="likeBtn"
+                class="btn btn-light position-absolute bottom-0 end-0 m-3 border shadow-sm rounded-circle p-2"
+                style="width: 45px; height: 45px;">
+                <i id="likeIcon" class="far fa-heart fs-5 text-danger"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- Product Info -->
+    <div class="col-md-6">
+        <div class="mb-3">
+            <small class="text-muted fw-bold">{{ product.brand_name }}</small>
+            <h4 class="fw-bold mt-1">{{ product.prod_name }}</h4>
+            <div class="text-muted small">모델명: {{ product.model_code }}</div>
+        </div>
+
+        <!-- <div class="mb-4">
+            <h6 class="fw-bold">상품 설명</h6>
+            <p class="text-muted small">{{ product.detected_desc or '상품 설명이 없습니다.' }}</p>
+        </div> -->
+
+        <!-- Official Price -->
+        <a href="{{ product.origin_url }}" target="_blank" class="text-decoration-none">
+            <div class="card bg-light border-primary mb-4" style="transition: transform 0.2s;">
+                <div class="card-body d-flex align-items-center justify-content-between">
+                    <div>
+                        <i class="fas fa-store text-primary me-2"></i>
+                        <span class="fw-bold text-primary">{{ product.brand_name }} 공식몰 가격</span>
+                    </div>
+                    <div class="d-flex align-items-center">
+                        <h5 class="m-0 fw-bold text-primary">{{ "{:,}".format(product.base_price) }}원</h5>
+                        <i class="fas fa-chevron-right text-primary ms-3 opacity-75"></i>
+                    </div>
+                </div>
+            </div>
+        </a>
+
+        <!-- Price Comparison -->
+        <h6 class="fw-bold mb-2"><i class="fas fa-money-bill-wave text-warning me-2"></i>가격 비교 (낮은 가격 순)</h6>
+        <div class="list-group">
+            {% if prices %}
+            {% for price in prices %}
+            <div class="list-group-item d-flex align-items-center justify-content-between">
+                <div>
+                    <div class="d-flex align-items-center">
+                        {% if price.image_url %}
+                        <img src="{{ price.image_url }}" alt="thumbnail" class="rounded me-3 border"
+                            style="width: 50px; height: 50px; object-fit: cover;">
+                        {% endif %}
+                        <div>
+                            <div class="d-flex align-items-center mb-1">
+                                {% if loop.index == 1 %}
+                                <span class="badge bg-danger me-2">최저가</span>
+                                {% endif %}
+                                <span class="fw-bold {% if loop.index > 1 %}text-secondary{% endif %}">{{
+                                    price.mall_name }}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="text-end">
+                    <div class="fw-bold {% if loop.index == 1 %}text-danger{% endif %}">{{
+                        "{:,}".format(price.naver_price)
+                        }}원</div>
+                    {% if price.discount > 0 %}
+                    <small class="text-success" style="font-size: 0.75rem;">{{ "{:,}".format(price.discount) }}원 절약 ({{
+                        price.discount_rate }}% 할인)</small>
+                    {% endif %}
+                </div>
+                <a href="{{ price.mall_url }}" target="_blank"
+                    class="btn btn-outline-{% if loop.index == 1 %}dark{% else %}secondary{% endif %} btn-sm ms-2">구매 <i
+                        class="fas fa-external-link-alt"></i></a>
+            </div>
+            {% endfor %}
+            {% else %}
+            <div class="list-group-item text-center text-muted">
+                가격 정보가 없습니다
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', async function () {
+        const productId = "{{ product.product_id }}";
+        const likeBtn = document.getElementById('likeBtn');
+        const likeIcon = document.getElementById('likeIcon');
+        let isLiked = false;
+
+        // 1. 페이지 로드 시 자동으로 조회 기록
+        try {
+            await fetch(`/api/products/${productId}/view`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            });
+        } catch (error) {
+            console.error('조회 기록 실패:', error);
+        }
+
+        // 2. 좋아요 상태 확인
+        try {
+            const response = await fetch(`/api/products/${productId}/like-status`);
+            const data = await response.json();
+            if (data.success && data.liked) {
+                isLiked = true;
+                likeIcon.classList.remove('far');
+                likeIcon.classList.add('fas');
+            }
+        } catch (error) {
+            console.error('좋아요 상태 확인 실패:', error);
+        }
+
+        // 3. 좋아요 버튼 클릭 이벤트
+        likeBtn.addEventListener('click', async function () {
+            try {
+                if (isLiked) {
+                    // 좋아요 취소
+                    const response = await fetch(`/api/products/${productId}/like`, {
+                        method: 'DELETE'
+                    });
+                    const data = await response.json();
+                    if (data.success) {
+                        isLiked = false;
+                        likeIcon.classList.remove('fas');
+                        likeIcon.classList.add('far');
+                    } else if (data.message) {
+                        alert(data.message);
+                    }
+                } else {
+                    // 좋아요 추가
+                    const response = await fetch(`/api/products/${productId}/like`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' }
+                    });
+                    const data = await response.json();
+                    if (data.success) {
+                        isLiked = true;
+                        likeIcon.classList.remove('far');
+                        likeIcon.classList.add('fas');
+                    } else if (data.message) {
+                        alert(data.message);
+                    }
+                }
+            } catch (error) {
+                console.error('좋아요 처리 실패:', error);
+                alert('로그인이 필요합니다.');
+            }
+        });
+    });
+</script>
+{% endblock %}

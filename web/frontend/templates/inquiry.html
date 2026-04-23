@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+
+{% block title %}Lookalike - 문의 게시판{% endblock %}
+
+{% block content %}
+<div class="inquiry-page">
+    <!-- 헤더 -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h4 class="fw-bold mb-1"><i class="far fa-comment-dots me-2 text-primary"></i>문의 게시판</h4>
+            <p class="text-muted mb-0" style="font-size: 0.85rem;">궁금한 점이나 불편사항을 문의해주세요.</p>
+        </div>
+        <button class="btn btn-dark btn-sm rounded-pill px-3 shadow-sm" onclick="showWriteForm()" id="writeInquiryBtn">
+            <i class="fas fa-pen me-1"></i> 문의 작성
+        </button>
+    </div>
+
+    <!-- 로그인 필요 안내 -->
+    <div class="text-center py-5 d-none" id="requireLoginMsg">
+        <div class="mb-3">
+            <i class="fas fa-lock fa-3x text-muted"></i>
+        </div>
+        <h5 class="fw-bold text-muted">로그인이 필요합니다</h5>
+        <p class="text-muted" style="font-size: 0.9rem;">문의 게시판을 이용하려면 로그인해주세요.</p>
+        <button class="btn btn-dark btn-sm rounded-pill px-4" data-bs-toggle="modal" data-bs-target="#authModal">
+            <i class="fas fa-sign-in-alt me-1"></i> 로그인하기
+        </button>
+    </div>
+
+    <!-- 문의 작성 폼 (숨김) -->
+    <div class="card border-0 shadow-sm rounded-4 mb-4 d-none" id="writeFormCard" style="overflow: hidden;">
+        <div class="card-header bg-dark text-white py-3 px-4 border-0">
+            <h6 class="mb-0 fw-bold"><i class="fas fa-pen-nib me-2"></i>새 문의 작성</h6>
+        </div>
+        <div class="card-body p-4">
+            <form id="inquiryForm" novalidate>
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">제목</label>
+                    <input type="text" class="form-control rounded-3" id="inquiryTitle" placeholder="문의 제목을 입력하세요"
+                        required maxlength="200" style="padding: 12px 16px; border: 1px solid #e0e0e0;">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">내용</label>
+                    <textarea class="form-control rounded-3" id="inquiryContent" rows="6"
+                        placeholder="문의 내용을 자세히 작성해주세요" required
+                        style="padding: 12px 16px; border: 1px solid #e0e0e0; resize: vertical;"></textarea>
+                </div>
+                <div class="d-flex justify-content-end gap-2">
+                    <button type="button" class="btn btn-outline-secondary rounded-pill px-3" onclick="hideWriteForm()">
+                        취소
+                    </button>
+                    <button type="submit" class="btn btn-dark rounded-pill px-4" id="submitInquiryBtn">
+                        <span class="btn-text">등록하기</span>
+                        <span class="spinner-border spinner-border-sm d-none" id="inquirySpinner"></span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 문의 목록 -->
+    <div id="inquiryListSection">
+        <!-- 상태 요약 -->
+        <div class="row g-3 mb-4" id="inquirySummary">
+            <div class="col-4">
+                <div class="bg-white rounded-4 p-3 text-center shadow-sm" style="border-left: 4px solid #0d6efd;">
+                    <div class="fw-bold fs-4 text-primary" id="totalCount">0</div>
+                    <div class="text-muted" style="font-size: 0.8rem;">전체</div>
+                </div>
+            </div>
+            <div class="col-4">
+                <div class="bg-white rounded-4 p-3 text-center shadow-sm" style="border-left: 4px solid #ffc107;">
+                    <div class="fw-bold fs-4 text-warning" id="pendingCount">0</div>
+                    <div class="text-muted" style="font-size: 0.8rem;">대기중</div>
+                </div>
+            </div>
+            <div class="col-4">
+                <div class="bg-white rounded-4 p-3 text-center shadow-sm" style="border-left: 4px solid #198754;">
+                    <div class="fw-bold fs-4 text-success" id="answeredCount">0</div>
+                    <div class="text-muted" style="font-size: 0.8rem;">답변완료</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 문의 리스트 -->
+        <div id="inquiryList"></div>
+
+        <!-- 빈 상태 -->
+        <div class="text-center py-5 d-none" id="emptyState">
+            <div class="mb-3">
+                <i class="far fa-comment-dots fa-3x text-muted" style="opacity: 0.4;"></i>
+            </div>
+            <h6 class="text-muted fw-bold">아직 문의글이 없습니다</h6>
+            <p class="text-muted" style="font-size: 0.85rem;">궁금한 점이 있다면 문의를 작성해보세요!</p>
+        </div>
+
+        <!-- 페이지네이션 -->
+        <nav id="paginationNav" class="mt-4 d-none">
+            <ul class="pagination justify-content-center" id="pagination"></ul>
+        </nav>
+    </div>
+
+    <!-- 문의 상세 보기 (숨김) -->
+    <div class="d-none" id="inquiryDetailSection">
+        <button class="btn btn-sm btn-outline-secondary rounded-pill mb-3 px-3" onclick="backToList()">
+            <i class="fas fa-arrow-left me-1"></i> 목록으로
+        </button>
+
+        <div class="card border-0 shadow-sm rounded-4" style="overflow: hidden;" id="inquiryDetailCard">
+            <!-- 동적으로 채워짐 -->
+        </div>
+    </div>
+</div>
+
+<!-- 수정 모달 -->
+<div class="modal fade" id="editModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg" style="border-radius: 16px;">
+            <div class="modal-header border-0 pb-0 px-4 pt-4">
+                <h5 class="modal-title fw-bold">문의 수정</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4">
+                <form id="editForm" novalidate>
+                    <input type="hidden" id="editInquiryId">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">제목</label>
+                        <input type="text" class="form-control rounded-3" id="editTitle"
+                            style="padding: 12px 16px; border: 1px solid #e0e0e0;" required maxlength="200">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">내용</label>
+                        <textarea class="form-control rounded-3" id="editContent" rows="5"
+                            style="padding: 12px 16px; border: 1px solid #e0e0e0; resize: vertical;"
+                            required></textarea>
+                    </div>
+                    <div class="d-flex justify-content-end gap-2">
+                        <button type="button" class="btn btn-outline-secondary rounded-pill px-3"
+                            data-bs-dismiss="modal">취소</button>
+                        <button type="submit" class="btn btn-dark rounded-pill px-4">저장</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="/static/js/inquiry.js"></script>
+{% endblock %}

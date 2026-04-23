@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+
+{% block title %}Lookalike - 최근 본 상품{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <h4 class="mb-4 fw-bold">최근 본 상품</h4>
+
+    <!-- 상품 목록 -->
+    <div id="productsContainer" class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
+        <!-- 상품 카드가 여기에 동적으로 추가됩니다 -->
+    </div>
+
+    <!-- 빈 상태 -->
+    <div id="emptyState" class="text-center py-5 d-none">
+        <i class="far fa-clock fa-3x text-muted mb-3"></i>
+        <p class="text-muted">최근 본 상품이 없습니다.</p>
+        <a href="/" class="btn btn-primary">상품 검색하기</a>
+    </div>
+
+    <!-- 로딩 -->
+    <div id="loading" class="text-center py-5">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">로딩 중...</span>
+        </div>
+    </div>
+</div>
+
+{% endblock %}

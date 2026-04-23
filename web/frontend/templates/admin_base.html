@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <script src="/static/js/admin_common.js"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Lookalike Admin{% endblock %}</title>
+    <!-- [성능] CDN 도메인 preconnect: DNS + TLS 핸드셰이크 미리 수행 -->
+    <link rel="preconnect" href="https://cdn.jsdelivr.net">
+    <link rel="preconnect" href="https://cdnjs.cloudflare.com">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- [성능] defer: DOMContentLoaded 이후 실행, 렌더링 블로킹 방지 -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js" defer></script>
+    <link href="/static/css/style.css?v=2" rel="stylesheet">
+    <link href="/static/css/admin_style.css?v=2" rel="stylesheet">
+</head>
+
+<body>
+    <!-- 어드민 인증 오버레이 제거됨 (서버 사이드 렌더링 검증 및 admin_login.html로 대체) -->
+
+    <!-- 프로페셔널 사이드바 -->
+    <div class="sidebar" id="adminSidebar">
+        <!-- 햄버거 메뉴 토글 버튼 -->
+        <button class="sidebar-toggle" onclick="toggleSidebar()" title="메뉴 접기/펴기">
+            <i class="fas fa-bars" id="toggleIcon"></i>
+        </button>
+
+        <!-- 스크롤 가능 영역 -->
+        <div class="sidebar-scroll">
+            <!-- 로고 -->
+            <a href="/admin/infra" class="sidebar-logo">
+                <i class="fas fa-user-shield"></i>
+                <span class="sidebar-text">관리자 페이지</span>
+            </a>
+
+            <hr>
+
+            <!-- 네비게이션 메뉴 -->
+            <ul class="nav nav-pills flex-column">
+                <li class="nav-item">
+                    <a href="/admin/infra" class="nav-link {% if request.url.path == '/admin/infra' %}active{% endif %}"
+                        data-tooltip="인프라 모니터링">
+                        <i class="fas fa-server"></i>
+                        <span class="sidebar-text">인프라 모니터링</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="/admin/logs" class="nav-link {% if request.url.path == '/admin/logs' %}active{% endif %}"
+                        data-tooltip="로그 모니터링">
+                        <i class="fas fa-file-alt"></i>
+                        <span class="sidebar-text">로그 모니터링</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="/admin/inquiry"
+                        class="nav-link {% if request.url.path == '/admin/inquiry' %}active{% endif %}"
+                        data-tooltip="문의 관리">
+                        <i class="far fa-comment-dots"></i>
+                        <span class="sidebar-text">문의 관리</span>
+                    </a>
+                </li>
+                <!--
+                <li class="nav-item">
+                    <a href="/admin/stats" class="nav-link {% if request.url.path == '/admin/stats' %}active{% endif %}"
+                        data-tooltip="통계 모니터링">
+                        <i class="fas fa-chart-line"></i>
+                        <span class="sidebar-text">통계 모니터링</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="/admin/batch" class="nav-link {% if request.url.path == '/admin/batch' %}active{% endif %}"
+                        data-tooltip="배치작업 모니터링">
+                        <i class="fas fa-cogs"></i>
+                        <span class="sidebar-text">배치작업 모니터링</span>
+                    </a>
+                </li>
+
+                 -->
+            </ul>
+        </div>
+
+        <!-- 접힌 상태 액션 버튼 -->
+        <div class="sidebar-collapsed-actions">
+            <a href="/" class="sidebar-action-btn" title="사용자 홈으로">
+                <i class="fas fa-home"></i>
+            </a>
+            <button class="sidebar-action-btn logout-btn" onclick="adminLogout()" title="로그아웃">
+                <i class="fas fa-sign-out-alt"></i>
+            </button>
+        </div>
+
+        <!-- 펼친 상태 드롭다운 -->
+        <div class="sidebar-dropdown">
+            <a href="#" class="dropdown-toggle" id="dropdownUser2" data-bs-toggle="dropdown" aria-expanded="false">
+                <img src="https://ui-avatars.com/api/?name=Admin&background=3b82f6&color=fff" alt="" width="36"
+                    height="36" class="rounded-circle">
+                <strong id="adminUserName" class="sidebar-text ms-2">Admin</strong>
+            </a>
+            <ul class="dropdown-menu text-small shadow" aria-labelledby="dropdownUser2">
+                <li><a class="dropdown-item" href="/">
+                        <i class="fas fa-home me-2"></i>사용자 홈으로
+                    </a></li>
+                <li>
+                    <hr class="dropdown-divider">
+                </li>
+                <li><a class="dropdown-item" href="#" onclick="adminLogout(); return false;">
+                        <i class="fas fa-sign-out-alt me-2"></i>관리자 로그아웃
+                    </a></li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- [추가] 모바일용 Offcanvas 사이드바 -->
+    <div class="offcanvas offcanvas-start" tabindex="-1" id="mobileSidebar" aria-labelledby="mobileSidebarLabel">
+        <div class="offcanvas-header">
+            <h5 class="offcanvas-title fw-bold" id="mobileSidebarLabel">
+                <i class="fas fa-user-shield text-primary me-2"></i>관리자 메뉴
+            </h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+        </div>
+        <div class="offcanvas-body d-flex flex-column">
+            <ul class="nav nav-pills flex-column mb-auto">
+                <li>
+                    <a href="/admin/infra"
+                        class="nav-link link-dark {% if request.url.path == '/admin/infra' %}active{% endif %}">
+                        <i class="fas fa-server me-2"></i> 인프라 모니터링
+                    </a>
+                </li>
+                <li>
+                    <a href="/admin/logs"
+                        class="nav-link link-dark {% if request.url.path == '/admin/logs' %}active{% endif %}">
+                        <i class="fas fa-file-alt me-2"></i> 로그 모니터링
+                    </a>
+                </li>
+                <li>
+                    <a href="/admin/inquiry"
+                        class="nav-link link-dark {% if request.url.path == '/admin/inquiry' %}active{% endif %}">
+                        <i class="far fa-comment-dots me-2"></i> 문의 관리
+                    </a>
+                </li>
+                <!--
+                <li class="nav-item">
+                    <a href="/admin/stats" class="nav-link link-dark {% if request.url.path == '/admin/stats' %}active{% endif %}">
+                        <i class="fas fa-chart-line me-2"></i> 통계 모니터링
+                    </a>
+                </li>
+                <li>
+                    <a href="/admin/batch"
+                        class="nav-link link-dark {% if request.url.path == '/admin/batch' %}active{% endif %}">
+                        <i class="fas fa-cogs me-2"></i> 배치작업 모니터링
+                    </a>
+                </li>
+
+                -->
+            </ul>
+            <hr>
+            <div class="d-grid gap-2">
+                <a href="/" class="btn btn-outline-secondary">
+                    <i class="fas fa-home me-1"></i> 사용자 홈으로
+                </a>
+                <button class="btn btn-outline-danger" onclick="adminLogout()">
+                    <i class="fas fa-sign-out-alt me-1"></i> 로그아웃
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-content" id="adminMainContent"> <!-- 초기 display 스타일 제거 -->
+        <!-- Top Bar -->
+        <div class="d-flex justify-content-between align-items-center mb-4 bg-white p-3 rounded shadow-sm">
+            <div class="d-flex align-items-center">
+                <!-- [추가] 모바일 햄버거 메뉴 버튼 -->
+                <button class="btn btn-link text-dark p-0 me-3 d-md-none" type="button" data-bs-toggle="offcanvas"
+                    data-bs-target="#mobileSidebar">
+                    <i class="fas fa-bars fs-4"></i>
+                </button>
+                <h5 class="m-0 fw-bold text-nowrap dashboard-title">{% block page_title
+                    %}Dashboard{% endblock %}</h5>
+            </div>
+
+            <div class="d-flex align-items-center">
+                <!-- Header Actions Block -->
+                <div class="me-1 me-md-3">
+                    {% block header_actions %}{% endblock %}
+                </div>
+                <div class="text-end d-none d-md-block">
+                    <div class="fw-bold" id="adminTopName">Admin</div>
+                    <small class="text-success" style="font-size: 0.7rem;">FULL ACCESS</small>
+                </div>
+                <!-- 모바일용 간단 프로필 아이콘 -->
+                <div class="d-md-none">
+                    <i class="fas fa-user-circle fs-4 text-secondary"></i>
+                </div>
+            </div>
+        </div>
+
+        {% block content %}{% endblock %}
+    </div>
+
+    <!-- [성능] defer: 병렬 다운로드 후 DOM 준비되면 실행 -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js" defer></script>
+
+    <!-- [성능 최적화 3차] 페이지 전환 속도 개선 -->
+
+</body>
+
+</html>

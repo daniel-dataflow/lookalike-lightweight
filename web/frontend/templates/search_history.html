@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+
+{% block title %}검색 히스토리 - Lookalike{% endblock %}
+
+{% block content %}
+<div class="row mb-3 align-items-center">
+    <div class="col">
+        <h4 class="fw-bold mb-0">검색 히스토리</h4>
+        <small class="text-muted">최근 검색한 상품들 확인</small>
+    </div>
+    <div class="col-auto">
+        <a href="#" class="text-decoration-none text-danger" style="font-size: 0.9rem;" id="deleteAllBtn">전체 삭제</a>
+    </div>
+</div>
+
+<div class="d-flex gap-2 mb-4 overflow-auto pb-2" id="filterBtns">
+    <button class="filter-btn active" data-filter="all">전체</button>
+    <button class="filter-btn" data-filter="today">오늘</button>
+    <button class="filter-btn" data-filter="week">최근 7일</button>
+</div>
+
+<!-- 로딩 -->
+<div id="historyLoading" class="text-center py-5">
+    <div class="spinner-border text-secondary" role="status">
+        <span class="visually-hidden">로딩 중...</span>
+    </div>
+    <p class="text-muted mt-2">검색 히스토리를 불러오는 중...</p>
+</div>
+
+<!-- 로그인 필요 안내 -->
+<div id="loginRequired" class="d-none text-center py-5">
+    <i class="fas fa-lock text-muted mb-3" style="font-size: 3rem;"></i>
+    <p class="text-muted">로그인 후 검색 히스토리를 확인할 수 있습니다.</p>
+    <button class="btn btn-dark btn-sm rounded-pill px-4" data-bs-toggle="modal" data-bs-target="#authModal">
+        <i class="fas fa-sign-in-alt me-1"></i> 로그인
+    </button>
+</div>
+
+<!-- 비어있음 안내 -->
+<div id="emptyHistory" class="d-none text-center py-5">
+    <i class="fas fa-search text-muted mb-3" style="font-size: 3rem;"></i>
+    <p class="text-muted">검색 히스토리가 없습니다.</p>
+    <a href="/" class="btn btn-dark btn-sm rounded-pill px-4">
+        <i class="fas fa-home me-1"></i> 홈에서 검색하기
+    </a>
+</div>
+
+<!-- 히스토리 콘텐츠 (동적 생성) -->
+<div id="historyContent" class="d-none"></div>
+
+<!-- 더 보기 버튼 -->
+<div id="loadMoreArea" class="d-none text-center mt-4 mb-4">
+    <button class="btn btn-outline-secondary rounded-pill px-4" id="loadMoreBtn">
+        더 보기 <i class="fas fa-chevron-down ms-1"></i>
+    </button>
+</div>
+
+<!-- 검색 결과 상세 모달 -->
+<div class="modal fade" id="detailModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header border-0 pb-0">
+                <h5 class="modal-title fw-bold">검색 결과 상세</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="detailModalBody">
+                <div class="text-center py-3">
+                    <div class="spinner-border text-secondary" role="status"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="/static/js/search_history.js"></script>
+{% endblock %}

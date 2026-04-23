@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Lookalike{% endblock %}</title>
+    <!-- Favicon -->
+    <link rel="icon" type="image/x-icon" href="/static/images/favicon.ico">
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/images/favicon.png">
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts: Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Custom CSS -->
+    <link href="/static/css/style.css?v={{ range(1, 999999) | random }}" rel="stylesheet">
+</head>
+
+<body class="d-flex flex-column h-100">
+
+    <!-- Toast 알림 컨테이너 -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <!-- Top Header -->
+    <header class="py-3 px-3 border-bottom bg-white fixed-top">
+        <div class="container d-flex justify-content-between align-items-center">
+            <a href="/"
+                class="text-decoration-none text-dark d-flex flex-column flex-sm-row align-items-start align-items-sm-center gap-1 gap-sm-2 mt-1 mt-sm-0">
+                <img src="/static/images/logo_open_1.png" alt="Lookalike Logo" id="mainLogo" class="logo-image"
+                    onmouseover="this.src='/static/images/logo_close_1.png'"
+                    onmouseout="this.src='/static/images/logo_open_1.png'" style="max-height: 28px;">
+                <div class="text-muted" style="font-size: 0.70rem; line-height: 1.2;">
+                    이미지로 찾는 최저가 쇼핑
+                </div>
+            </a>
+
+            <!-- 비로그인 상태: 로그인 버튼 -->
+            <div id="authArea">
+                <button class="btn btn-dark btn-sm rounded-pill px-3" data-bs-toggle="modal" data-bs-target="#authModal"
+                    id="loginBtn">
+                    <i class="fas fa-sign-in-alt me-1"></i> 로그인
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="flex-shrink-0 container" style="margin-top: 80px; margin-bottom: 80px;">
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-light py-4 border-top mt-auto" style="margin-bottom: 70px;">
+        <div class="container text-center text-muted small">
+            <div class="d-flex justify-content-center gap-3 mb-3">
+                <a href="/terms" class="text-decoration-none text-muted fw-medium">이용약관</a>
+                <span class="text-secondary">|</span>
+                <a href="/privacy" class="text-decoration-none text-muted fw-bold">개인정보처리방침</a>
+            </div>
+            <div class="mb-2" style="font-size: 0.85rem; line-height: 1.6;">
+                <a href="/teams"
+                    class="text-decoration-none text-dark fw-bold border border-secondary rounded px-3 py-1 bg-white hover-shadow"
+                    style="display: inline-block;">
+                    <i class="fas fa-users me-1"></i> 팀 Lookalike 소개
+                </a>
+            </div>
+
+            <div class="mt-3">
+                ©
+                <a href="/admin/infra" class="text-decoration-none" style="color: inherit;">Lookalike</a>. All rights
+                reserved.
+            </div>
+        </div>
+    </footer>
+
+    <!-- Bottom Navigation -->
+    <nav class="navbar navbar-light bg-white border-top fixed-bottom navbar-bottom">
+        <div class="container d-flex justify-content-around">
+            <a href="/" class="nav-link text-center text-dark active">
+                <i class="fas fa-home fa-lg mb-1"></i>
+                <div style="font-size: 0.7rem;">홈</div>
+            </a>
+            <a href="/recent" class="nav-link text-center text-secondary">
+                <i class="far fa-clock fa-lg mb-1"></i>
+                <div style="font-size: 0.7rem;">최근 본 상품</div>
+            </a>
+            <a href="/likes" class="nav-link text-center text-secondary">
+                <i class="far fa-heart fa-lg mb-1"></i>
+                <div style="font-size: 0.7rem;">좋아요</div>
+            </a>
+            <a href="/mypage" class="nav-link text-center text-secondary">
+                <i class="far fa-user fa-lg mb-1"></i>
+                <div style="font-size: 0.7rem;">마이페이지</div>
+            </a>
+        </div>
+    </nav>
+
+    <!-- ============================================ -->
+    <!-- 인증 모달 (로그인 / 회원가입)                -->
+    <!-- ============================================ -->
+    <div class="modal fade auth-modal" id="authModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow-lg">
+                <div class="modal-header border-0 pb-0">
+                    <h5 class="modal-title fw-bold">환영합니다!</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted mb-4" style="font-size: 0.9rem;">소셜 계정 또는 이메일로 시작하세요.</p>
+
+                    <!-- ─── 소셜 로그인 버튼 ─── -->
+                    <div class="d-flex flex-column gap-2 mb-3" id="socialLoginBtns">
+                        <a href="/api/auth/oauth/google" class="btn-social btn-google" id="btnGoogle">
+                            <i class="fab fa-google"></i>
+                            <span>Google로 계속하기</span>
+                        </a>
+                        <a href="/api/auth/oauth/naver" class="btn-social btn-naver" id="btnNaver">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 20 20"
+                                fill="currentColor">
+                                <path d="M13.5 10.56L6.26 0H0v20h6.5V9.44L13.74 20H20V0h-6.5v10.56z" />
+                            </svg>
+                            <span>네이버로 계속하기</span>
+                        </a>
+                        <a href="/api/auth/oauth/kakao" class="btn-social btn-kakao" id="btnKakao">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"
+                                fill="#191919">
+                                <path
+                                    d="M12 3C6.477 3 2 6.463 2 10.691c0 2.72 1.794 5.108 4.508 6.463-.196.732-.71 2.654-.812 3.067-.126.508.186.501.391.365.161-.107 2.563-1.741 3.604-2.449.746.107 1.518.163 2.309.163 5.523 0 10-3.463 10-7.609C22 6.463 17.523 3 12 3z" />
+                            </svg>
+                            <span>카카오로 계속하기</span>
+                        </a>
+                    </div>
+
+                    <!-- ─── 구분선 ─── -->
+                    <div class="divider-text">또는 이메일로 계속하기</div>
+
+                    <!-- ─── 탭 (로그인 / 회원가입) ─── -->
+                    <ul class="nav nav-pills nav-fill mb-3 bg-light rounded p-1" id="authTab" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active rounded shadow-sm" id="tab-login" data-bs-toggle="pill"
+                                data-bs-target="#panel-login" type="button" role="tab">로그인</button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link rounded" id="tab-signup" data-bs-toggle="pill"
+                                data-bs-target="#panel-signup" type="button" role="tab">회원가입</button>
+                        </li>
+                    </ul>
+
+                    <div class="tab-content" id="authTabContent">
+                        <!-- ─── 로그인 패널 ─── -->
+                        <div class="tab-pane fade show active" id="panel-login" role="tabpanel">
+                            <form id="loginForm" novalidate>
+                                <div class="mb-3">
+                                    <input type="email" class="form-control" id="loginEmail" placeholder="이메일 주소"
+                                        required autocomplete="email">
+                                    <div class="form-error" id="loginEmailError"></div>
+                                </div>
+                                <div class="mb-3">
+                                    <div class="input-group">
+                                        <input type="password" class="form-control border-end-0" id="loginPassword"
+                                            placeholder="비밀번호" required autocomplete="current-password">
+                                        <button class="btn btn-outline-secondary border-start-0 bg-white" type="button"
+                                            onclick="togglePassword('loginPassword', this)">
+                                            <i class="far fa-eye"></i>
+                                        </button>
+                                    </div>
+                                    <div class="form-error" id="loginPasswordError"></div>
+                                </div>
+                                <div class="form-error text-center mb-2" id="loginError"></div>
+                                <button type="submit" class="btn btn-dark w-100 btn-submit" id="loginSubmitBtn">
+                                    <span class="btn-text">로그인</span>
+                                    <span class="spinner-border spinner-border-sm d-none" id="loginSpinner"></span>
+                                </button>
+                            </form>
+                        </div>
+
+                        <!-- ─── 회원가입 패널 ─── -->
+                        <div class="tab-pane fade" id="panel-signup" role="tabpanel">
+                            <form id="signupForm" novalidate>
+                                <div class="mb-3">
+                                    <input type="text" class="form-control" id="signupName" placeholder="이름" required
+                                        autocomplete="name">
+                                    <div class="form-error" id="signupNameError"></div>
+                                </div>
+                                <div class="mb-3">
+                                    <input type="email" class="form-control" id="signupEmail" placeholder="이메일 주소"
+                                        required autocomplete="email">
+                                    <div class="form-error" id="signupEmailError"></div>
+                                </div>
+                                <div class="mb-3">
+                                    <div class="input-group">
+                                        <input type="password" class="form-control border-end-0" id="signupPassword"
+                                            placeholder="비밀번호 (4자리 이상)" required autocomplete="new-password">
+                                        <button class="btn btn-outline-secondary border-start-0 bg-white" type="button"
+                                            onclick="togglePassword('signupPassword', this)">
+                                            <i class="far fa-eye"></i>
+                                        </button>
+                                    </div>
+                                    <div class="password-strength" id="passwordStrength"></div>
+                                    <div class="form-error" id="signupPasswordError"></div>
+                                </div>
+                                <div class="mb-3">
+                                    <div class="input-group">
+                                        <input type="password" class="form-control border-end-0"
+                                            id="signupPasswordConfirm" placeholder="비밀번호 확인" required
+                                            autocomplete="new-password">
+                                        <button class="btn btn-outline-secondary border-start-0 bg-white" type="button"
+                                            onclick="togglePassword('signupPasswordConfirm', this)">
+                                            <i class="far fa-eye"></i>
+                                        </button>
+                                    </div>
+                                    <div class="form-error" id="signupPasswordConfirmError"></div>
+                                </div>
+                                <div class="form-error text-center mb-2" id="signupError"></div>
+                                <button type="submit" class="btn btn-dark w-100 btn-submit" id="signupSubmitBtn">
+                                    <span class="btn-text">회원가입</span>
+                                    <span class="spinner-border spinner-border-sm d-none" id="signupSpinner"></span>
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap Bundle with Popper -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <!-- 네비게이션 활성화 표시 -->
+    <script src="/static/js/common.js" defer></script>
+
+    {% block extra_js %}{% endblock %}
+</body>
+
+</html>

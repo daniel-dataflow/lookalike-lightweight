@@ -1,0 +1,944 @@
+/* =========================================================================
+   [admin_style.css]
+========================================================================= */
+
+/* ========================================
+   관리자 사이드바 디자인 시스템
+======================================== */
+
+:root {
+    --sidebar-width: 260px;
+    --sidebar-collapsed-width: 80px;
+    --sidebar-bg: #ffffff;
+    --sidebar-border: #e5e7eb;
+    --primary-color: #3b82f6;
+    --primary-hover: #2563eb;
+    --text-primary: #1f2937;
+    --text-secondary: #6b7280;
+    --hover-bg: #f3f4f6;
+    --active-bg: #3b82f6;
+    --active-text: #ffffff;
+    --transition-speed: 0.3s;
+    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+/* 사이드바 컨테이너 */
+.sidebar {
+    width: var(--sidebar-width);
+    background: var(--sidebar-bg);
+    border-right: 1px solid var(--sidebar-border);
+    height: 100vh;
+    position: fixed;
+    top: 0;
+    left: 0;
+    overflow: hidden;
+    z-index: 1000;
+    transition: width var(--transition-speed) cubic-bezier(0.4, 0, 0.2, 1);
+    display: flex;
+    flex-direction: column;
+}
+
+.sidebar.collapsed {
+    width: var(--sidebar-collapsed-width);
+}
+
+/* 사이드바 내부 스크롤 영역 */
+.sidebar-scroll {
+    overflow-y: auto;
+    overflow-x: hidden;
+    flex: 1;
+    padding: 20px 16px;
+}
+
+.sidebar.collapsed .sidebar-scroll {
+    padding: 20px 8px;
+}
+
+/* 토글 버튼 - 햄버거 메뉴 */
+.sidebar-toggle {
+    position: absolute;
+    top: 20px;
+    left: 16px;
+    width: 32px;
+    height: 32px;
+    background: transparent;
+    border: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 1001;
+    transition: all 0.2s ease;
+    padding: 0;
+}
+
+.sidebar.collapsed .sidebar-toggle {
+    left: 50%;
+    transform: translateX(-50%);
+}
+
+.sidebar-toggle:hover {
+    background: var(--hover-bg);
+    border-radius: 8px;
+}
+
+.sidebar-toggle i {
+    font-size: 1.25rem;
+    color: var(--text-primary);
+    transition: transform 0.3s ease;
+}
+
+/* 로고 영역 */
+.sidebar-logo {
+    display: flex;
+    align-items: center;
+    padding: 8px 12px;
+    margin-bottom: 24px;
+    margin-top: 60px;
+    text-decoration: none;
+    color: var(--text-primary);
+    border-radius: 12px;
+    transition: all var(--transition-speed) ease;
+    min-height: 48px;
+}
+
+.sidebar-logo i {
+    font-size: 1.75rem;
+    color: var(--primary-color);
+    width: 32px;
+    min-width: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: font-size var(--transition-speed) ease;
+}
+
+.sidebar-logo .sidebar-text {
+    margin-left: 12px;
+    font-size: 1.25rem;
+    font-weight: 700;
+    white-space: nowrap;
+    opacity: 1;
+    visibility: visible;
+    transition: opacity 0.2s ease, visibility 0.2s ease;
+}
+
+.sidebar.collapsed .sidebar-logo {
+    justify-content: center;
+    padding: 8px 0;
+    margin-top: 70px;
+}
+
+.sidebar.collapsed .sidebar-logo i {
+    font-size: 2rem;
+}
+
+.sidebar.collapsed .sidebar-logo .sidebar-text {
+    opacity: 0;
+    visibility: hidden;
+    width: 0;
+    margin: 0;
+    overflow: hidden;
+}
+
+/* 구분선 */
+.sidebar hr {
+    border: none;
+    border-top: 1px solid var(--sidebar-border);
+    margin: 16px 0;
+    transition: all var(--transition-speed) ease;
+}
+
+.sidebar.collapsed hr {
+    margin: 16px 12px;
+}
+
+/* 네비게이션 */
+.sidebar .nav {
+    gap: 4px;
+}
+
+.sidebar .nav-link {
+    display: flex;
+    align-items: center;
+    padding: 0;
+    color: var(--text-primary);
+    text-decoration: none;
+    border-radius: 10px;
+    transition: background 0.2s ease, color 0.2s ease;
+    position: relative;
+    font-weight: 500;
+    font-size: 0.95rem;
+    height: 48px;
+    overflow: hidden;
+}
+
+/* 아이콘 컨테이너 - 고정 너비 */
+.sidebar .nav-link i {
+    font-size: 1.25rem;
+    width: 56px;
+    min-width: 56px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: font-size 0.2s ease;
+}
+
+/* 텍스트 컨테이너 - 고정 너비 */
+.sidebar .nav-link .sidebar-text {
+    white-space: nowrap;
+    flex: 1;
+    opacity: 1;
+    visibility: visible;
+    transition: opacity 0.15s ease, visibility 0.15s ease;
+    overflow: hidden;
+}
+
+/* 접힌 상태 */
+.sidebar.collapsed .nav-link {
+    justify-content: center;
+}
+
+.sidebar.collapsed .nav-link i {
+    font-size: 1.4rem;
+    width: 100%;
+}
+
+.sidebar.collapsed .nav-link .sidebar-text {
+    opacity: 0;
+    visibility: hidden;
+    width: 0;
+    flex: 0;
+}
+
+/* 호버 효과 */
+.sidebar .nav-link:hover {
+    background: var(--hover-bg);
+    color: var(--primary-color);
+}
+
+/* 활성 상태 */
+.sidebar .nav-link.active {
+    background: var(--active-bg);
+    color: var(--active-text);
+    box-shadow: var(--shadow-sm);
+}
+
+.sidebar .nav-link.active i {
+    color: var(--active-text);
+}
+
+/* 전역 텍스트 숨김 */
+.sidebar-text {
+    transition: opacity 0.15s ease, visibility 0.15s ease;
+}
+
+.sidebar.collapsed .sidebar-text {
+    opacity: 0;
+    visibility: hidden;
+}
+
+/* 접힌 상태 액션 버튼 */
+.sidebar-collapsed-actions {
+    display: none;
+    flex-direction: column;
+    gap: 8px;
+    padding: 16px 8px;
+    border-top: 1px solid var(--sidebar-border);
+}
+
+.sidebar.collapsed .sidebar-collapsed-actions {
+    display: flex;
+}
+
+.sidebar-action-btn {
+    width: 100%;
+    padding: 12px 0;
+    background: transparent;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-primary);
+    text-decoration: none;
+}
+
+.sidebar-action-btn:hover {
+    background: var(--hover-bg);
+}
+
+.sidebar-action-btn i {
+    font-size: 1.3rem;
+}
+
+.sidebar-action-btn.logout-btn:hover {
+    background: #fee2e2;
+    color: #dc2626;
+}
+
+/* 드롭다운 */
+.sidebar-dropdown {
+    margin-top: auto;
+    padding: 16px;
+    border-top: 1px solid var(--sidebar-border);
+}
+
+.sidebar.collapsed .sidebar-dropdown {
+    display: none;
+}
+
+.sidebar-dropdown .dropdown-toggle {
+    display: flex;
+    align-items: center;
+    padding: 8px 12px;
+    border-radius: 10px;
+    transition: background 0.2s ease;
+}
+
+.sidebar-dropdown .dropdown-toggle:hover {
+    background: var(--hover-bg);
+}
+
+.sidebar-dropdown img {
+    border: 2px solid var(--sidebar-border);
+}
+
+/* 메인 콘텐츠 */
+.main-content {
+    margin-left: var(--sidebar-width);
+    padding: 20px;
+    transition: margin-left var(--transition-speed) cubic-bezier(0.4, 0, 0.2, 1);
+    min-height: 100vh;
+}
+
+.main-content.expanded {
+    margin-left: var(--sidebar-collapsed-width);
+}
+
+/* 스크롤바 커스텀 */
+.sidebar-scroll::-webkit-scrollbar {
+    width: 6px;
+}
+
+.sidebar-scroll::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.sidebar-scroll::-webkit-scrollbar-thumb {
+    background: #d1d5db;
+    border-radius: 3px;
+}
+
+.sidebar-scroll::-webkit-scrollbar-thumb:hover {
+    background: #9ca3af;
+}
+
+/* 접힌 상태에서 툴팁 효과 */
+.sidebar.collapsed .nav-link {
+    position: relative;
+}
+
+.sidebar.collapsed .nav-link::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    left: 100%;
+    top: 50%;
+    transform: translateY(-50%);
+    background: var(--text-primary);
+    color: white;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    margin-left: 12px;
+    transition: opacity 0.2s ease;
+    box-shadow: var(--shadow-md);
+    z-index: 1002;
+}
+
+.sidebar.collapsed .nav-link:hover::after {
+    opacity: 1;
+}
+
+/* 반응형 */
+@media (max-width: 768px) {
+    .sidebar {
+        transform: translateX(-100%);
+    }
+
+    .sidebar.mobile-open {
+        transform: translateX(0);
+    }
+
+    .main-content {
+        margin-left: 0 !important;
+    }
+}
+
+/* ========================================
+   초기 로드 상태 - 깜빡임 최소화
+======================================== */
+.sidebar-collapsed-init * {
+    transition: none !important;
+    animation: none !important;
+}
+
+.sidebar-collapsed-init #adminSidebar {
+    width: 80px !important;
+}
+
+.sidebar-collapsed-init #adminMainContent {
+    margin-left: 80px !important;
+}
+
+.sidebar-collapsed-init .sidebar-text {
+    opacity: 0 !important;
+    visibility: hidden !important;
+    width: 0 !important;
+}
+
+.sidebar-collapsed-init .nav-link {
+    justify-content: center !important;
+}
+
+.sidebar-collapsed-init .nav-link i {
+    font-size: 1.4rem !important;
+    width: 100% !important;
+}
+
+.sidebar-collapsed-init .sidebar-logo {
+    justify-content: center !important;
+    padding: 8px 0 !important;
+}
+
+.sidebar-collapsed-init .sidebar-logo i {
+    font-size: 2rem !important;
+}
+
+.sidebar-collapsed-init .sidebar-dropdown {
+    display: none !important;
+}
+
+.sidebar-collapsed-init .sidebar-collapsed-actions {
+    display: flex !important;
+}
+
+
+/* =========================================================================
+   [admin_login.css]
+========================================================================= */
+
+.admin-login-body {
+    background-color: #f8f9fa;
+    font-family: 'Inter', sans-serif;
+    height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0;
+}
+
+.login-card {
+    background: #fff;
+    border-radius: 16px;
+    padding: 40px 36px;
+    width: 100%;
+    max-width: 400px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
+}
+
+.login-icon-box {
+    width: 64px;
+    height: 64px;
+    background: linear-gradient(135deg, #1a1a2e, #16213e);
+    border-radius: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 24px;
+    box-shadow: 0 8px 16px rgba(26, 26, 46, 0.2);
+}
+
+.login-title {
+    font-weight: 700;
+    margin-bottom: 8px;
+    color: #1a1a2e;
+}
+
+.form-control-lg {
+    border-radius: 12px;
+    border: 2px solid #e9ecef;
+    text-align: center;
+    font-size: 1rem;
+    padding: 14px 20px;
+    transition: all 0.2s;
+    margin-bottom: 12px;
+}
+
+.form-control-lg:focus {
+    border-color: #1a1a2e;
+    box-shadow: 0 0 0 0.25rem rgba(26, 26, 46, 0.1);
+}
+
+#adminPassword {
+    letter-spacing: 4px;
+}
+
+.btn-login {
+    border-radius: 12px;
+    font-weight: 600;
+    padding: 14px 20px;
+    background-color: #1a1a2e;
+    border-color: #1a1a2e;
+    transition: all 0.2s;
+}
+
+.btn-login:hover {
+    background-color: #0f1322;
+    border-color: #0f1322;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(26, 26, 46, 0.2);
+}
+
+.back-link {
+    display: inline-block;
+    margin-top: 24px;
+    color: #6c757d;
+    text-decoration: none;
+    font-size: 0.9rem;
+    transition: color 0.2s;
+}
+
+.back-link:hover {
+    color: #1a1a2e;
+}
+
+/* =========================================================================
+   [admin_inquiry.css]
+========================================================================= */
+
+.admin-status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.admin-status-pending {
+    background: linear-gradient(135deg, #fff3cd, #ffeaa7);
+    color: #856404;
+}
+
+.admin-status-answered {
+    background: linear-gradient(135deg, #d1e7dd, #a3d9a5);
+    color: #0f5132;
+}
+
+.table th {
+    font-weight: 600;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #6c757d;
+    border-bottom: 2px solid #dee2e6;
+}
+
+.table td {
+    font-size: 0.9rem;
+    vertical-align: middle;
+}
+
+.inquiry-row {
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+
+.inquiry-row:hover {
+    background-color: #f0f4ff !important;
+}
+
+#statusFilter {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 4px;
+}
+
+#statusFilter::-webkit-scrollbar {
+    height: 4px;
+}
+
+#statusFilter::-webkit-scrollbar-thumb {
+    background-color: #ddd;
+    border-radius: 4px;
+}
+
+#statusFilter .nav-link {
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: #6c757d;
+    white-space: nowrap;
+}
+
+#statusFilter .nav-link.active {
+    background-color: #212529;
+    color: #fff;
+}
+
+/* =========================================================================
+   [admin_logs.css]
+========================================================================= */
+
+.health-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+.health-dot.healthy {
+    background: #1cc88a;
+}
+
+.health-dot.warning {
+    background: #f6c23e;
+}
+
+.health-dot.critical {
+    background: #e74a3b;
+    animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+
+    0%,
+    100% {
+        opacity: 1
+    }
+
+    50% {
+        opacity: 0.4
+    }
+}
+
+.alert-banner {
+    animation: slideDown 0.3s ease;
+}
+
+@keyframes slideDown {
+    from {
+        transform: translateY(-20px);
+        opacity: 0
+    }
+
+    to {
+        transform: translateY(0);
+        opacity: 1
+    }
+}
+
+.error-rank {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 0.8rem;
+    flex-shrink: 0;
+}
+
+.error-rank.rank-1 {
+    background: #e74a3b;
+    color: #fff;
+}
+
+.error-rank.rank-2 {
+    background: #f6c23e;
+    color: #fff;
+}
+
+.error-rank.rank-3 {
+    background: #36b9cc;
+    color: #fff;
+}
+
+.error-rank.rank-other {
+    background: #d1d3e2;
+    color: #5a5c69;
+}
+
+.log-card {
+    border-left: 4px solid #ccc;
+    background: #fff;
+    margin-bottom: 12px;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    cursor: pointer;
+    transition: transform 0.1s;
+}
+
+.log-card:active {
+    transform: scale(0.98);
+}
+
+.log-card.level-error {
+    border-left-color: #dc3545;
+}
+
+.log-card.level-warn {
+    border-left-color: #ffc107;
+}
+
+.log-card.level-info {
+    border-left-color: #0dcaf0;
+}
+
+.log-card.level-critical {
+    border-left-color: #6f42c1;
+}
+
+.filter-scroll-container {
+    overflow-x: auto;
+    white-space: nowrap;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 5px;
+}
+
+.filter-scroll-container::-webkit-scrollbar {
+    height: 4px;
+}
+
+.filter-scroll-container::-webkit-scrollbar-thumb {
+    background: #ccc;
+    border-radius: 4px;
+}
+
+.level-search-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+}
+
+.level-filters {
+    display: flex;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.search-box {
+    flex: 1;
+    min-width: 120px;
+    display: flex;
+    gap: 8px;
+}
+
+.search-box input {
+    flex: 1;
+    width: 100%;
+}
+
+@media (max-width: 600px) {
+    .level-search-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .search-box {
+        width: 100%;
+    }
+
+    .level-filters {
+        width: 100%;
+        overflow-x: auto;
+        padding-bottom: 5px;
+    }
+}
+
+/* =========================================================================
+   [admin_logs_old.css]
+========================================================================= */
+
+/* ========== Mobile & Responsive CSS ========== */
+
+/* 1. Filter Horizontal Scroll */
+.filter-scroll-container {
+    overflow-x: auto;
+    white-space: nowrap;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 5px;
+    /* Scrollbar space */
+}
+
+.filter-scroll-container::-webkit-scrollbar {
+    height: 4px;
+}
+
+.filter-scroll-container::-webkit-scrollbar-thumb {
+    background: #ccc;
+    border-radius: 4px;
+}
+
+/* 2. Mobile Log Card */
+.log-card {
+    border-left: 4px solid #ccc;
+    background: #fff;
+    margin-bottom: 12px;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    cursor: pointer;
+    transition: transform 0.1s;
+}
+
+.log-card:active {
+    transform: scale(0.98);
+}
+
+.log-card-body {
+    padding: 12px 16px;
+}
+
+/* Level Colors for Card Border */
+.log-card.level-error {
+    border-left-color: #dc3545;
+}
+
+.log-card.level-warn {
+    border-left-color: #ffc107;
+}
+
+.log-card.level-info {
+    border-left-color: #0dcaf0;
+}
+
+/* 3. Search Bar & Layout */
+.level-search-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+}
+
+.level-filters {
+    display: flex;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.search-box {
+    flex: 1;
+    min-width: 120px;
+    display: flex;
+    gap: 8px;
+}
+
+.search-box input {
+    flex: 1;
+    /* Input takes all remaining space */
+    width: 100%;
+}
+
+.mobile-search-btn {
+    width: 48px;
+    flex-shrink: 0;
+}
+
+/* Mobile: Stack Level and Search */
+@media (max-width: 600px) {
+    .level-search-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .search-box {
+        width: 100%;
+    }
+
+    .level-filters {
+        width: 100%;
+        overflow-x: auto;
+        /* Allow level buttons to scroll if needed on very small screens */
+        padding-bottom: 5px;
+    }
+}
+
+/* Header Badges: Hide on < 900px */
+@media (max-width: 900px) {
+    .status-badges {
+        display: none !important;
+    }
+}
+
+/* 4. Stats Card Responsive */
+@media (max-width: 767px) {
+
+    /* Mobile: Stacked Stats */
+    .stat-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 8px 0;
+        border-bottom: 1px solid #f0f0f0;
+    }
+
+    .stat-item:last-child {
+        border-bottom: none;
+    }
+
+    .stat-label {
+        font-size: 0.9rem;
+        color: #6c757d;
+    }
+
+    .stat-value {
+        font-size: 1.1rem;
+        font-weight: bold;
+    }
+}
+
+@media (min-width: 768px) and (max-width: 1023px) {
+
+    /* Tablet: 2x2 Grid */
+    .stat-col {
+        border-right: 1px solid #dee2e6;
+        border-bottom: 1px solid #dee2e6;
+        padding: 15px;
+    }
+
+    .stat-col:nth-child(2n) {
+        border-right: none;
+    }
+
+    /* Remove right border for 2nd col */
+    .stat-col:nth-child(n+3) {
+        border-bottom: none;
+    }
+
+    /* Remove bottom border for last row */
+}
+
+@media (min-width: 1024px) {
+
+    /* Desktop: 4 cols in one row */
+    .stat-col {
+        border-right: 1px solid #dee2e6;
+    }
+
+    .stat-col:last-child {
+        border-right: none;
+    }
+}
