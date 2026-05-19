@@ -10,7 +10,7 @@ import math
 import logging
 import json
 
-from ..database import get_pg_cursor, get_redis
+from ..database import get_pg_cursor, get_session
 from ..models.inquiry import (
     InquiryCreateRequest,
     InquiryUpdateRequest,
@@ -28,59 +28,34 @@ router = APIRouter(prefix="/api/inquiries", tags=["문의 게시판"])
 # ──────────────────────────────────────
 # 세션 헬퍼
 # ──────────────────────────────────────
-def _get_session(request: Request) -> dict | None:
-    """
-    HTTP Request의 쿠키 헤더에서 `session_token`을 추출해 Redis를 조회함으로써 현재 무상태(Stateless) 요청자의 인증 상태를 판별함.
-
-    Args:
-        request (Request): 미들웨어를 통과한 현재 API 요청 객체.
-
-    Returns:
-        dict | None: 검증 완료된 사용자 메타 세션 딕셔너리. 존재하지 않거나 만료 시 None.
-    """
+def _get_user_session(request: Request) -> dict | None:
+    """일반 사용자 쿠키 토큰으로 DB 세션 조회"""
     token = request.cookies.get("session_token")
     if not token:
         return None
-    try:
-        redis_client = get_redis()
-        data = redis_client.get(f"session:{token}")
-        if data:
-            return json.loads(data)
-    except Exception as e:
-        logger.warning(f"Redis 세션 조회 실패: {e}")
-    return None
+    return get_session(token, is_admin=False)
+
+
+def _get_admin_session(request: Request) -> dict | None:
+    """어드민 쿠키 토큰으로 DB 세션 조회"""
+    token = request.cookies.get("admin_session_token")
+    if not token:
+        return None
+    return get_session(token, is_admin=True)
 
 
 def _require_login(request: Request) -> dict:
-    """
-    유저 권한이 필수인 엔드포인트(문의글 작성 등)에서 초기 필터링을 수행하기 위함.
-    세션이 없으면 `401 Unauthorized` 예외를 던져 익명 접근을 즉시 차단함.
-
-    Args:
-        request (Request): HTTP 요청.
-
-    Returns:
-        dict: 유효함이 증명된 유저 세션.
-    """
-    session = _get_session(request)
+    """일반 사용자 로그인 필수 검증"""
+    session = _get_user_session(request)
     if not session:
         raise HTTPException(status_code=401, detail="로그인이 필요합니다")
     return session
 
 
 def _require_admin(request: Request) -> dict:
-    """
-    어드민 뷰 전용 API(답변 달기 등)를 방어하기 위한 추가 가드레일 로직.
-    로그인 통과 후, 해당 계정의 `is_admin` 플래그를 검증해 일반 고객의 어뷰징을 막음.
-
-    Args:
-        request (Request): HTTP 요청 객체.
-
-    Returns:
-        dict: 인증된 관리자 세션 데이터.
-    """
-    session = _require_login(request)
-    if not session.get("is_admin"):
+    """관리자 권한 필수 검증"""
+    session = _get_admin_session(request)
+    if not session or not session.get("is_admin"):
         raise HTTPException(status_code=403, detail="관리자 인증이 필요합니다")
     return session
 

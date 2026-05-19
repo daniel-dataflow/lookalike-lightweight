@@ -1,60 +1,77 @@
 """
-데이터베이스 연결 관리
-- PostgreSQL: psycopg2 커넥션 풀
-- MongoDB: pymongo 클라이언트
-- Redis: redis 클라이언트
-- Elasticsearch: elasticsearch 클라이언트
+데이터베이스 연결 관리 (SQLAlchemy & PostgreSQL 표준 연동)
+- Redis/MongoDB 제거 → DB 기반 세션 + PostgreSQL 통합
 """
 import psycopg2
-from psycopg2 import pool
 from psycopg2.extras import RealDictCursor
-from pymongo import MongoClient
-import redis
 from contextlib import contextmanager
 from typing import Optional
 import logging
+import json
+import uuid
+from datetime import datetime, timedelta
+
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 
 from .config import get_settings
 
 logger = logging.getLogger(__name__)
 
 # ──────────────────────────────────────
-# 글로벌 커넥션 객체
+# 글로벌 SQLAlchemy 엔진 및 세션 팩토리
 # ──────────────────────────────────────
-_pg_pool: Optional[pool.ThreadedConnectionPool] = None
-_mongo_client: Optional[MongoClient] = None
-_redis_client: Optional[redis.Redis] = None
+engine = None
+SessionLocal = None
 
 
 # ========================
-# PostgreSQL
+# PostgreSQL (SQLAlchemy)
 # ========================
 def init_postgres():
-    """PostgreSQL 커넥션 풀 초기화"""
-    global _pg_pool
+    """DATABASE_URL 기반 SQLAlchemy 엔진 및 커넥션 풀 초기화"""
+    global engine, SessionLocal
     settings = get_settings()
     try:
-        _pg_pool = pool.ThreadedConnectionPool(
-            minconn=settings.POSTGRES_MIN_CONN,
-            maxconn=settings.POSTGRES_MAX_CONN,
-            host=settings.POSTGRES_HOST,
-            port=settings.POSTGRES_PORT,
-            database=settings.POSTGRES_DB,
-            user=settings.POSTGRES_USER,
-            password=settings.POSTGRES_PASSWORD,
+        db_url = settings.DATABASE_URL
+        if not db_url:
+            raise ValueError("DATABASE_URL이 설정되지 않았습니다.")
+
+        # SQLAlchemy 호환성을 위해 postgres:// 스키마 수정
+        if db_url.startswith("postgres://"):
+            db_url = db_url.replace("postgres://", "postgresql://", 1)
+
+        connect_args = {}
+        # URL에서 호스트 이름을 추출하여 로컬/도커 개발용 호스트인지 검증합니다.
+        from urllib.parse import urlparse
+        parsed = urlparse(db_url)
+        hostname = parsed.hostname or ""
+        is_local = any(host in hostname for host in ["localhost", "127.0.0.1", "db", "postgres"])
+        if not is_local:
+            connect_args["sslmode"] = "require"
+            logger.info("🔒 원격 데이터베이스 연결 - sslmode=require 강제 적용")
+
+        engine = create_engine(
+            db_url,
+            pool_size=settings.POSTGRES_MIN_CONN,
+            max_overflow=max(0, settings.POSTGRES_MAX_CONN - settings.POSTGRES_MIN_CONN),
+            connect_args=connect_args,
+            pool_pre_ping=True
         )
-        logger.info("✅ PostgreSQL 커넥션 풀 초기화 완료")
+        SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+        logger.info("✅ PostgreSQL SQLAlchemy 엔진 및 커넥션 풀 초기화 완료")
     except Exception as e:
         logger.error(f"❌ PostgreSQL 연결 실패: {e}")
-        _pg_pool = None
+        engine = None
+        SessionLocal = None
 
 
 @contextmanager
 def get_pg_connection():
-    """PostgreSQL 커넥션을 컨텍스트 매니저로 제공"""
-    if _pg_pool is None:
-        raise ConnectionError("PostgreSQL 커넥션 풀이 초기화되지 않았습니다")
-    conn = _pg_pool.getconn()
+    """SQLAlchemy 커넥션 풀에서 raw connection을 획득하여 컨텍스트 매니저로 제공"""
+    if engine is None:
+        raise ConnectionError("SQLAlchemy 엔진이 초기화되지 않았습니다")
+    conn = engine.raw_connection()
     try:
         yield conn
         conn.commit()
@@ -62,7 +79,7 @@ def get_pg_connection():
         conn.rollback()
         raise
     finally:
-        _pg_pool.putconn(conn)
+        conn.close()
 
 
 @contextmanager
@@ -78,90 +95,108 @@ def get_pg_cursor(dict_cursor=True):
 
 
 # ========================
-# MongoDB
+# DB 기반 세션 관리 (Redis 대체)
 # ========================
-def init_mongo():
-    """MongoDB 클라이언트 초기화"""
-    global _mongo_client
+def create_session(user_data: dict, is_admin: bool = False) -> str:
+    """DB 기반 세션 생성 (Redis 대체)
+
+    Args:
+        user_data: 세션에 저장할 사용자 데이터
+        is_admin: 어드민 세션 여부
+
+    Returns:
+        세션 토큰 문자열
+    """
     settings = get_settings()
+    token = uuid.uuid4().hex
+    session_json = json.dumps(user_data, default=str, ensure_ascii=False)
+    expires_at = datetime.utcnow() + timedelta(hours=settings.SESSION_EXPIRE_HOURS)
+
     try:
-        _mongo_client = MongoClient(
-            host=settings.MONGODB_HOST,
-            port=settings.MONGODB_PORT,
-            username=settings.MONGODB_USER,
-            password=settings.MONGODB_PASSWORD,
-            authSource="admin",
-            serverSelectionTimeoutMS=settings.MONGO_TIMEOUT_MS,
-        )
-        # 연결 테스트
-        _mongo_client.admin.command("ping")
-        logger.info("✅ MongoDB 연결 완료")
+        with get_pg_cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO user_sessions (token, user_id, session_data, is_admin, expires_at)
+                VALUES (%s, %s, %s, %s, %s)
+                ON CONFLICT (token) DO UPDATE
+                SET session_data = EXCLUDED.session_data, expires_at = EXCLUDED.expires_at
+                """,
+                (token, user_data.get("user_id"), session_json, is_admin, expires_at),
+            )
+        return token
     except Exception as e:
-        logger.error(f"❌ MongoDB 연결 실패: {e}")
-        _mongo_client = None
+        logger.error(f"세션 생성 실패: {e}")
+        raise
 
 
-def get_mongo_db():
-    """MongoDB 데이터베이스 객체 반환"""
-    if _mongo_client is None:
-        raise ConnectionError("MongoDB 클라이언트가 초기화되지 않았습니다")
-    settings = get_settings()
-    return _mongo_client[settings.POSTGRES_DB]  # datadb
+def get_session(token: str, is_admin: bool = False) -> Optional[dict]:
+    """DB에서 세션 조회 (Redis 대체)
 
+    Args:
+        token: 세션 토큰
+        is_admin: 어드민 세션만 검색할지 여부
 
-# ========================
-# Redis
-# ========================
-def init_redis():
-    """Redis 클라이언트 초기화"""
-    global _redis_client
-    settings = get_settings()
+    Returns:
+        세션 데이터 dict 또는 None
+    """
+    if not token:
+        return None
+
     try:
-        _redis_client = redis.Redis(
-            host=settings.REDIS_HOST,
-            port=settings.REDIS_PORT,
-            password=settings.REDIS_PASSWORD,
-            db=0,
-            decode_responses=True,
-            socket_connect_timeout=settings.REDIS_TIMEOUT_SEC,
-        )
-        _redis_client.ping()
-        logger.info("✅ Redis 연결 완료")
+        with get_pg_cursor() as cur:
+            cur.execute(
+                """
+                SELECT session_data FROM user_sessions
+                WHERE token = %s AND is_admin = %s AND expires_at > NOW()
+                """,
+                (token, is_admin),
+            )
+            row = cur.fetchone()
+            if row:
+                data = row["session_data"]
+                return data if isinstance(data, dict) else json.loads(data)
     except Exception as e:
-        logger.error(f"❌ Redis 연결 실패: {e}")
-        _redis_client = None
+        logger.warning(f"세션 조회 실패: {e}")
+
+    return None
 
 
-def get_redis():
-    """Redis 클라이언트 반환"""
-    if _redis_client is None:
-        raise ConnectionError("Redis 클라이언트가 초기화되지 않았습니다")
-    return _redis_client
+def delete_session(token: str):
+    """DB에서 세션 삭제"""
+    if not token:
+        return
+    try:
+        with get_pg_cursor() as cur:
+            cur.execute("DELETE FROM user_sessions WHERE token = %s", (token,))
+    except Exception as e:
+        logger.warning(f"세션 삭제 실패: {e}")
+
+
+def cleanup_expired_sessions():
+    """만료된 세션 정리 (주기적 호출용)"""
+    try:
+        with get_pg_cursor() as cur:
+            cur.execute("DELETE FROM user_sessions WHERE expires_at < NOW()")
+            deleted = cur.rowcount
+            if deleted > 0:
+                logger.info(f"만료 세션 {deleted}건 정리 완료")
+    except Exception as e:
+        logger.warning(f"세션 정리 실패: {e}")
 
 
 # ========================
 # 전체 초기화 / 종료
 # ========================
 def init_all_databases():
-    """모든 데이터베이스 연결 초기화 (앱 시작 시 호출)"""
+    """데이터베이스 연결 초기화 (앱 시작 시 호출)"""
     init_postgres()
-    init_mongo()
-    init_redis()
-    logger.info("🚀 모든 데이터베이스 초기화 완료")
+    logger.info("🚀 PostgreSQL 데이터베이스 연결 초기화 완료")
 
 
 def close_all_databases():
-    """모든 데이터베이스 연결 종료 (앱 종료 시 호출)"""
-    global _pg_pool, _mongo_client, _redis_client
+    """데이터베이스 연결 종료 (앱 종료 시 호출)"""
+    global engine
 
-    if _pg_pool:
-        _pg_pool.closeall()
-        logger.info("PostgreSQL 커넥션 풀 종료")
-
-    if _mongo_client:
-        _mongo_client.close()
-        logger.info("MongoDB 클라이언트 종료")
-
-    if _redis_client:
-        _redis_client.close()
-        logger.info("Redis 클라이언트 종료")
+    if engine:
+        engine.dispose()
+        logger.info("PostgreSQL SQLAlchemy 엔진 및 커넥션 풀 종료")

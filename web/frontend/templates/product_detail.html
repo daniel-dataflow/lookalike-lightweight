@@ -8,7 +8,8 @@
     <div class="col-md-6">
         <div class="position-relative">
             <img src="{{ product.img_hdfs_path }}" class="img-fluid rounded shadow-sm w-100"
-                alt="{{ product.prod_name }}" onerror="this.src='https://placehold.co/600x600?text=No+Image'">
+                alt="{{ product.prod_name }}" 
+                onerror="if(this.src.indexOf('{{ product.local_url }}') === -1 && '{{ product.local_url }}' !== '') { this.src='{{ product.local_url }}'; } else { this.src='https://placehold.co/600x600?text=No+Image'; }">
             <button id="likeBtn"
                 class="btn btn-light position-absolute bottom-0 end-0 m-3 border shadow-sm rounded-circle p-2"
                 style="width: 45px; height: 45px;">
@@ -104,7 +105,8 @@
         try {
             await fetch(`/api/products/${productId}/view`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' }
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include'
             });
         } catch (error) {
             console.error('조회 기록 실패:', error);
@@ -112,7 +114,7 @@
 
         // 2. 좋아요 상태 확인
         try {
-            const response = await fetch(`/api/products/${productId}/like-status`);
+            const response = await fetch(`/api/products/${productId}/like-status`, { credentials: 'include' });
             const data = await response.json();
             if (data.success && data.liked) {
                 isLiked = true;
@@ -129,7 +131,8 @@
                 if (isLiked) {
                     // 좋아요 취소
                     const response = await fetch(`/api/products/${productId}/like`, {
-                        method: 'DELETE'
+                        method: 'DELETE',
+                        credentials: 'include'
                     });
                     const data = await response.json();
                     if (data.success) {
@@ -143,7 +146,8 @@
                     // 좋아요 추가
                     const response = await fetch(`/api/products/${productId}/like`, {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' }
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'include'
                     });
                     const data = await response.json();
                     if (data.success) {

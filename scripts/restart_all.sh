@@ -4,7 +4,7 @@ echo "=========================================="
 echo "Main Project Lookalike - 전체 재시작"
 echo "=========================================="
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"# 중지
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)" # 중지
 bash "${SCRIPT_DIR}/stop_all.sh"
 
 echo ""

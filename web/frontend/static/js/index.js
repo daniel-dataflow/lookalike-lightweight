@@ -695,6 +695,7 @@ document.addEventListener('DOMContentLoaded', function () {
             const response = await fetch('/api/search/by-image', {
                 method: 'POST',
                 body: formData,
+                credentials: 'include'
             });
 
             const data = await response.json();
@@ -742,7 +743,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 <a href="/product/${item.product_id}" class="text-decoration-none">
                     <div class="card h-100 product-card position-relative overflow-hidden shadow-sm">
                         <img src="${item.image_url}" class="card-img-top" alt="${item.product_name}"
-                            style="height: 350px; object-fit: cover; object-position: top;" onerror="this.src='https://placehold.co/300x400?text=No+Image'">
+                            style="height: 350px; object-fit: cover; object-position: top;" 
+                            onerror="if(this.src.indexOf('${item.local_url}') === -1 && '${item.local_url}' !== 'null') { this.src='${item.local_url}'; } else { this.src='https://placehold.co/300x400?text=No+Image'; }">
                         <div class="card-body">
                             <small class="text-muted d-block mb-1">${item.brand}</small>
                             <h6 class="card-title text-truncate fw-bold text-dark">${item.product_name}</h6>

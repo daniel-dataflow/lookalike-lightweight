@@ -17,7 +17,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     // 1. 로그인 확인
     let isLoggedIn = false;
     try {
-        const authResp = await fetch('/api/auth/me');
+        const authResp = await fetch('/api/auth/me', { credentials: 'include' });
         const authData = await authResp.json();
         isLoggedIn = authData.success && authData.user;
     } catch (e) {
@@ -85,7 +85,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         }
 
         try {
-            const resp = await fetch(`/api/search/history?limit=${pageSize}&offset=${currentOffset}`);
+            const resp = await fetch(`/api/search/history?limit=${pageSize}&offset=${currentOffset}`, { credentials: 'include' });
 
             if (resp.status === 401) {
                 historyLoading.classList.add('d-none');
@@ -181,7 +181,7 @@ document.addEventListener('DOMContentLoaded', async function () {
                              onclick="showDetail(${item.log_id})">
                             <img src="${thumbUrl}" alt="검색 이미지"
                                 class="history-img" style="width: 100%; height: 140px; object-fit: contain; background-color: #f8f9fa;"
-                                onerror="this.src='https://placehold.co/150x150/f8f9fa/999?text=No+Image'">
+                                onerror="if(this.src.indexOf('${item.local_thumbnail_url}') === -1 && '${item.local_thumbnail_url}' !== 'null') { this.src='${item.local_thumbnail_url}'; } else { this.src='https://placehold.co/150x150/f8f9fa/999?text=No+Image'; }">
                             <div class="p-2 text-center">
                                 ${searchText}
                                 <div class="d-flex justify-content-center gap-1 mb-1">
@@ -274,7 +274,7 @@ async function showDetail(logId) {
             html += `<div class="text-center mb-3">
                 <img src="${data.thumbnail_url}" alt="검색 이미지"
                     style="max-height: 200px; border-radius: 8px;"
-                    onerror="this.style.display='none'">
+                    onerror="if(this.src.indexOf('${data.local_thumbnail_url}') === -1 && '${data.local_thumbnail_url}' !== 'null') { this.src='${data.local_thumbnail_url}'; } else { this.style.display='none'; }">
             </div>`;
         }
 
@@ -295,7 +295,8 @@ async function showDetail(logId) {
                     <div class="col">
                         <div class="card h-100 border-0 shadow-sm">
                             <img src="${item.image_url}" class="card-img-top" alt="${item.product_name}"
-                                style="height: 350px; object-fit: cover; object-position: top;" onerror="this.src='https://placehold.co/300x400?text=No+Image'">
+                                style="height: 350px; object-fit: cover; object-position: top;" 
+                                onerror="if(this.src.indexOf('${item.local_url}') === -1 && '${item.local_url}' !== 'null') { this.src='${item.local_url}'; } else { this.src='https://placehold.co/300x400?text=No+Image'; }">
                             <div class="card-body p-2">
                                 <small class="text-muted">${item.brand}</small>
                                 <div class="fw-bold small text-truncate">${item.product_name}</div>

@@ -472,12 +472,14 @@ function getToastIcon(type) {
 ========================================================================= */
 
 document.addEventListener('DOMContentLoaded', async function () {
+    if (!window.location.pathname.startsWith('/likes')) return;
+
     const container = document.getElementById('productsContainer');
     const emptyState = document.getElementById('emptyState');
     const loading = document.getElementById('loading');
 
     try {
-        const response = await fetch('/api/products/likes');
+        const response = await fetch('/api/products/likes', { credentials: 'include' });
         const data = await response.json();
 
         if (loading) loading.classList.add('d-none');
@@ -489,9 +491,10 @@ document.addEventListener('DOMContentLoaded', async function () {
                     <div class="col">
                         <a href="/product/${product.product_id}" class="text-decoration-none">
                             <div class="card h-100 border-0 shadow-sm hover-shadow">
-                                <img src="${product.img_hdfs_path || 'https://placehold.co/300x400?text=No+Image'}" 
+                                <img src="${product.img_url || product.img_hdfs_path || 'https://placehold.co/300x400?text=No+Image'}" 
                                      class="card-img-top" alt="${product.prod_name}"
-                                     style="height: 350px; object-fit: cover; object-position: top;">
+                                     style="height: 350px; object-fit: cover; object-position: top;"
+                                     onerror="if(this.src.indexOf('${product.local_url}') === -1 && '${product.local_url}' !== 'null') { this.src='${product.local_url}'; } else { this.src='https://placehold.co/300x400?text=No+Image'; }">
                                 <div class="card-body">
                                     <small class="text-muted">${product.brand_name || ''}</small>
                                     <h6 class="card-title text-truncate fw-bold">${product.prod_name}</h6>
@@ -506,6 +509,8 @@ document.addEventListener('DOMContentLoaded', async function () {
                 `;
                 if (container) container.innerHTML += card;
             });
+        } else {
+            if (emptyState) emptyState.classList.remove('d-none');
         }
     } catch (error) {
         console.error('좋아요 목록 조회 실패:', error);
@@ -545,7 +550,7 @@ document.addEventListener('DOMContentLoaded', async function () {
 
     // 페이지 로드 시 사용자 정보 확인
     try {
-        const resp = await fetch('/api/auth/me');
+        const resp = await fetch('/api/auth/me', { credentials: 'include' });
         const data = await resp.json();
 
         if (data.success && data.user) {
@@ -655,12 +660,14 @@ document.addEventListener('DOMContentLoaded', async function () {
 ========================================================================= */
 
 document.addEventListener('DOMContentLoaded', async function () {
+    if (!window.location.pathname.startsWith('/recent')) return;
+
     const container = document.getElementById('productsContainer');
     const emptyState = document.getElementById('emptyState');
     const loading = document.getElementById('loading');
 
     try {
-        const response = await fetch('/api/products/recent-views');
+        const response = await fetch('/api/products/recent-views', { credentials: 'include' });
         const data = await response.json();
 
         if (loading) loading.classList.add('d-none');
@@ -672,9 +679,10 @@ document.addEventListener('DOMContentLoaded', async function () {
                     <div class="col">
                         <a href="/product/${product.product_id}" class="text-decoration-none">
                             <div class="card h-100 border-0 shadow-sm hover-shadow">
-                                <img src="${product.img_hdfs_path || 'https://placehold.co/300x400?text=No+Image'}" 
+                                <img src="${product.img_url || product.img_hdfs_path || 'https://placehold.co/300x400?text=No+Image'}" 
                                      class="card-img-top" alt="${product.prod_name}"
-                                     style="height: 350px; object-fit: cover; object-position: top;">
+                                     style="height: 350px; object-fit: cover; object-position: top;"
+                                     onerror="if(this.src.indexOf('${product.local_url}') === -1 && '${product.local_url}' !== 'null') { this.src='${product.local_url}'; } else { this.src='https://placehold.co/300x400?text=No+Image'; }">
                                 <div class="card-body">
                                     <small class="text-muted">${product.brand_name || ''}</small>
                                     <h6 class="card-title text-truncate fw-bold">${product.prod_name}</h6>
@@ -689,6 +697,8 @@ document.addEventListener('DOMContentLoaded', async function () {
                 `;
                 if (container) container.innerHTML += card;
             });
+        } else {
+            if (emptyState) emptyState.classList.remove('d-none');
         }
     } catch (error) {
         console.error('최근 본 상품 조회 실패:', error);

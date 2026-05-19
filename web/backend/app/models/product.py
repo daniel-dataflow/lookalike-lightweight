@@ -33,6 +33,8 @@ class ProductResponse(BaseModel):
     base_price: Optional[int] = None
     category_code: Optional[str] = None
     img_hdfs_path: Optional[str] = None
+    img_url: Optional[str] = None             # Cloudinary 또는 원본 주소
+    local_url: Optional[str] = None           # 로컬 Fallback 주소
     create_dt: Optional[datetime] = None
     update_dt: Optional[datetime] = None
 

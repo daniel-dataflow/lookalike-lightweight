@@ -246,3 +246,7 @@ ml-models/api/app.py
 
 # 평가지표 계산
 ml-models/search-evaluation/scripts
+
+# 추가 제외 경로 (경량화 마이그레이션)
+supabase/
+web/frontend/static/uploads/

@@ -24,6 +24,12 @@ class UserLoginRequest(BaseModel):
     password: str = Field(..., description="비밀번호")
 
 
+class AdminLoginRequest(BaseModel):
+    """관리자 로그인 요청"""
+    username: str
+    password: str
+
+
 class UserUpdateRequest(BaseModel):
     """사용자 정보 수정"""
     name: Optional[str] = Field(None, max_length=50)

@@ -31,7 +31,8 @@ class SimilarProductResponse(BaseModel):
     product_id: Optional[str] = None
     prod_name: Optional[str] = None
     base_price: Optional[int] = None
-    img_hdfs_path: Optional[str] = None
+    img_url: Optional[str] = None
+    local_url: Optional[str] = None
 
 
 class SearchResultResponse(BaseModel):
@@ -68,6 +69,7 @@ class ProductResult(BaseModel):
     brand: str
     price: int
     image_url: str
+    local_url: Optional[str] = None           # 로컬 Fallback URL
     mall_name: str
     mall_url: str
     similarity_score: Optional[float] = None   # ML 유사도 점수
@@ -81,8 +83,8 @@ MockProductResult = ProductResult
 class ImageSearchResponse(BaseModel):
     """이미지 검색 응답"""
     success: bool = True
-    log_id: int
-    thumbnail_url: str
+    log_id: Optional[int] = None
+    thumbnail_url: Optional[str] = None
     results: List[ProductResult]
     result_count: int
     search_source: str = "db"  # 전체 검색에 적용된 전략
@@ -92,6 +94,7 @@ class SearchHistoryItem(BaseModel):
     """검색 히스토리 아이템"""
     log_id: int
     thumbnail_url: Optional[str] = None
+    local_thumbnail_url: Optional[str] = None
     search_text: Optional[str] = None
     category: Optional[str] = None
     gender: Optional[str] = None
