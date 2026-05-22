@@ -37,4 +37,6 @@ Pillow>=10.0.0
 # 기타
 urllib3<2
 
+# gradio_client: handle_file() 방식으로 HF Space(gr.Interface) 호출
 gradio_client
+# torch/transformers 제거: 이미지 임베딩은 HF Space에서 처리 (경량화)

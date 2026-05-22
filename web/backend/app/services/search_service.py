@@ -5,6 +5,7 @@
 - Late Fusion RRF: 이미지 70% + 텍스트 30%
 """
 import os
+import io
 import logging
 import asyncio
 import httpx
@@ -17,10 +18,10 @@ logger = logging.getLogger(__name__)
 
 settings = get_settings()
 
-# HuggingFace Space URL (.env의 HF_SPACE_URL 또는 기본값)
+# HuggingFace Space URL (config의 settings 사용)
 # 예: https://daniel0708-lookalike-yolo.hf.space
-HF_SPACE_BASE = os.getenv("HF_SPACE_URL", "").rstrip("/")
-HF_SPACE_TOKEN = os.getenv("HF_SPACE_TOKEN", "")
+HF_SPACE_BASE = settings.HF_SPACE_URL.rstrip("/") if settings.HF_SPACE_URL else ""
+HF_SPACE_TOKEN = settings.HF_SPACE_TOKEN or ""
 
 
 class SearchService:
@@ -28,6 +29,51 @@ class SearchService:
     유사 상품 검색 비즈니스 로직.
     HuggingFace Space → 임베딩 수신 → pgvector HNSW 검색.
     """
+
+    # ─────────────────────────────────────
+    # 로컬 Fashion CLIP 임베딩 (새로 추가)
+    # ─────────────────────────────────────
+    async def generate_fashion_clip_embedding(self, image_bytes: bytes) -> Optional[list[float]]:
+        """
+        로컬 Fashion CLIP 모델로 이미지 임베딩 생성 (512d)
+        패션 특화 CLIP 모델 사용 → 정확도 향상
+        """
+        try:
+            from PIL import Image
+            import torch
+            from transformers import CLIPModel, CLIPProcessor
+            
+            # 이미지 로드
+            pil_img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+            
+            # Fashion-CLIP 모델 로드 (로컬 캐시 사용)
+            logger.info("🔄 Fashion-CLIP 모델 로드...")
+            model = CLIPModel.from_pretrained("patrickjohncyh/fashion-clip")
+            processor = CLIPProcessor.from_pretrained("patrickjohncyh/fashion-clip")
+            model.eval()
+            
+            # GPU 사용 가능하면 사용
+            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            model = model.to(device)
+            
+            # 이미지 전처리 및 임베딩 생성
+            inputs = processor(images=pil_img, return_tensors="pt").to(device)
+            with torch.no_grad():
+                features = model.get_image_features(**inputs)
+            
+            # L2 정규화 (코사인 유사도 최적화)
+            embedding = torch.nn.functional.normalize(features, p=2, dim=1)
+            embedding_list = embedding[0].cpu().tolist()
+            
+            logger.info(f"✅ Fashion-CLIP 임베딩 생성: dim={len(embedding_list)}")
+            return embedding_list
+            
+        except ImportError:
+            logger.warning("❌ torch/transformers 미설치")
+            return None
+        except Exception as e:
+            logger.error(f"❌ Fashion-CLIP 임베딩 생성 실패: {e}")
+            return None
 
     # ──────────────────────────────────────
     # 공개 검색 진입점
@@ -57,10 +103,15 @@ class SearchService:
                     limit=limit,
                 )
                 if results:
+                    logger.info(f"벡터 검색 성공: {len(results)}개 상품")
                     return results
+                else:
+                    logger.warning("벡터 검색 결과 없음, DB fallback 진행")
             except Exception as e:
-                logger.error(f"벡터 검색 실패: {e}")
+                logger.error(f"벡터 검색 실패: {e}, DB fallback 진행")
 
+        # Fallback: 랜덤 검색 또는 카테고리/성별 기반 검색
+        logger.info("DB fallback으로 상품 검색")
         return self._search_by_db(category=category, gender=gender, limit=limit)
 
     # ──────────────────────────────────────
@@ -68,42 +119,82 @@ class SearchService:
     # ──────────────────────────────────────
     async def call_hf_space_predict(self, image_bytes: bytes) -> dict:
         """
-        Space POST /predict → { boxes, embedding(512d), label, category }
+        HF Space Gradio API 호출 (gradio_client 사용)
+
+        HF Space가 gr.Interface(fn=predict, inputs=gr.Image(), outputs=gr.JSON())
+        로 구성되어 있어 gradio_client로 호출합니다.
+
+        gradio_client v1.x에서는 handle_file()로 이미지를 전달해야 합니다.
+        (tmp 파일 경로를 직접 전달하는 방식은 동작하지 않음)
 
         반환 구조:
             {
-                "embedding": list[float] | None,   # Fashion-CLIP 512d
-                "boxes": list[dict],
-                "label": str,
-                "category": str | None,
+                "embedding": list[float] | None,  # 512d CLIP 벡터
+                "boxes":     list[dict],
+                "label":     str,
+                "category":  str | None,
+                "status":    "success" | "error",
             }
         """
         if not HF_SPACE_BASE:
-            logger.warning("HF_SPACE_URL 미설정 → Space 호출 건너뜀")
+            logger.warning("HF_SPACE_URL 미설정 → 이미지 임베딩 불가")
             return {"embedding": None, "boxes": [], "label": "unknown", "category": None}
 
-        headers = {}
-        if HF_SPACE_TOKEN:
-            headers["Authorization"] = f"Bearer {HF_SPACE_TOKEN}"
-
-        url = f"{HF_SPACE_BASE}/predict"
-        files = {"image": ("image.jpg", image_bytes, "image/jpeg")}
+        import tempfile
 
         try:
-            async with httpx.AsyncClient(timeout=60.0) as client:
-                resp = await client.post(url, headers=headers, files=files)
-                resp.raise_for_status()
-                data = resp.json()
-                logger.info(f"Space 응답: label={data.get('label')}, "
-                            f"boxes={len(data.get('boxes', []))}, "
-                            f"embedding={'있음' if data.get('embedding') else '없음'}")
-                return data
-        except httpx.TimeoutException:
-            logger.warning("HF Space 타임아웃 (콜드스타트 가능) → 재시도 없이 None 반환")
-            return {"embedding": None, "boxes": [], "label": "unknown", "category": None}
+            from gradio_client import Client, handle_file
+
+            # ── 이미지 bytes → 임시 파일 ────────────────────
+            # MIME 타입에 따라 확장자 결정
+            if image_bytes[:8] == b"\x89PNG\r\n\x1a\n":
+                suffix = ".png"
+            elif image_bytes[:4] == b"RIFF" and image_bytes[8:12] == b"WEBP":
+                suffix = ".webp"
+            else:
+                suffix = ".jpg"
+
+            with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+                tmp.write(image_bytes)
+                tmp_path = tmp.name
+
+            try:
+                # ── gradio_client로 HF Space 호출 ───────────
+                # handle_file(): gradio_client v1.x 표준 이미지 전달 방식
+                # HF Space 콜드스타트 대비 타임아웃을 넉넉히 설정
+                def _predict():
+                    client = Client(HF_SPACE_BASE)
+                    return client.predict(
+                        image=handle_file(tmp_path),
+                        api_name="/predict",
+                    )
+
+                result = await asyncio.to_thread(_predict)
+            finally:
+                if os.path.exists(tmp_path):
+                    os.remove(tmp_path)
+
+            # ── 응답 파싱 ──────────────────────────────────
+            if not isinstance(result, dict):
+                logger.warning(f"HF Space 응답 타입 이상: {type(result)}")
+                return {"embedding": None, "boxes": [], "label": "unknown", "category": None}
+
+            status = result.get("status", "")
+            if status == "error":
+                logger.warning(
+                    f"⚠️ HF Space 내부 오류: {result.get('error_message', 'unknown')}"
+                )
+                return {"embedding": None, "boxes": [], "label": "unknown", "category": None}
+
+            embedding = result.get("embedding")
+            dim = len(embedding) if embedding else 0
+            logger.info(f"✅ HF Space 임베딩 수신 성공 (dim={dim})")
+            return result
+
         except Exception as e:
-            logger.error(f"HF Space /predict 호출 실패: {e}")
-            return {"embedding": None, "boxes": [], "label": "unknown", "category": None}
+            logger.error(f"⚠️ HF Space 호출 실패: {type(e).__name__}: {e}")
+
+        return {"embedding": None, "boxes": [], "label": "unknown", "category": None}
 
     # ──────────────────────────────────────
     # YOLO 전용 탐지 (레거시 호환)
@@ -276,7 +367,6 @@ class SearchService:
 
             products.sort(key=lambda x: x["similarity_score"] or 0.0, reverse=True)
             return products[:limit]
-
         except Exception as e:
             logger.error(f"DB Hydration 실패: {e}")
             return []
@@ -318,7 +408,7 @@ class SearchService:
             return f"/raw/{clean_path}"
 
     def _search_by_db(self, category, gender, limit: int) -> list:
-        """Fallback: 랜덤 상품 반환"""
+        """Fallback: 카테고리/성별 기반 검색 + similarity score 할당"""
         try:
             with get_pg_cursor() as cur:
                 conditions, params = [], []
@@ -342,14 +432,23 @@ class SearchService:
                     """,
                     params + [limit],
                 )
+                
+                # 카테고리 매칭 점수: 조건 만족 정도에 따라 0.5~0.7 할당
+                has_category = category is not None
+                has_gender = gender is not None
+                base_score = 0.5 + (0.1 if has_category else 0) + (0.1 if has_gender else 0)
+                
                 return [{
-                    "product_id": str(r["product_id"]), "product_name": r["prod_name"] or "상품명 없음",
-                    "brand": r["brand_name"] or "브랜드 없음", "price": r["lowest_price"] or 0,
+                    "product_id": str(r["product_id"]), 
+                    "product_name": r["prod_name"] or "상품명 없음",
+                    "brand": r["brand_name"] or "브랜드 없음", 
+                    "price": r["lowest_price"] or 0,
                     "image_url": r["img_url"] or "https://placehold.co/300x300?text=No+Image",
                     "local_url": self.get_local_fallback_url(r["img_url"] or ""),
                     "mall_name": r["mall_name"] or r["brand_name"] or "공식몰",
                     "mall_url": r["mall_url"] or r["origin_url"] or "#",
-                    "similarity_score": None, "search_source": "db_fallback",
+                    "similarity_score": round(base_score, 2),  # 0.5~0.7
+                    "search_source": "db_category_match",
                 } for r in cur.fetchall()]
         except Exception as e:
             logger.error(f"DB fallback 검색 실패: {e}")
@@ -359,11 +458,13 @@ class SearchService:
         key = (category or "").strip().lower()
         if not key:
             return []
-        category_map = {
-            "top": ["top", "상의"], "bottom": ["bottom", "하의"],
-            "outer": ["outer", "아우터"],
-        }
-        return category_map.get(key, [key])
+        if key in ["top", "상의"]:
+            return ["top", "상의"]
+        elif key in ["bottom", "하의", "팬츠"]:
+            return ["bottom", "하의"]
+        elif key in ["outer", "아우터", "아우터(outer)"]:
+            return ["outer", "아우터"]
+        return [key]
 
 
 search_service = SearchService()

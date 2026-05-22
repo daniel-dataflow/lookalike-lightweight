@@ -71,12 +71,16 @@ async def search_by_image(
                 logger.info(f"YOLO 카테고리 자동 적용: {category}")
 
             if image_vector:
-                logger.info(f"Fashion-CLIP 임베딩 수신 (dim={len(image_vector)})")
+                logger.info(f"✅ Fashion-CLIP 임베딩 수신 (dim={len(image_vector)})")
             else:
-                logger.warning("HF Space 임베딩 없음 → DB fallback 예정")
+                logger.warning("⚠️ HF Space 임베딩 없음 → 텍스트 검색만 진행")
 
         if search_text:
             text_vector = await embedding_service.encode_text(search_text)
+            if text_vector:
+                logger.info(f"✅ 텍스트 임베딩 생성 (dim={len(text_vector)})")
+            else:
+                logger.warning("⚠️ 텍스트 임베딩 생성 실패")
 
         results = await search_service.search_products(
             image_vector=image_vector,
