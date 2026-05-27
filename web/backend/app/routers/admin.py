@@ -77,6 +77,11 @@ async def get_system_health_api():
 
 def _get_system_health() -> SystemHealthResponse:
     settings = get_settings()
+    
+    # 1. PostgreSQL DB 정보 조회
+    active_connections = 0
+    db_size = 0
+    db_status = "healthy"
     try:
         with get_pg_cursor() as cur:
             cur.execute("SELECT count(*) as cnt FROM pg_stat_activity;")
@@ -86,23 +91,76 @@ def _get_system_health() -> SystemHealthResponse:
             cur.execute("SELECT pg_database_size(current_database()) as size;")
             row = cur.fetchone()
             db_size = row["size"] if row else 0
-
-        return SystemHealthResponse(
-            server_status="healthy",
-            db_status="healthy",
-            db_active_connections=active_connections,
-            db_size_mb=round(db_size / 1024 / 1024, 2),
-            app_version=settings.APP_VERSION,
-            environment=settings.APP_ENV,
-        )
     except Exception as e:
-        logger.error(f"시스템 상태 조회 실패: {e}")
-        return SystemHealthResponse(
-            server_status="healthy",
-            db_status="error",
-            app_version=settings.APP_VERSION,
-            environment=settings.APP_ENV,
+        logger.error(f"시스템 상태 DB 조회 실패: {e}")
+        db_status = "error"
+
+    # 2. Cloudinary 정보 조회
+    cloudinary_status = "healthy"
+    cloudinary_usage_bytes = 0
+    cloudinary_resources_count = 0
+    try:
+        import cloudinary
+        import cloudinary.api
+        # Cloudinary 인증 설정
+        cloudinary.config(
+            cloud_name=settings.CLOUDINARY_CLOUD_NAME,
+            api_key=settings.CLOUDINARY_API_KEY,
+            api_secret=settings.CLOUDINARY_API_SECRET,
+            secure=True,
         )
+        # API 사용량 정보 가져오기
+        usage = cloudinary.api.usage()
+        # resources의 최신 개수를 세기 위해 list_resources 실행 (최대 1건 정보만 받아와서 속도 최적화)
+        resources = cloudinary.api.resources(max_results=1)
+        
+        cloudinary_resources_count = usage.get("resources", 0)
+        # usage["storage"]["usage"]는 바이트 단위 크기이므로 그대로 대입
+        cloudinary_usage_bytes = usage.get("storage", {}).get("usage", 0)
+    except Exception as e:
+        logger.warning(f"Cloudinary 상태 조회 실패: {e}")
+        cloudinary_status = "error"
+
+    # 3. HuggingFace Space 정보 조회
+    hf_status = "healthy"
+    hf_model_status = "healthy"
+    hf_latency_ms = 0.0
+    try:
+        import httpx
+        hf_url = settings.HF_SPACE_URL
+        if hf_url:
+            t0 = time.time()
+            # HF Space는 보통 / 로 접근하면 GUI를 주기 때문에 헬스체크 또는 메타데이터 경로 호출
+            # 여기서는 /api/predict 또는 루트 경로 호출 성능 측정
+            resp = httpx.get(hf_url, timeout=3.0)
+            latency = (time.time() - t0) * 1000.0
+            hf_latency_ms = round(latency, 2)
+            if resp.status_code >= 400:
+                hf_model_status = f"HTTP {resp.status_code}"
+                if resp.status_code == 503:
+                    hf_status = "sleeping"
+        else:
+            hf_status = "disabled"
+            hf_model_status = "disabled"
+    except Exception as e:
+        logger.warning(f"HuggingFace Space 상태 조회 실패: {e}")
+        hf_status = "error"
+        hf_model_status = "offline"
+
+    return SystemHealthResponse(
+        server_status="healthy",
+        db_status=db_status,
+        db_active_connections=active_connections,
+        db_size_mb=round(db_size / 1024 / 1024, 2),
+        app_version=settings.APP_VERSION,
+        environment=settings.ENV_MODE,
+        cloudinary_status=cloudinary_status,
+        cloudinary_usage_bytes=cloudinary_usage_bytes,
+        cloudinary_resources_count=cloudinary_resources_count,
+        hf_status=hf_status,
+        hf_model_status=hf_model_status,
+        hf_latency_ms=hf_latency_ms,
+    )
 
 
 # ──────────────────────────────────────

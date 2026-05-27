@@ -69,13 +69,23 @@ class DataSummaryResponse(BaseModel):
 
 
 class SystemHealthResponse(BaseModel):
-    """시스템 상태 (Render 서버 + Supabase DB)"""
+    """시스템 상태 (FastAPI 서버 + Supabase DB + Cloudinary + HF)"""
     server_status: str = "healthy"
     db_status: str = "unknown"
     db_active_connections: int = 0
     db_size_mb: float = 0.0
     app_version: str = ""
     environment: str = ""
+    
+    # Cloudinary 이미지 저장소 정보
+    cloudinary_status: str = "unknown"
+    cloudinary_usage_bytes: int = 0
+    cloudinary_resources_count: int = 0
+    
+    # HuggingFace Space 정보
+    hf_status: str = "unknown"
+    hf_model_status: str = "unknown"
+    hf_latency_ms: float = 0.0
 
 
 # ──────────────────────────────────────

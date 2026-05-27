@@ -58,6 +58,11 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: str = ""
     GEMINI_EMBED_MODEL: str = "text-embedding-004"
 
+    # === Cloudinary 이미지 저장소 ===
+    CLOUDINARY_CLOUD_NAME: str = ""
+    CLOUDINARY_API_KEY: str = ""
+    CLOUDINARY_API_SECRET: str = ""
+
     # === 이미지 업로드 ===
     MAX_UPLOAD_SIZE_MB: int = 10
     THUMBNAIL_SIZE: int = 150

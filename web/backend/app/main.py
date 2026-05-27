@@ -5,6 +5,7 @@ FastAPI 기반 백엔드 애플리케이션 진입점
 - ENV_MODE=production -> Supabase DB + Cloudflare R2
 """
 import os
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 
@@ -18,6 +19,8 @@ from .database import init_all_databases, close_all_databases, cleanup_expired_s
 from . import database as _db_module
 from .routers import auth_router, product_router, search_router, inquiry_router, admin_router
 from .routers.pages import router as pages_router
+from .routers.metric import router as metric_router, start_metric_collector
+from .routers.metric_realtime import router as metric_realtime_router
 
 # ──────────────────────────────────────
 # 로깅 설정
@@ -60,9 +63,14 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"세션 정리 실패: {e}")
 
+    # 5분 주기 인프라 메트릭 수집 백그라운드 태스크 기동
+    collector_task = asyncio.create_task(start_metric_collector())
+    logger.info("📊 인프라 메트릭 수집 태스크 시작")
+
     yield
 
     logger.info("앱 종료 - 데이터베이스 연결 해제")
+    collector_task.cancel()
     close_all_databases()
 
 
@@ -127,11 +135,22 @@ app.include_router(product_router)
 app.include_router(search_router)
 app.include_router(inquiry_router)
 app.include_router(admin_router)
+app.include_router(metric_router)
+app.include_router(metric_realtime_router)
 
 
 # ──────────────────────────────────────
-# 헬스체크 & 상태 API
+# 헬스체크 & 상태 API & 파비콘
 # ──────────────────────────────────────
+from fastapi.responses import FileResponse
+
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon():
+    favicon_path = os.path.join(_static_dir, "images", "favicon.ico")
+    if os.path.isfile(favicon_path):
+        return FileResponse(favicon_path)
+    return HTMLResponse(status_code=404)
+
 @app.get("/health", tags=["system"])
 async def health_check():
     """헬스체크 엔드포인트"""
@@ -149,7 +168,7 @@ async def api_status():
         "status": "running",
         "environment": settings.ENV_MODE,
         "databases": {
-            "postgresql": "connected" if _db_module._pg_pool else "disconnected",
+            "postgresql": "connected" if _db_module.engine is not None else "disconnected",
         },
     }
 

@@ -15,7 +15,6 @@
 (function () {
     const preloadMap = {
         '/admin/infra': [
-            { key: 'infraDashboard', url: '/api/admin/infra/dashboard' },
             { key: 'metricsStats', url: '/api/metrics/stats' },
             { key: 'metricsStream', url: '/api/metrics/stream' }
         ],

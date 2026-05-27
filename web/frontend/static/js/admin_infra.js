@@ -29,7 +29,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 function startAutoRefresh() {
     if (autoRefreshInterval) clearInterval(autoRefreshInterval);
-    autoRefreshInterval = setInterval(refreshData, 30000); // 30초마다
+    autoRefreshInterval = setInterval(refreshData, 10000); // 10초마다
 }
 
 function stopAutoRefresh() {
@@ -156,179 +156,145 @@ function initCharts() {
 }
 
 /**
- * 메인 갱신 함수: 인프라 상태(CPU/Memory), Elasticsearch 통계값, 컨테이너 스트림을 동시에 병렬 취합함.
- * I/O 대기를 최소화하고 렌더링 블로킹을 방지하기 위해 Promise.all 로 비동기 요청을 묶었음.
- * @returns {Promise<void>}
+ * 메인 갱신 함수: 시스템 리소스 + 메트릭 데이터를 병렬 수신하여 UI 업데이트.
+ * Neon DB 링 버퍼(스트림) + psutil 요약(stats) + 어드민 시스템 헬스를 병렬 호치.
  */
 async function refreshData() {
-    // [성능 최적화] Phase 1: 빠른 API 먼저 렌더링 (~100ms)
-    // 통합 API (system+DB) + ES 메트릭을 병렬 호출
     await Promise.all([
-        loadInfraDashboard(),  // system+DB 통합 (1회 왕복)
-        fetchStats(),
-        fetchStream()
+        fetchSystemHealth(),   // 시스템 상태 (CPU/Mem/Disk/Uptime) — psutil realtime
+        fetchStats(),          // 요약 카드 (1시간 평균) — Neon DB stats
+        fetchStream()          // 시계열 차트   — Neon DB stream
     ]);
     document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString('ko-KR');
 
-    // [성능 최적화] Phase 2: Docker API 비동기 후속 로딩
-    // await 없음 → 페이지 블로킹 않고 Docker 정보만 나중에 채워짐
-    loadDockerStatus();
+    // 데이터베이스 상태는 어드민 API 사용
+    fetchDbStatus();
 }
 
-// ── Docker 마지막 체크 시각 조회 ──
-async function loadDockerStatus() {
+// 시스템 상태 (psutil realtime)
+async function fetchSystemHealth() {
     try {
-        const resp = await fetch('/api/admin/docker/containers');
+        const resp = await fetch('/api/metrics/realtime');
         const data = await resp.json();
-        const checkedEl = document.getElementById('dockerCheckedAt');
-        if (data.checked_at && checkedEl) {
-            const t = new Date(data.checked_at);
-            checkedEl.textContent = `Docker 마지막 체크: ${t.toLocaleTimeString('ko-KR')}`;
+        const m = (data.metrics || [])[0];
+        if (!m) return;
+
+        // CPU 카드
+        document.getElementById('cpuPercent').textContent = `${m.cpu_percent.toFixed(1)}%`;
+        document.getElementById('cpuProgress').style.width = `${m.cpu_percent}%`;
+        document.getElementById('cpuProgress').className = `progress-bar ${getProgressColor(m.cpu_percent)}`;
+        
+        // CPU 코어 및 사양 정보 출력
+        const cpuInfo = [];
+        if (m.cpu_freq_current > 0) cpuInfo.push(`${(m.cpu_freq_current / 1000).toFixed(2)}GHz`);
+        if (m.cpu_cores_physical > 0 && m.cpu_cores_logical > 0) {
+            cpuInfo.push(`${m.cpu_cores_physical}C/${m.cpu_cores_logical}T`);
+        }
+        document.getElementById('cpuDetail').textContent = cpuInfo.join(' | ') || 'CPU 정보 없음';
+
+        // 메모리 카드
+        const memUsedGB  = (m.memory_usage / 1024 / 1024 / 1024).toFixed(1);
+        const memTotalGB = (m.memory_limit / 1024 / 1024 / 1024).toFixed(1);
+        document.getElementById('memoryPercent').textContent = `${m.memory_percent.toFixed(1)}%`;
+        document.getElementById('memoryProgress').style.width = `${m.memory_percent}%`;
+        document.getElementById('memoryProgress').className = `progress-bar ${getProgressColor(m.memory_percent)}`;
+        document.getElementById('memoryDetail').textContent = `${memUsedGB}GB / ${memTotalGB}GB`;
+
+        // 업타임
+        if (m.uptime_seconds !== undefined) {
+            const uptime = m.uptime_seconds;
+            if (uptime < 60) {
+                document.getElementById('uptime').textContent = `${uptime.toFixed(0)}초`;
+            } else if (uptime < 3600) {
+                document.getElementById('uptime').textContent = `${Math.floor(uptime / 60)}분 ${Math.floor(uptime % 60)}초`;
+            } else {
+                const hrs = Math.floor(uptime / 3600);
+                const mins = Math.floor((uptime % 3600) / 60);
+                document.getElementById('uptime').textContent = `${hrs}시간 ${mins}분`;
+            }
+        } else {
+            document.getElementById('uptime').textContent = '구동 중';
+        }
+
+        // 디스크
+        if (m.disk_used !== undefined) {
+            const diskUsedGB = (m.disk_used / 1024 / 1024 / 1024).toFixed(1);
+            const diskTotalGB = (m.disk_total / 1024 / 1024 / 1024).toFixed(1);
+            const diskFreeGB = ((m.disk_total - m.disk_used) / 1024 / 1024 / 1024).toFixed(1);
+            document.getElementById('diskPercent').textContent = `${m.disk_percent.toFixed(1)}%`;
+            document.getElementById('diskProgress').style.width = `${m.disk_percent}%`;
+            document.getElementById('diskProgress').className = `progress-bar ${getProgressColor(m.disk_percent)}`;
+            document.getElementById('diskDetail').textContent = `${diskUsedGB}GB / ${diskTotalGB}GB`;
+            document.getElementById('diskTotal').textContent = `${diskTotalGB} GB`;
+            document.getElementById('diskFree').textContent = `${diskFreeGB} GB`;
+        } else {
+            document.getElementById('diskPercent').textContent = 'N/A';
+            document.getElementById('diskDetail').textContent  = '측정 실패';
+            document.getElementById('diskTotal').textContent   = '-';
+            document.getElementById('diskFree').textContent    = '-';
         }
     } catch (e) {
-        console.error('Docker 상태 조회 실패:', e);
+        console.error('시스템 실시간 조회 실패:', e);
     }
 }
 
-/**
- * 호스트 OS 자원 상태와 종속 DB(Postgres, Mongo, Redis) 헬스 체크를 서버로부터 통합 수신.
- * 각각을 개별로 폴링할 때 발생하는 네트워크 오버헤드를 아끼고 단일 응답으로 UI 컴포넌트를 전부 매핑하기 위함.
- * @returns {Promise<void>}
- */
-async function loadInfraDashboard() {
+// 데이터베이스 및 이미지 상태 (admin health API)
+async function fetchDbStatus() {
     try {
-        // [성능] 프리로드된 데이터가 있으면 재사용 (초기 로딩 시)
-        let data;
-        if (window.__preload?.infraDashboard) {
-            data = await window.__preload.infraDashboard;
-            window.__preload.infraDashboard = null; // 1회 사용 후 폐기
+        const resp = await fetch('/api/admin/system/health');
+        const data = await resp.json();
+
+        // PostgreSQL
+        const pgOk = data.db_status === 'healthy';
+        document.getElementById('pgStatus').className = `badge bg-${pgOk ? 'success' : 'danger'}`;
+        document.getElementById('pgStatus').textContent = pgOk ? '정상' : '오류';
+        document.getElementById('pgConnections').textContent = data.db_active_connections || '-';
+        document.getElementById('pgSize').textContent = data.db_size_mb ? `${data.db_size_mb} MB` : '-';
+
+        // 운영체제 표시 동적 반영
+        if (data.environment === 'local') {
+            document.getElementById('osName').textContent = 'Windows';
+        } else {
+            document.getElementById('osName').textContent = 'Linux (Render)';
         }
-        if (!data) {
-            const response = await fetch('/api/admin/infra/dashboard');
-            data = await response.json();
+
+        // Cloudinary 상태 및 리소스 반영
+        const cloudOk = data.cloudinary_status === 'healthy';
+        const cloudinaryStatusEl = document.getElementById('cloudinaryStatus');
+        if (cloudinaryStatusEl) {
+            cloudinaryStatusEl.className = `badge bg-${cloudOk ? 'success' : 'danger'}`;
+            cloudinaryStatusEl.textContent = cloudOk ? '정상' : '오류';
+            
+            const usageMB = (data.cloudinary_usage_bytes / 1024 / 1024).toFixed(2);
+            document.getElementById('cloudinaryUsage').textContent = `${usageMB} MB`;
+            document.getElementById('cloudinaryResources').textContent = `${data.cloudinary_resources_count.toLocaleString()}개`;
         }
 
-        // System 데이터 적용
-        if (data.system) {
-            applySystemStatus(data.system);
+        // HuggingFace Space 상태 반영
+        const hfOk = data.hf_status === 'healthy';
+        const hfStatusEl = document.getElementById('hfStatus');
+        if (hfStatusEl) {
+            if (data.hf_status === 'sleeping') {
+                hfStatusEl.className = 'badge bg-warning text-dark';
+                hfStatusEl.textContent = '대기 모드';
+            } else {
+                hfStatusEl.className = `badge bg-${hfOk ? 'success' : 'danger'}`;
+                hfStatusEl.textContent = hfOk ? '정상' : '오류';
+            }
+            
+            document.getElementById('hfModelStatus').textContent = data.hf_model_status || '-';
+            document.getElementById('hfLatency').textContent = data.hf_latency_ms ? `${data.hf_latency_ms} ms` : '-';
         }
-        // Database 데이터 적용
-        if (data.database) {
-            applyDatabaseStatus(data.database);
-        }
-    } catch (error) {
-        console.error('인프라 대시보드 조회 실패:', error);
-        // 폴백: 개별 호출
-        await Promise.all([loadSystemStatus(), loadDatabaseStatus()]);
+    } catch (e) {
+        console.error('데이터베이스 상태 조회 실패:', e);
     }
 }
 
-// ── 시스템 상태 (기존 인프라 모니터링) ──
-async function loadSystemStatus() {
-    try {
-        const response = await fetch('/api/admin/system/status');
-        const data = await response.json();
-        applySystemStatus(data);
-    } catch (error) {
-        console.error('시스템 상태 조회 실패:', error);
-    }
-}
-
-function applySystemStatus(data) {
-    // CPU
-    document.getElementById('cpuPercent').textContent = `${data.cpu_percent.toFixed(1)}%`;
-    document.getElementById('cpuProgress').style.width = `${data.cpu_percent}%`;
-    document.getElementById('cpuProgress').className = `progress-bar ${getProgressColor(data.cpu_percent)}`;
-
-    let cpuInfo = [];
-    if (data.cpu_freq_current > 0) cpuInfo.push(`${(data.cpu_freq_current / 1000).toFixed(2)}GHz`);
-    if (data.cpu_cores_physical > 0 && data.cpu_cores_logical > 0) cpuInfo.push(`${data.cpu_cores_physical}C/${data.cpu_cores_logical}T`);
-    document.getElementById('cpuDetail').textContent = cpuInfo.join(' | ') || 'CPU 정보 없음';
-
-    // 메모리
-    const memoryUsedGB = (data.memory_used / 1024 / 1024 / 1024).toFixed(1);
-    const memoryTotalGB = (data.memory_total / 1024 / 1024 / 1024).toFixed(1);
-    document.getElementById('memoryPercent').textContent = `${data.memory_percent.toFixed(1)}%`;
-    document.getElementById('memoryProgress').style.width = `${data.memory_percent}%`;
-    document.getElementById('memoryProgress').className = `progress-bar ${getProgressColor(data.memory_percent)}`;
-    document.getElementById('memoryDetail').textContent = `${memoryUsedGB}GB / ${memoryTotalGB}GB`;
-
-    // 디스크
-    const diskUsedGB = (data.disk_used / 1024 / 1024 / 1024).toFixed(1);
-    const diskTotalGB = (data.disk_total / 1024 / 1024 / 1024).toFixed(1);
-    const diskFreeGB = ((data.disk_total - data.disk_used) / 1024 / 1024 / 1024).toFixed(1);
-    document.getElementById('diskPercent').textContent = `${data.disk_percent.toFixed(1)}%`;
-    document.getElementById('diskProgress').style.width = `${data.disk_percent}%`;
-    document.getElementById('diskProgress').className = `progress-bar ${getProgressColor(data.disk_percent)}`;
-    document.getElementById('diskDetail').textContent = `${diskUsedGB}GB / ${diskTotalGB}GB`;
-    document.getElementById('diskTotal').textContent = `${diskTotalGB} GB`;
-    document.getElementById('diskFree').textContent = `${diskFreeGB} GB`;
-
-    // 업타임
-    const days = Math.floor(data.uptime_seconds / 86400);
-    const hours = Math.floor((data.uptime_seconds % 86400) / 3600);
-    document.getElementById('uptime').textContent = `${days}일 ${hours}시간`;
-}
-
-// ── 데이터베이스 상태 ──
-async function loadDatabaseStatus() {
-    try {
-        const response = await fetch('/api/admin/database/status');
-        const data = await response.json();
-        applyDatabaseStatus(data);
-    } catch (error) {
-        console.error('데이터베이스 상태 조회 실패:', error);
-    }
-}
-
-function applyDatabaseStatus(data) {
-    // PostgreSQL
-    if (data.postgresql.status === 'healthy') {
-        document.getElementById('pgStatus').className = 'badge bg-success';
-        document.getElementById('pgStatus').textContent = '정상';
-        document.getElementById('pgConnections').textContent = data.postgresql.active_connections;
-        document.getElementById('pgSize').textContent = `${data.postgresql.database_size_mb} MB`;
-    } else {
-        document.getElementById('pgStatus').className = 'badge bg-danger';
-        document.getElementById('pgStatus').textContent = '오류';
-    }
-
-    // MongoDB
-    if (data.mongodb.status === 'healthy') {
-        document.getElementById('mongoStatus').className = 'badge bg-success';
-        document.getElementById('mongoStatus').textContent = '정상';
-        document.getElementById('mongoCollections').textContent = data.mongodb.collections;
-        document.getElementById('mongoSize').textContent = `${data.mongodb.data_size_mb} MB`;
-    } else {
-        document.getElementById('mongoStatus').className = 'badge bg-danger';
-        document.getElementById('mongoStatus').textContent = '오류';
-    }
-
-    // Redis
-    if (data.redis.status === 'healthy') {
-        document.getElementById('redisStatus').className = 'badge bg-success';
-        document.getElementById('redisStatus').textContent = '정상';
-        document.getElementById('redisMemory').textContent = `${data.redis.used_memory_mb} MB`;
-        document.getElementById('redisKeys').textContent = data.redis.total_keys.toLocaleString();
-    } else {
-        document.getElementById('redisStatus').className = 'badge bg-danger';
-        document.getElementById('redisStatus').textContent = '오류';
-    }
-}
-
-// ── 메트릭 통계 (Elasticsearch) ──
+// 메트릭 통계 (Neon DB 평균)
 async function fetchStats() {
     try {
-        // [성능] 프리로드된 데이터가 있으면 재사용
-        let data;
-        if (window.__preload?.metricsStats) {
-            data = await window.__preload.metricsStats;
-            window.__preload.metricsStats = null;
-        }
-        if (!data) {
-            const resp = await fetch('/api/metrics/stats');
-            data = await resp.json();
-        }
+        const resp = await fetch('/api/metrics/stats');
+        const data = await resp.json();
 
         let totalCpu = 0, totalMem = 0, count = 0;
         let maxMem = 0, maxMemService = '-';
@@ -343,7 +309,6 @@ async function fetchStats() {
                 maxMem = stats.max_mem_mb;
                 maxMemService = svc;
             }
-
             let cpuVal = stats.max_cpu || stats.avg_cpu;
             if (cpuVal > maxCpu) {
                 maxCpu = cpuVal;
@@ -354,41 +319,31 @@ async function fetchStats() {
         if (count > 0) {
             document.getElementById('avgCpu').innerText = (totalCpu / count).toFixed(1) + '%';
             document.getElementById('avgMem').innerText = (totalMem / count).toFixed(1) + '%';
-
-            document.getElementById('maxMemVal').innerText = maxMem.toFixed(0) + ' MB';
+            document.getElementById('maxMemVal').innerText    = maxMem.toFixed(0) + ' MB';
             document.getElementById('maxMemDetail').innerText = '사용 1위: ' + maxMemService;
-
             if (document.getElementById('maxCpuVal')) {
-                document.getElementById('maxCpuVal').innerText = maxCpu.toFixed(1) + '%';
+                document.getElementById('maxCpuVal').innerText    = maxCpu.toFixed(1) + '%';
                 document.getElementById('maxCpuDetail').innerText = '사용 1위: ' + maxCpuService;
             }
         }
     } catch (e) {
-        console.error("Stats error", e);
+        console.error('Stats error', e);
     }
 }
 
-// ── 메트릭 스트림 (Elasticsearch) ──
+// 메트릭 스트림 (Neon DB 시계열)
 async function fetchStream() {
     try {
-        // [성능] 프리로드된 데이터가 있으면 재사용
-        let data;
-        if (window.__preload?.metricsStream) {
-            data = await window.__preload.metricsStream;
-            window.__preload.metricsStream = null;
-        }
-        if (!data) {
-            const resp = await fetch('/api/metrics/stream?limit=200');
-            data = await resp.json();
-        }
-        const logs = data.metrics.reverse();
+        const resp = await fetch('/api/metrics/stream');
+        const data = await resp.json();
+        const logs = (data.metrics || []);
 
         if (!logs.length) return;
 
         updateCharts(logs);
         updateTable(logs);
     } catch (e) {
-        console.error("Stream error", e);
+        console.error('Stream error', e);
     }
 }
 

@@ -190,7 +190,25 @@ def cleanup_expired_sessions():
 def init_all_databases():
     """데이터베이스 연결 초기화 (앱 시작 시 호출)"""
     init_postgres()
+    _ensure_infra_metrics_table()
     logger.info("🚀 PostgreSQL 데이터베이스 연결 초기화 완료")
+
+
+def _ensure_infra_metrics_table():
+    """infra_metrics 링 버퍼 테이블이 없으면 자동 생성 (초경량 Ring Buffer)"""
+    try:
+        with get_pg_cursor() as cur:
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS infra_metrics (
+                    id        SERIAL PRIMARY KEY,
+                    cpu_usage REAL,
+                    memory_usage REAL,
+                    timestamp TIMESTAMP DEFAULT NOW()
+                );
+            """)
+        logger.info("✅ infra_metrics 테이블 확인/생성 완료")
+    except Exception as e:
+        logger.error(f"❌ infra_metrics 테이블 생성 실패: {e}")
 
 
 def close_all_databases():

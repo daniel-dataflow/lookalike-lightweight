@@ -40,3 +40,9 @@ urllib3<2
 # gradio_client: handle_file() 방식으로 HF Space(gr.Interface) 호출
 gradio_client
 # torch/transformers 제거: 이미지 임베딩은 HF Space에서 처리 (경량화)
+
+# 서버 리소스 모니터링 (CPU/Memory 수집)
+psutil>=5.9.0
+
+# Cloudinary 이미지 저장소 모니터링
+cloudinary>=1.44.2
