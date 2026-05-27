@@ -144,6 +144,59 @@ async def search_by_image(
         raise HTTPException(status_code=500, detail="서버 오류")
 
 
+@router.post("/detect")
+async def detect_objects(image: UploadFile = File(...)):
+    """YOLO 기반 객체탐지 API (기존 프론트엔드 네모칸 조작 및 클릭 검색 완벽 호환 규격)"""
+    try:
+        image_bytes = await image.read()
+        # HuggingFace Space의 원본 결과를 수집
+        result = await search_service.call_hf_space_predict(image_bytes)
+        raw_boxes = result.get("boxes", [])
+        
+        # 라벨 한영 매핑
+        label_map = {
+            "아우터": "Outer",
+            "상의": "Top",
+            "하의": "Bottom",
+            "outer": "Outer",
+            "top": "Top",
+            "bottom": "Bottom"
+        }
+        
+        # 프론트엔드가 기대하는 x1, y1, x2, y2, w, h, conf, label 구조로 변환
+        formatted_boxes = []
+        for box in raw_boxes:
+            x1 = box.get("x1", 0.0)
+            y1 = box.get("y1", 0.0)
+            x2 = box.get("x2", 0.0)
+            y2 = box.get("y2", 0.0)
+            conf = box.get("conf") if box.get("conf") is not None else box.get("confidence", 0.0)
+            raw_label = box.get("label", "unknown")
+            label = label_map.get(raw_label.lower(), raw_label)
+            if raw_label in label_map:
+                label = label_map[raw_label]
+
+            formatted_boxes.append({
+                "x1": x1,
+                "y1": y1,
+                "x2": x2,
+                "y2": y2,
+                "w": round(x2 - x1, 4),
+                "h": round(y2 - y1, 4),
+                "conf": conf,
+                "label": label
+            })
+            
+        return {
+            "success": True,
+            "boxes": formatted_boxes
+        }
+    except Exception as e:
+        logger.error(f"객체 탐지 실패: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"객체 탐지 실패: {str(e)}")
+
+
+
 @router.get("/history", response_model=SearchHistoryListResponse)
 async def get_search_history(request: Request, limit: int = Query(20, ge=1, le=100), offset: int = Query(0, ge=0)):
     session = _get_user_from_session(request)
