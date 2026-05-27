@@ -41,8 +41,17 @@ async def get_realtime_metrics():
             # 메모리
             vm = psutil.virtual_memory()
 
-            # 디스크
-            disk = psutil.disk_usage('/')
+            # 디스크 수집 (Render 환경 권한 오류 방어 및 현재 작업 디렉토리 기준 측정)
+            try:
+                disk = psutil.disk_usage('.')
+                disk_used = disk.used
+                disk_total = disk.total
+                disk_percent = round(disk.percent, 2)
+            except Exception as e:
+                logger.warning(f"디스크 메트릭 수집 실패 (기본값 대체): {e}")
+                disk_used = 0
+                disk_total = 0
+                disk_percent = 0.0
             
             # 업타임
             uptime = time.time() - _START_TIME
@@ -57,9 +66,9 @@ async def get_realtime_metrics():
                 "memory_usage":   vm.used,
                 "memory_percent": round(vm.percent, 2),
                 "memory_limit":   vm.total,
-                "disk_used":      disk.used,
-                "disk_total":     disk.total,
-                "disk_percent":   round(disk.percent, 2),
+                "disk_used":      disk_used,
+                "disk_total":     disk_total,
+                "disk_percent":   disk_percent,
                 "uptime_seconds": round(uptime, 2),
                 "status":         "running",
             }
