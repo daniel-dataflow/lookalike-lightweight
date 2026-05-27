@@ -67,12 +67,10 @@ async function fetchDashboard() {
         const criticalCnt = levels['CRITICAL'] || 0;
         const errorCnt = levels['ERROR'] || 0;
         const warnCnt = levels['WARN'] || 0;
-        const infoCnt = levels['INFO'] || 0;
-        const total = criticalCnt + errorCnt + warnCnt + infoCnt;
+        const total = criticalCnt + errorCnt + warnCnt;
         setText('statCritical', criticalCnt);
         setText('statError', errorCnt);
         setText('statWarn', warnCnt);
-        setText('statInfo', infoCnt);
         setText('statTotal', total);
         const badgeThroughput = document.getElementById('badgeThroughput');
         if (badgeThroughput) {
@@ -136,8 +134,7 @@ function _applyTrend(trend) {
     trendChart.data.labels = labels;
     trendChart.data.datasets = [
         { label: 'ERROR', data: trend.map(t => t.ERROR), backgroundColor: 'rgba(231,74,59,0.85)', borderRadius: 2 },
-        { label: 'WARN', data: trend.map(t => t.WARN), backgroundColor: 'rgba(246,194,62,0.85)', borderRadius: 2 },
-        { label: 'INFO', data: trend.map(t => t.INFO), backgroundColor: 'rgba(54,185,204,0.35)', borderRadius: 2 }
+        { label: 'WARN', data: trend.map(t => t.WARN), backgroundColor: 'rgba(246,194,62,0.85)', borderRadius: 2 }
     ];
     trendChart.update('none'); // [성능] 애니메이션 비활성화
     checkErrorSpike(trend);
@@ -236,13 +233,11 @@ async function fetchStats() {
         const criticalCnt = levels['CRITICAL'] || 0;
         const errorCnt = levels['ERROR'] || 0;
         const warnCnt = levels['WARN'] || 0;
-        const infoCnt = levels['INFO'] || 0;
-        const total = criticalCnt + errorCnt + warnCnt + infoCnt;
+        const total = criticalCnt + errorCnt + warnCnt;
 
         setText('statCritical', criticalCnt);
         setText('statError', errorCnt);
         setText('statWarn', warnCnt);
-        setText('statInfo', infoCnt);
         setText('statTotal', total);
 
         const badgeThroughput = document.getElementById('badgeThroughput');

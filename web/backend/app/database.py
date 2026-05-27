@@ -191,6 +191,7 @@ def init_all_databases():
     """데이터베이스 연결 초기화 (앱 시작 시 호출)"""
     init_postgres()
     _ensure_infra_metrics_table()
+    _ensure_app_logs_table()
     logger.info("🚀 PostgreSQL 데이터베이스 연결 초기화 완료")
 
 
@@ -209,6 +210,31 @@ def _ensure_infra_metrics_table():
         logger.info("✅ infra_metrics 테이블 확인/생성 완료")
     except Exception as e:
         logger.error(f"❌ infra_metrics 테이블 생성 실패: {e}")
+
+
+def _ensure_app_logs_table():
+    """app_logs 링 버퍼 테이블이 없으면 자동 생성 (초경량 Log Ring Buffer)"""
+    try:
+        with get_pg_cursor() as cur:
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS app_logs (
+                    id SERIAL PRIMARY KEY,
+                    level VARCHAR(20),
+                    service VARCHAR(50) DEFAULT 'FastAPI',
+                    message TEXT,
+                    error_type VARCHAR(100),
+                    timestamp TIMESTAMPTZ DEFAULT NOW()
+                );
+            """)
+            # 기존 컬럼이 있는 경우 TIMESTAMPTZ로 마이그레이션 시도
+            cur.execute("""
+                ALTER TABLE app_logs ALTER COLUMN timestamp TYPE TIMESTAMPTZ;
+            """)
+        logger.info("✅ app_logs 테이블 확인/생성 및 TIMESTAMPTZ 설정 완료")
+    except Exception as e:
+        logger.error(f"❌ app_logs 테이블 생성/수정 실패: {e}")
+
+
 
 
 def close_all_databases():

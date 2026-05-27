@@ -13,11 +13,11 @@
         <span class="badge bg-info text-dark" id="badgeThroughput" title="예상 수집량">
             <i class="fas fa-tachometer-alt me-1"></i>수집: -건/분
         </span>
-        <span class="badge bg-primary" id="badgeStorage" title="Elasticsearch 저장소">
+        <span class="badge bg-primary" id="badgeStorage" title="Neon DB 저장소">
             <i class="fas fa-hdd me-1"></i>저장소: - GB
         </span>
         <span class="badge bg-success" title="로그 보관 정책">
-            <i class="fas fa-history me-1"></i>보관: 7일
+            <i class="fas fa-history me-1"></i>보관: 24시간
         </span>
     </div>
     <div class="form-check form-switch mb-0 d-flex align-items-center">
@@ -81,10 +81,6 @@
                 <div class="d-flex justify-content-between align-items-center py-2 border-bottom">
                     <span><span class="badge bg-warning text-dark me-2">WARN</span>경고</span>
                     <span class="fw-bold text-warning" id="statWarn">-</span>
-                </div>
-                <div class="d-flex justify-content-between align-items-center py-2 border-bottom">
-                    <span><span class="badge bg-info text-dark me-2">INFO</span>정보</span>
-                    <span class="fw-bold text-info" id="statInfo">-</span>
                 </div>
                 <div class="d-flex justify-content-between align-items-center py-2">
                     <span class="fw-bold">전체</span>
@@ -225,28 +221,20 @@
             <label class="form-label small fw-bold">알림 제외 서비스</label>
             <div class="d-flex flex-wrap gap-2" id="excludeServicesGroup">
                 <div class="form-check form-check-inline">
-                    <input class="form-check-input" type="checkbox" id="excl_DB" value="DB">
-                    <label class="form-check-label small" for="excl_DB">DB</label>
+                    <input class="form-check-input" type="checkbox" id="excl_FastAPI" value="FastAPI">
+                    <label class="form-check-label small" for="excl_FastAPI">FastAPI</label>
                 </div>
                 <div class="form-check form-check-inline">
-                    <input class="form-check-input" type="checkbox" id="excl_Kafka" value="Kafka">
-                    <label class="form-check-label small" for="excl_Kafka">Kafka</label>
+                    <input class="form-check-input" type="checkbox" id="excl_PostgreSQL" value="PostgreSQL">
+                    <label class="form-check-label small" for="excl_PostgreSQL">PostgreSQL</label>
                 </div>
                 <div class="form-check form-check-inline">
-                    <input class="form-check-input" type="checkbox" id="excl_Elastic" value="Elastic">
-                    <label class="form-check-label small" for="excl_Elastic">Elastic</label>
+                    <input class="form-check-input" type="checkbox" id="excl_Cloudinary" value="Cloudinary">
+                    <label class="form-check-label small" for="excl_Cloudinary">Cloudinary</label>
                 </div>
                 <div class="form-check form-check-inline">
-                    <input class="form-check-input" type="checkbox" id="excl_Airflow" value="Airflow">
-                    <label class="form-check-label small" for="excl_Airflow">Airflow</label>
-                </div>
-                <div class="form-check form-check-inline">
-                    <input class="form-check-input" type="checkbox" id="excl_API_BE" value="API_BE">
-                    <label class="form-check-label small" for="excl_API_BE">API_BE</label>
-                </div>
-                <div class="form-check form-check-inline">
-                    <input class="form-check-input" type="checkbox" id="excl_API_ML" value="API_ML">
-                    <label class="form-check-label small" for="excl_API_ML">API_ML</label>
+                    <input class="form-check-input" type="checkbox" id="excl_HuggingFace" value="HuggingFace">
+                    <label class="form-check-label small" for="excl_HuggingFace">HuggingFace</label>
                 </div>
             </div>
         </div>
@@ -313,22 +301,14 @@
             <div class="btn-group" role="group" id="serviceFilterGroup">
                 <input type="radio" class="btn-check" name="serviceFilter" id="svc_ALL" value="ALL" checked>
                 <label class="btn btn-outline-secondary btn-sm px-3" for="svc_ALL">전체</label>
-                <input type="radio" class="btn-check" name="serviceFilter" id="svc_Airflow" value="Airflow">
-                <label class="btn btn-outline-secondary btn-sm px-3" for="svc_Airflow">Airflow</label>
-                <input type="radio" class="btn-check" name="serviceFilter" id="svc_Spark" value="Spark">
-                <label class="btn btn-outline-secondary btn-sm px-3" for="svc_Spark">Spark</label>
-                <input type="radio" class="btn-check" name="serviceFilter" id="svc_Hadoop" value="Hadoop">
-                <label class="btn btn-outline-secondary btn-sm px-3" for="svc_Hadoop">Hadoop</label>
-                <input type="radio" class="btn-check" name="serviceFilter" id="svc_Kafka" value="Kafka">
-                <label class="btn btn-outline-secondary btn-sm px-3" for="svc_Kafka">Kafka</label>
-                <input type="radio" class="btn-check" name="serviceFilter" id="svc_DB" value="DB">
-                <label class="btn btn-outline-secondary btn-sm px-3" for="svc_DB">DB</label>
-                <input type="radio" class="btn-check" name="serviceFilter" id="svc_Elastic" value="Elastic">
-                <label class="btn btn-outline-secondary btn-sm px-3" for="svc_Elastic">Elastic</label>
-                <input type="radio" class="btn-check" name="serviceFilter" id="svc_API_BE" value="API_BE">
-                <label class="btn btn-outline-secondary btn-sm px-3" for="svc_API_BE">API_BE</label>
-                <input type="radio" class="btn-check" name="serviceFilter" id="svc_API_ML" value="API_ML">
-                <label class="btn btn-outline-secondary btn-sm px-3" for="svc_API_ML">API_ML</label>
+                <input type="radio" class="btn-check" name="serviceFilter" id="svc_FastAPI" value="FastAPI">
+                <label class="btn btn-outline-secondary btn-sm px-3" for="svc_FastAPI">FastAPI</label>
+                <input type="radio" class="btn-check" name="serviceFilter" id="svc_PostgreSQL" value="PostgreSQL">
+                <label class="btn btn-outline-secondary btn-sm px-3" for="svc_PostgreSQL">PostgreSQL</label>
+                <input type="radio" class="btn-check" name="serviceFilter" id="svc_Cloudinary" value="Cloudinary">
+                <label class="btn btn-outline-secondary btn-sm px-3" for="svc_Cloudinary">Cloudinary</label>
+                <input type="radio" class="btn-check" name="serviceFilter" id="svc_HuggingFace" value="HuggingFace">
+                <label class="btn btn-outline-secondary btn-sm px-3" for="svc_HuggingFace">HuggingFace</label>
             </div>
         </div>
         <div class="level-search-row">
@@ -341,8 +321,6 @@
                 <label class="btn btn-outline-danger btn-sm px-3" for="lvl_ERROR">ERROR</label>
                 <input type="radio" class="btn-check" name="levelFilter" id="lvl_WARN" value="WARN">
                 <label class="btn btn-outline-warning btn-sm px-3" for="lvl_WARN">WARN</label>
-                <input type="radio" class="btn-check" name="levelFilter" id="lvl_INFO" value="INFO">
-                <label class="btn btn-outline-info btn-sm px-3" for="lvl_INFO">INFO</label>
             </div>
             <div class="search-box">
                 <input type="text" class="form-control" id="keywordSearch" placeholder="로그 검색...">
