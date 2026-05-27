@@ -1,72 +1,40 @@
-# 👗 Lookalike (Snap-Match) — 듀프족을 위한 AI 패션 이미지 검색 플랫폼
+# 👗 Lookalike (Snap-Match) — 듀프족을 위한 AI 패션 이미지 검색 플랫폼 (3세대 경량 서버)
 
-> **"비슷한 옷, 더 싸게"** — 이미지 한 장으로 유사 패션 상품을 찾고 최저가 5개 쇼핑몰을 한 번에 비교합니다.
+> **"비슷한 옷, 더 싸게"** — 이미지 한 장으로 유사 패션 상품을 찾고 최저가 쇼핑몰을 한 번에 비교합니다. 본 프로젝트는 과거 Lookalike 팀원들이 구축한 부트캠프 최우수상 초기 분산 클러스터 아키텍처 유산([이전 버전 프로젝트 레포지토리](https://github.com/daniel-dataflow/main-project-lookalike))을 기반으로 삼아, Render 무료 서버 환경에 맞춰 **3세대 경량 서버 아키텍처**로 리팩토링을 단독 진행한 버전입니다.
 
 [![Python](https://img.shields.io/badge/Python-3.11-3776AB?style=flat-square&logo=python)](https://python.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.109.0-009688?style=flat-square&logo=fastapi)](https://fastapi.tiangolo.com)
-[![Elasticsearch](https://img.shields.io/badge/Elasticsearch-8.11.0-005571?style=flat-square&logo=elasticsearch)](https://elastic.co)
-[![Airflow](https://img.shields.io/badge/Airflow-2.10.4-017CEE?style=flat-square&logo=apacheairflow)](https://airflow.apache.org)
-[![Spark](https://img.shields.io/badge/Apache_Spark-3.5.3-E25A1C?style=flat-square&logo=apachespark)](https://spark.apache.org)
-[![Kafka](https://img.shields.io/badge/Kafka-7.5.0-231F20?style=flat-square&logo=apachekafka)](https://kafka.apache.org)
-[![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=flat-square&logo=docker)](https://docker.com)
-[![GCP](https://img.shields.io/badge/GCP-Cloud_VM-4285F4?style=flat-square&logo=googlecloud)](https://cloud.google.com)
+[![PostgreSQL](https://img.shields.io/badge/Neon_PostgreSQL-pgvector-4169E1?style=flat-square&logo=postgresql)](https://neon.tech)
+[![HuggingFace](https://img.shields.io/badge/HuggingFace-Spaces-FFD21E?style=flat-square&logo=huggingface)](https://huggingface.co)
+[![Cloudinary](https://img.shields.io/badge/Cloudinary-Media-3448C5?style=flat-square&logo=cloudinary)](https://cloudinary.com)
 
 ---
 
-## 🧑‍🤝‍🧑 팀명: **Lookalike**
+## 🏗️ 3세대 경량 서버 설계 배경 (Architecture Evolution)
 
-### 👑 팀장  
-- **한대성** (Lead DE · Data Engineer · Pipeline Architect): 아키텍처 설계, Docker 인프라, Airflow · Spark 설계 및 튜닝, Kafka 운영 파이프라인, CI/CD, Core FastAPI 백엔드, 프로젝트 전체 총괄
+본 프로젝트는 기존의 대규모 인프라망(Elasticsearch, Apache Spark, Hadoop HDFS, Kafka, Redis, MongoDB)을 전면 제거하고, 메모리 512MB 한계인 Render 무료 티어에서도 원활하게 작동할 수 있도록 초경량 싱글 서버 아키텍처로 거듭났습니다.
 
-### 🌱 팀원  
-- **박주언** (Data Engineer · ETL): 크롤러 개발, Spark 전처리, HDFS 적재, ERD 설계, Naver API 연동
-- **이주형** (ML Engineer · MLOps): AI 모델 스택 선정, YOLOv11 파인튜닝, VLM(LLaVA) 학습·프롬프트 설계, ML 파이프라인-Airflow DAG 최종 연결
-- **정수아** (AI Researcher · Vector Search): YOLOv11 파인튜닝, 이미지 처리 파이프라인, Fashion-CLIP/SBERT 임베딩 검색 로직 구현(FastAPI ML Serving), Vector search(Late Fusion-RRF)
-  
-### 🗓 프로젝트 기간  
-**2026년 01월 12일 ~ 2026년 03월 11일**  
-**서비스 URL**: https://lookalike.duckdns.org
-
-> [!IMPORTANT]
-> **🕒 무료서버로 인한 한시적 운영 안내 (2026.03 ~ 2026.06)**
-> - **운영 시간**: 평일 09:00 ~ 20:00 (KST) 
-> - **참고**: 서버 자원 절약을 위해 주말 및 야간에는 서비스가 제한될 수 있습니다.
-
+| 비교 항목 | 레거시 아키텍처 (GCP 컨테이너 클러스터) | 3세대 경량 서버 아키텍처 (현재 리팩토링) |
+| :--- | :--- | :--- |
+| **코어 RDBMS** | PostgreSQL (GCP VM 컨테이너 운용) | **Neon PostgreSQL (Cloud Serverless DB)** |
+| **벡터 데이터베이스** | Elasticsearch kNN (ViT-B/32, SBERT) | **pgvector (HNSW Index 코사인 유사도 검색)** |
+| **세션 저장소** | Redis (Stateful Memory DB) | **PostgreSQL 기반 DB 세션 (`user_sessions` 테이블)** |
+| **ML/AI 인퍼런스** | 로컬 전용 FastAPI ML 서버 (NVIDIA GPU 가속) | **HuggingFace Space 위탁 추론 (Gradio API 연동)** |
+| **이미지/미디어 저장** | 로컬 컨테이너 호스트 파일시스템 | **Cloudinary (3세대 경량 서버 신규 도입 이미지 클라우드)** |
+| **리소스 & 로그 모니터링** | Filebeat ➔ Kafka ➔ Logstash ➔ ES ➔ 어드민 | **cgroups/psutil 동적 감지 + DB 로그 링 버퍼(24h)** |
 
 ---
 
-## 🏆 수상
+## 📋 프로젝트 개요 및 핵심 기능
 
-> **멀티캠퍼스 K-Digital Training · 데이터 엔지니어 부트캠프**  
-> 문제해결 프로젝트 경진대회 **최우수상** — 2026.03.13
-
-<div align="center">
-  <img src="docs/award_certificate.png" width="500" alt="최우수상 상장">
-</div>
-
----
-
-## 📋 프로젝트 개요
-
-### 주제
-**AI 패션 이미지 검색 기반 듀프 쇼핑 최저가 비교 서비스**
-
-### 📚 배경 및 차별점
-현대 소비자의 구매 패턴은 **'듀프(Dupe) 소비'** 로 진화하고 있습니다. 에이블리 사례에서 확인되듯 듀프족의 등장은 SPA 시장을 전년 대비 2배 이상 성장시켰습니다. 그러나 기존 네이버 렌즈 등 범용 이미지 검색은 패션 도메인에 특화되지 않아 정확도가 낮고, 가격 비교 연동 서비스가 전무합니다.
-
-| 구분 | 기존 서비스 (네이버 렌즈 등) | **Lookalike** |
-|---|---|---|
-| **도메인 특화** | 범용 이미지 검색 | 패션 특화 (YOLOv11 + Fashion-CLIP) |
-| **검색 방식** | 이미지 단독 | 이미지 + 텍스트 Late Fusion (이미지 70% · 텍스트 30%) |
-| **가격 비교** | 미제공 | 실시간 최저가 5개 쇼핑몰 비교 (Naver 쇼핑 API) |
-| **텍스트 이해** | 미제공 | VLM(LLaVA) 상품 설명 생성 + SBERT 임베딩 |
-| **파이프라인** | N/A | Airflow DAG 완전 자동화 (매일 새벽 02:00) |
-
-### 🎯 핵심 목표
-1. **도메인 특화 검색**: YOLOv11 객체 탐지와 Fashion-CLIP 기반 유사도 탐색
-2. **복합 검색 (Late Fusion)**: 이미지 + 텍스트 동시 입력 최적화
-3. **완전 자동화 파이프라인**: Airflow 기반 매일 자동 수집 및 ML 추론 적재
-4. **대규모 분산 아키텍처**: 4개 코어망 통합 (API, 데이터 파이프라인, ML 추론, 관제망)
+### 🎯 핵심 기능
+1. **YOLO 기반 객체 탐지**: 사진 업로드 시 HuggingFace Space의 YOLO 모델을 위탁 호출하여 아우터/상의/하의 영역을 정확히 검출하고 네모칸을 선택해 정밀 검색을 수행합니다.
+2. **Fashion-CLIP 벡터 매칭**: 패션 도메인 특화 CLIP 임베딩을 이용하고 PostgreSQL pgvector HNSW 인덱스를 활용해 0.1초 내외로 초고속 유사 의류를 매칭합니다.
+3. **Late Fusion RRF (복합 검색)**: 이미지 벡터(70%)와 텍스트 의미 벡터(30%)를 RRF(Reciprocal Rank Fusion) 알고리즘으로 결합하여 정교한 검색 결과를 산출합니다.
+4. **실시간 최저가 연동**: 검색된 유사 상품들에 대해 Naver 쇼핑 API를 통해 최저가 5개 쇼핑몰 가격을 실시간으로 비교 제공합니다.
+5. **초경량 어드민 모니터링**: 
+   - cgroups(v1 & v2)와 psutil을 이용해 컨테이너의 실제 리소스 한계치(512MB RAM, 1vCPU)를 자동 추적합니다.
+   - 데이터베이스 용량 초과 방지를 위한 24시간 제한 로그 링 버퍼가 Neon DB 상에 매끄럽게 흐릅니다.
 
 ---
 
@@ -74,183 +42,108 @@
 
 ```text
 snap-match/
-├── docs/                          # 📚 시스템 가이드 및 매뉴얼 (하단 링크 참조)
-├── data-pipeline/                 # 🔧 데이터 엔지니어링 및 파이프라인 망
-│   ├── airflow/                   # Apache Airflow DAGs 및 오퍼레이터 스케줄링
-│   ├── crawlers/                  # 크롤링 봇 스크립트
-│   ├── database/                  # RDBMS 초기 스키마 마이그레이션 (더미 및 Seed)
-│   ├── elasticsearch/             # ES kNN 인덱스 매핑 및 쿼리 튜닝
-│   ├── kafka/                     # 메트릭 및 로그 큐 프로듀서/컨슈머
-│   └── spark/                     # PySpark 기반 대용량 병렬 데이터 전처리 잡(Jobs)
-├── ml-models/                     # 🤖 머신러닝 인퍼런스 레이어
-│   ├── api/                       # ML 전용 FastAPI 라우터 (YOLO 및 Vector 추출)
-│   └── weights/                   # 파인튜닝된 YOLOv8 모델 가중치 (.pt)
+├── docs/                          # 📚 3세대 경량 서버 인프라 및 로그 모니터링 명세서
+│   └── renewal/                   # admin_infra_renewal.md, admin_logs_renewal.md
+├── ml-models/                     # 🤖 머신러닝 인퍼런스 레이어 (HuggingFace Space 배포용)
+│   └── api/                       # hf_space_app.py (YOLO 탐지 및 Fashion-CLIP 임베딩 추출)
 ├── web/                           # 🌐 코어 백엔드 및 웹 프론트엔드
 │   ├── backend/                   # 메인 FastAPI 앱 엔진
 │   │   ├── app/
-│   │   │   ├── core/              # 보안(Auth), ES 연결, 환경 변수 등 핵심 유틸
-│   │   │   ├── models/            # SQLAlchemy ORM 계층
-│   │   │   ├── routers/           # `/api/*` 클라이언트 통신 API 엔드포인트
-│   │   │   └── services/          # 도메인 비즈니스 로직, 모니터링 콜렉터 및 Kafka 연동
+│   │   │   ├── config/            # Pydantic 기반 환경변수 매핑 (base.py)
+│   │   │   ├── database.py        # Neon DB 연결, 테이블 자동 생성 및 세션 관리
+│   │   │   ├── routers/           # /api/* 라우터 (YOLO detect API 내장)
+│   │   │   └── services/          # RRF 검색 로직, HF Space 호출 및 Cloudinary 연동
 │   │   └── requirements.txt
-│   └── frontend/                  # 초경량 SSR 뷰 및 정적 자산
-│       ├── static/                # CSS, JS, Image 에셋
-│       └── templates/             # Jinja2 렌더링 기반 템플릿(HTML)
-├── scripts/                       # 🛠️ 백그라운드 구동 등 수동 제어 쉘 스크립트 모음
-├── config/                        # ⚙️ 통합 커스텀 설정 보관소
-├── Dockerfile.*                   # 각 파트별 커스텀 이미지 빌드 명세 (.airflow, .fastapi 등)
-├── docker-compose.yml             # 통합 클러스터 Full-Mesh 스케줄링 메인 엔트리
-└── docker-compose.gpu.yml         # ML 추론 진영 NVIDIA GPU 가속 오버라이드 지원망
+│   └── frontend/                  # 초경량 SSR Jinja2 뷰
+│       ├── static/                # CSS, JS, Image 에셋 (admin_logs.js 등)
+│       └── templates/             # HTML 템플릿 파일
+├── .env                           # 통합 환경변수 설정 파일
+└── README.md                      # 메인 문서
 ```
 
 ---
 
-## 🏗️ 시스템 아키텍처 및 기술 스택
+## 🏗️ 3세대 경량 서버 아키텍처 및 데이터 흐름
 
-### 1. 시스템 아키텍처 구성도
 ```text
-┌──────────────────────────────────────────────────────────────────────┐
-│  ① 배치 데이터 파이프라인  (Airflow DAG · 매일 02:00 자동 실행)       │
-│                                                                      │
-│  Airflow → Crawlers×5 → Hadoop HDFS → Spark ETL                     │
-│       → PostgreSQL / MongoDB                                         │
-│       → YOLOv11 → Fashion-CLIP → ES (image_embedding)               │
-│       → VLM(LLaVA) → SBERT    → ES (text_embedding)                 │
-│       → Naver 쇼핑 API → PostgreSQL (최저가)                         │
-└──────────────────────────────────────────────────────────────────────┘
-┌──────────────────────────────────────────────────────────────────────┐
-│  ② 실시간 서비스 레이어                                               │
-│                                                                      │
-│  사용자 → Main FastAPI → ML FastAPI (GPU)                            │
-│       → [이미지만] Fashion-CLIP → ES KNN                             │
-│       → [텍스트만] SBERT → ES KNN                                    │
-│       → [복합]     Late Fusion(이미지×0.7 + 텍스트×0.3) → ES KNN    │
-│       → 상품 정보 조회 (PostgreSQL + Naver API) → 결과 반환           │
-└──────────────────────────────────────────────────────────────────────┘
-┌──────────────────────────────────────────────────────────────────────┐
-│  ③ 운영 모니터링 (어드민 전용)                                        │
-│                                                                      │
-│  Filebeat → Kafka → KafkaLogConsumer → ES → 어드민 대시보드          │
-│  Docker SDK Fallback (Kafka 장애 시 자동 전환)                        │
-│  Slack 알람 + Auto-Recovery (docker.restart() 자동 실행)             │
-└──────────────────────────────────────────────────────────────────────┘
+[실시간 검색 서비스 흐름]
+사용자 이미지 업로드 ──► FastAPI (Main Server)
+                             │
+                             ├─► [YOLO 객체탐지] ──► HuggingFace Space API (YOLO)
+                             ├─► [임베딩 추출] ──► HuggingFace Space API (Fashion-CLIP)
+                             │
+                             ▼ [유사도 비교]
+                     Neon PostgreSQL (pgvector HNSW 인덱스 코사인 검색)
+                             │
+                             ▼ [최저가 비교]
+                     Naver 쇼핑 API 실시간 조회 ──► 사용자 결과 반환
 ```
 
-### 2. 주요 기술 스택
-
-| 분류 | 기술 스택 | 역할 |
-|---|---|---|
-| **AI / ML** | YOLOv11, Fashion-CLIP, VLM(LLaVA), SBERT | 객체 탐지, 이미지/텍스트 벡터화, 자연어 설명 생성 |
-| **Data Pipeline** | Apache Airflow, Hadoop HDFS, PySpark, Kafka | 9단계 자동화 워크플로우, 분산 전처리, 실시간 스트리밍 |
-| **Service / DB** | FastAPI (Main/ML), PostgreSQL, MongoDB, Elasticsearch, Redis | 비동기 API, 트랜잭션 DB, NoSQL, kNN 벡터 검색, 세션 관리 |
-| **Infra** | AWS EC2 (g4dn.xlarge), Docker Compose, GitHub Actions | 분산 클러스터링, GPU 가속, CI/CD |
-
 ---
 
-## 🔧 주요 기능
+## 🔧 시작하기 및 실행 방법
 
-- **이미지 검색**: 의류 사진 업로드 → YOLOv11 배경 제거 → Fashion-CLIP 벡터 변환 → Elasticsearch KNN으로 유사 상품 상위 6개 반환
-- **텍스트 검색**: 자연어 입력(예: "오버사이즈 베이지 린넨 셔츠") → SBERT 의미 벡터로 KNN 검색
-- **복합 검색 (Late Fusion)**: 이미지 + 텍스트 동시 입력 시, 두 벡터를 가중 결합(이미지 70% + 텍스트 30%)하여 시각적 유사도와 텍스트 의도를 동시 반영
-- **최저가 비교**: Naver 쇼핑 API로 유사 상품별 최저가 5개 쇼핑몰 실시간 조회 후 가격 오름차순 반환
-- **운영 모니터링**: 어드민 대시보드를 통한 컨테이너 자원 메트릭 및 실시간 에러 로그 관측
+### 1. 환경 변수 설정
+프로젝트 루트 디렉터리에 `.env` 파일을 생성하고 필수 설정값들을 기입합니다:
+```ini
+# 공통 설정
+ENV_MODE=production
+DATABASE_URL=postgresql://[Neon_DB_User]:[Password]@[Host]/[DB_Name]?sslmode=require
 
----
+# HuggingFace & Cloudinary (필수)
+HF_SPACE_URL=https://[Your-HF-Space-Name].hf.space
+CLOUDINARY_CLOUD_NAME=[Cloud_Name]
+CLOUDINARY_API_KEY=[API_Key]
+CLOUDINARY_API_SECRET=[API_Secret]
 
-## 🚀 시작하기 & 실행 방법
+# Naver API (최저가 검색용)
+NAVER_CLIENT_ID=[Naver_Client_ID]
+NAVER_CLIENT_SECRET=[Naver_Client_Secret]
+```
 
-본 클러스터는 Build-once 전략이 적용되어 최초 빌드 이후 초고속 부팅(Fast Boot)을 지원합니다.
-
-### 1. 사전 요구사항
-* **Docker & Docker Compose** (v2.20+)
-* **NVIDIA GPU** (VRAM 16GB 권장) + NVIDIA Container Toolkit
-
-### 2. 환경 변수 설정
+### 2. 로컬 실행 방법
 ```bash
-cp .env.example .env
-# .env 파일 내 포트, 시크릿 키, NAVER API KEY 등 필수 정보 입력
+# 의존성 설치
+cd web/backend
+pip install -r requirements.txt
+
+# FastAPI 백엔드 서버 기동 (8900 포트)
+uvicorn app.main:app --host 0.0.0.0 --port 8900 --reload
+```
+서버 기동 시 [database.py](web/backend/app/database.py)에 작성된 초기화 로직에 의해 Neon PostgreSQL의 `infra_metrics` 및 `app_logs` 테이블이 자동으로 검증 및 마그레이션(TIMESTAMPTZ 타입 마이그레이션 포함) 처리됩니다.
+
+## 📜 프로젝트 아키텍처 진화 히스토리 (Architecture Evolution History)
+
+Lookalike 프로젝트는 고비용의 분산 빅데이터 클러스터 환경에서 시작하여 한 달 운영비 0원의 초경량 분산 구조에 이르기까지, 인프라 비용과 하드웨어 제약 조건에 맞춰 점진적으로 고도화 및 다이어트를 반복하며 발전해 왔습니다.
+
+```mermaid
+graph TD
+    A["[1단계] 로컬 컨테이너 PoC<br>(Docker 기반 팀 공동 개발)"] 
+    ──► B["[2단계] AWS 클라우드 확장<br>(ML 탑재 + Kafka/ES 실시간 로그망)"]
+    ──► C["[3단계] GCP 인프라 이전<br>(자원 한계 대응 1차 기능 축소 & 시간 제한)"]
+    ──► D["[4단계] Render 3세대 경량 서버 (현재)<br>(컨테이너 해체 ➔ Serverless DB + HF API 분산 위탁)"]
+    
+    style A fill:#f9f,stroke:#333,stroke-width:2px
+    style B fill:#bbf,stroke:#333,stroke-width:2px
+    style C fill:#fdd,stroke:#333,stroke-width:2px
+    style D fill:#dfd,stroke:#333,stroke-width:2px
 ```
 
-### 3. 클러스터 실행
-```bash
-# 전체 파이프라인 백그라운드 구동 배포
-docker-compose up -d --build
+### 1단계: 로컬 컨테이너 PoC (팀 공동 개발 및 기틀 구축)
+* **목적**: 듀프 패션 검색 서비스 아이디어를 검증하기 위한 핵심 컴포넌트 간 연동 테스트.
+* **특징**: 모든 팀원이 동일한 도커 개발 환경에서 PostgreSQL, Elasticsearch, MongoDB, Redis, Hadoop, Spark, Airflow, Kafka 등 대형 인프라망을 Docker Compose 기반으로 로컬에서 빌드 및 구동하는 데 성공하며 클라우드 배포를 위한 기술적 기틀을 완성했습니다.
 
-# ML 컨테이너 GPU 오버라이드 기동 시
-docker-compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
-```
+### 2단계: AWS 클라우드 배포 및 실시간 분석망 구축
+* **목적**: 상용 서비스 가능 여부 검증 및 대용량 데이터 전처리/로그 파이프라인 고도화.
+* **특징**: AWS 클라우드로 인프라를 확장 배포하고, YOLO 및 Fashion-CLIP 기반 이미지 유사도 검색 로직을 ML 인프라망에 통합했습니다. 특히 시스템 모니터링 성능 강화를 위해 Filebeat ➔ Kafka ➔ Logstash ➔ Elasticsearch로 흐르는 실시간 로그 스트리밍망을 탑재하여 완벽한 분산 클러스터를 설계했습니다.
 
-### 4. 데이터베이스 및 배치 초기화
-```bash
-# 초기 RDBMS 데이터베이스 스키마 및 마이그레이션 적재
-bash scripts/apply_db_changes.sh
+### 3단계: GCP 인프라 이전 및 과도기적 경량화 (GCP 컨테이너 클러스터)
+* **목적**: 인프라 운영 비용 절감 및 하드웨어 한계 극복을 위한 1차 최적화.
+* **특징**: AWS 환경에서 GCP VM 인프라로 이전하며 동일한 컨테이너 클러스터를 구성했습니다. 다만, 클라우드 자원 스펙 축소로 인해 발생하는 메모리 부족 이슈에 대응하고자 일부 무거운 전처리 단계를 간소화하고, 무료 등급 자원 유지를 위해 어드민 대시보드 및 서비스 운영 시간에 한시적 제한을 두는 등 과도기적인 인프라 다이어트를 1차 적용했습니다.
 
-# 배치 파이프라인 수동 트리거 (Airflow 접속 후 또는 CLI)
-docker exec airflow-scheduler airflow dags trigger lookalike_batch_pipeline
-```
-- 상세 설정 및 개별 컨테이너 구동 방법은 `docs/SETUP.md`를 참고하세요.
-
----
-
-## 🐛 트러블슈팅 및 성능 최적화
-
-| 항목 | 개선 사항 및 해결 방법 |
-|---|---|
-| **어드민 대시보드 로딩 개선** | 순차 조회로 20초 걸리던 병목을 `asyncio.gather()` 병렬화와 Redis 캐시(TTL 25초)로 100ms 이하(200배)로 개선 |
-| **ES CPU 부하 완화** | 단건 인덱싱 로직을 Kafka 버퍼 단위 Bulk(50건) 호출로 변경 및 `refresh_interval` 조절로 부하를 91%에서 30%대로 감소 |
-| **로그망 장애 복원 (SPOF)**| Kafka 장애 지연 시 로그 통신이 두절되는 현상을 방어하기 위해 Docker SDK Fallback 이중 회선 라우팅망 구축 |
-| **ML VRAM OOM 통제**| T4 16GB 서버에서 ML 모델 동시 로드로 뻗는 문제를 Airflow 타임스케줄링 격리 및 `empty_cache()` 처리로 방어 |
-| **크롤링 차단 우회**| ZARA 등 React SPA 쇼핑몰 봇 차단을 Selenium Headless, 랜덤 딜레이, 마우스 시뮬레이션 복합 대응으로 뚫어냄 |
-
-*(추가 상세 내용 및 FastAPI 이벤트 룹 디버그 로깅은 `docs/admin/troubleshooting.md` 참고)*
-
----
-
-## 👨‍💻 개발자 노트
-
-### 알려진 한계 사항 및 자원 확보 시 개선 방향
-
-| 기능 / 구성 요소 | 제약 상황 (자원 한계) | 자원 확보 시 개선 방향 |
-|---|---|---|
-| **LLaVA 모델 크기** | VRAM 부족으로 7B 모델만 사용 가능. 13B 이상 로드 불가 → 색상·소재 세분화 정확도 저하 | GPT-4o Vision / Gemini API 전환으로 로컬 VRAM 의존 제거 |
-| **Spark Executor 메모리** | RAM 부족으로 executor-memory 1g, driver-memory 1g로 하향. 대용량 데이터 처리 시 OOM Killer로 Executor 강제 종료 | EMR / Glue 이관 또는 다중 EC2 Spot Instance 클러스터로 전환 |
-| **HDFS Replication Factor** | 디스크 공간 부족으로 Replication Factor 3 → 1로 강제 축소. 데이터 유실 위험 내재 | S3 전환 시 내장 11-nine 내구성으로 자동 해결 |
-| **Kafka 단일 브로커** | RAM 부족으로 Kafka 브로커 1개만 운영. 파티션 Replication 불가 → 단일 장애점(SPOF) 내재. Fallback으로 보완했으나 근본 해결은 아님 | 3-브로커 클러스터 또는 MSK(Managed Kafka)로 전환, ISR Replication Factor 3 적용 |
-| **ES JVM Heap** | 권장 Heap(RAM의 50%)인 7GB 할당 불가. 2GB로 축소 운영 → GC Pause 빈발, KNN 검색 응답 지연 간헐적 발생 | OpenSearch Serverless 또는 전용 ES 노드 분리로 Heap 충분히 확보 |
-| **Airflow 전용 DB 격리** | RAM 부족으로 Airflow 메타 DB를 서비스용 PostgreSQL과 공유. DB 부하 중첩 시 Airflow 스케줄러 지연 발생 | Airflow 전용 PostgreSQL 컨테이너 분리 또는 RDS 사용 |
-| **YOLOv11 배치 추론 크기** | VRAM 공유 부담으로 `batch_size=4`로 제한. 이론상 최적(32~64) 대비 배치 추론 처리량 저하 | A10G / A100 GPU 사용 시 `batch_size=32` 이상으로 처리량 8배 이상 향상 |
-
----
-
-## 📄 공식 도큐먼트 (Documentation)
-
-자세한 시스템 아키텍처 및 세부 운영 매뉴얼은 `docs/` 내에 체계적으로 명세화되어 있습니다.
-
-### 🌟 튜토리얼 및 아키텍처
-* **[통합 요약 명세서 (SUMMARY.md)](docs/SUMMARY.md)**: 전체 시스템 구조 Overview.
-* **[로컬 셋업 가이드 (SETUP.md)](docs/SETUP.md)**: 전체 인프라망 수동 디버그 및 셋업 매뉴얼.
-* **[코어 백엔드 시스템망 (core_backend_system.md)](docs/architecture/core_backend_system.md)**: API 설계, DB 스키마, Auth 종합 기술.
-* **[프론트엔드 UI 아키텍처망 (frontend_ui_system.md)](docs/architecture/frontend_ui_system.md)**: SSR/SPA 하이브리드 구조 및 통합 에셋 관리 규약.
-* **[머신러닝 및 검색망 (search_and_ml_system.md)](docs/architecture/search_and_ml_system.md)**: YOLO Crop 및 ES kNN 3단계 전략 맵.
-* **[통합 파이프라인망 (data_pipeline_system.md)](docs/architecture/data_pipeline_system.md)**: 에어플로우 기반 9단계 자동화 크롤링 적재.
-
-### 🛠️ 관리자 운영 관제
-* **[인프라 모니터링망 (infra_monitoring_system.md)](docs/admin/infra_monitoring_system.md)**: 하드웨어 메트릭 수집 구조.
-* **[로그 수집망 (log_monitoring_system.md)](docs/admin/log_monitoring_system.md)**: Filebeat-Kafka 안전 로그망.
-* **[알림 봇 시스템 (alert_monitoring_system.md)](docs/admin/alert_monitoring_system.md)**: Slack 에러 알림.
-
----
-
-## 📚 참고문헌
-1. 노준영, 『요즘 소비 트렌드 2026』, 슬로디미디어, 2025
-2. DeepFashion2: A Versatile Benchmark for Detection, Pose Estimation, Segmentation and Re-Identification of Clothing Images
-3. Fashion-CLIP: Leveraging CLIP for Fashion Image-Text Retrieval
-4. YOLOv11: Real-Time Object Detection and Segmentation
-5. LLaVA: Visual Instruction Tuning, Liu et al., 2023
-6. Sentence-BERT: Sentence Embeddings using Siamese BERT-Networks, Reimers & Gurevych, 2019
-
----
-
-<div align="center">
-  <b>작성자: 한대성</b> | 최종 업데이트: 2026-03-18
-</div>
+### 4단계: 3세대 경량 서버 구축 및 1인 단독 리팩토링 (현재)
+* **목적**: 월 인프라 비용 0원 유지 및 512MB 극소 메모리 환경에서의 365일 무중단 서비스 안착.
+* **특징**: 기존의 Docker 클러스터 구조를 전격 해체하고, 무료 클라우드 환경에 최적화된 새로운 설계 패러다임으로 리팩토링을 완수했습니다.
+  - **연산 위탁을 통한 리소스 분리**: 512MB 메모리에서 불가능한 YOLO/Fashion-CLIP 연산을 16GB 자원을 무상 제공하는 HuggingFace Space API로 전면 위탁하여 물리적 자원을 격리했습니다.
+  - **Serverless DB 전환**: 기존 로컬 PostgreSQL 대신 Serverless 기반의 Neon DB 및 pgvector(HNSW Index)를 채택해 기기 DB 부하를 제로화했습니다.
+  - **슬립 모드 및 제약 조건 극복**: Render 무료 인프라의 자동 절전(Sleep) 및 Ephemeral 스토리지 특성을 극복하기 위해, 디스크 실측 롤백 및 cgroups를 활용해 메모리/CPU 사양을 실시간으로 감지하고 24시간 만료 로그 링 버퍼를 활용해 초경량 무결성 모니터링 체계를 확보했습니다.
