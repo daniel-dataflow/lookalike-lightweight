@@ -47,10 +47,21 @@ function initCharts() {
     const cpuCtx = document.getElementById('cpuChart').getContext('2d');
     const memCtx = document.getElementById('memChart').getContext('2d');
 
-    // 시간 포맷 (ISO → '오후 4:13')
+    // 시간 포맷 (ISO → '오후 4:13' / 이미 '17:34' 등 포맷팅된 문자열은 그대로 반환)
     function fmtTime(iso) {
-        const t = iso.endsWith('Z') ? iso : iso + 'Z';
-        return new Date(t).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+        if (!iso) return '';
+        // 이미 '17:34' 와 같이 가공된 포맷이면 그대로 반환
+        if (iso.length === 5 && iso.includes(':')) {
+            return iso;
+        }
+        try {
+            const t = iso.endsWith('Z') ? iso : iso + 'Z';
+            const date = new Date(t);
+            if (isNaN(date.getTime())) return iso;
+            return date.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+        } catch (e) {
+            return iso;
+        }
     }
     // 차트 외부에서도 사용할 수 있도록 저장
     window._fmtTime = fmtTime;

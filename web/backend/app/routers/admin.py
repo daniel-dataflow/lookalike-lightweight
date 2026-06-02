@@ -921,3 +921,154 @@ async def get_crawling_logs(
     except Exception as e:
         logger.error(f"크롤링 로그 조회 에러: {e}")
         return {"success": False, "detail": str(e)}
+
+
+@router.get("/crawling/auto/logs")
+async def get_crawling_auto_logs(
+    run_page: int = Query(1, ge=1),
+    run_limit: int = Query(10, ge=1, le=100),
+    err_page: int = Query(1, ge=1),
+    err_limit: int = Query(10, ge=1, le=100)
+):
+    """
+    자동 크롤링 전용 구동 내역 및 에러 로그 목록 제공 (admin_crawling_auto.html 용)
+    """
+    try:
+        from ..database import get_dw_cursor
+        
+        run_offset = (run_page - 1) * run_limit
+        err_offset = (err_page - 1) * err_limit
+        
+        runs = []
+        errors = []
+        total_runs = 0
+        total_errors = 0
+        
+        with get_dw_cursor() as cur:
+            # 1. runs
+            cur.execute("SELECT count(*) as cnt FROM pipeline_runs WHERE pipeline_name = 'auto_crawling_pipeline';")
+            total_runs = cur.fetchone()["cnt"]
+            
+            cur.execute(
+                """
+                SELECT run_id, pipeline_name, brand, status, total_items, new_items, updated_items, error_count, started_at, finished_at, duration_sec
+                FROM pipeline_runs
+                WHERE pipeline_name = 'auto_crawling_pipeline'
+                ORDER BY started_at DESC
+                LIMIT %s OFFSET %s;
+                """,
+                (run_limit, run_offset)
+            )
+            for r in cur.fetchall():
+                runs.append({
+                    "run_id": r["run_id"],
+                    "pipeline_name": r["pipeline_name"],
+                    "brand": r["brand"],
+                    "status": r["status"],
+                    "total_items": r["total_items"] or 0,
+                    "new_items": r["new_items"] or 0,
+                    "updated_items": r["updated_items"] or 0,
+                    "error_count": r["error_count"] or 0,
+                    "started_at": r["started_at"].isoformat() if r["started_at"] else None,
+                    "finished_at": r["finished_at"].isoformat() if r["finished_at"] else None,
+                    "duration_sec": r["duration_sec"] or 0
+                })
+                
+            # 2. errors
+            cur.execute("""
+                SELECT count(*) as cnt 
+                FROM pipeline_errors pe
+                JOIN pipeline_runs pr ON pe.run_id = pr.run_id
+                WHERE pr.pipeline_name = 'auto_crawling_pipeline';
+            """)
+            total_errors = cur.fetchone()["cnt"]
+            
+            cur.execute(
+                """
+                SELECT pe.error_id, pe.run_id, pe.error_type, pe.error_message, pe.product_id, pe.source_url, pe.created_at, pr.brand, pe.stack_trace, sp.prod_name
+                FROM pipeline_errors pe
+                JOIN pipeline_runs pr ON pe.run_id = pr.run_id
+                LEFT JOIN staging_products sp ON pe.product_id = sp.product_id
+                WHERE pr.pipeline_name = 'auto_crawling_pipeline'
+                ORDER BY pe.created_at DESC
+                LIMIT %s OFFSET %s;
+                """,
+                (err_limit, err_offset)
+            )
+            for r in cur.fetchall():
+                errors.append({
+                    "error_id": r["error_id"],
+                    "run_id": r["run_id"],
+                    "error_type": r["error_type"],
+                    "error_message": r["error_message"],
+                    "product_id": r["product_id"],
+                    "source_url": r["source_url"],
+                    "created_at": r["created_at"].isoformat() if r["created_at"] else None,
+                    "brand": r["brand"],
+                    "stack_trace": r["stack_trace"] or "",
+                    "prod_name": r["prod_name"] or ""
+                })
+                
+        return {
+            "success": True,
+            "total_runs": total_runs,
+            "total_errors": total_errors,
+            "runs": runs,
+            "errors": errors
+        }
+    except Exception as e:
+        logger.error(f"자동 크롤링 로그 조회 에러: {e}")
+        return {"success": False, "detail": str(e)}
+
+
+@router.get("/crawling/auto/stats")
+async def get_crawling_auto_stats():
+    """
+    자동 크롤링 에러 분석 통계 (에러 유형 및 다빈도 브랜드 분포)
+    """
+    try:
+        from ..database import get_dw_cursor
+        
+        top_error_types = []
+        error_brands = []
+        
+        with get_dw_cursor() as cur:
+            # 1. 다빈도 에러 유형 Top 5
+            cur.execute("""
+                SELECT pe.error_type, count(*) as cnt
+                FROM pipeline_errors pe
+                JOIN pipeline_runs pr ON pe.run_id = pr.run_id
+                WHERE pr.pipeline_name = 'auto_crawling_pipeline'
+                GROUP BY pe.error_type
+                ORDER BY cnt DESC
+                LIMIT 5;
+            """)
+            for r in cur.fetchall():
+                top_error_types.append({
+                    "error_type": r["error_type"],
+                    "count": r["cnt"]
+                })
+                
+            # 2. 에러가 잦은 브랜드 목록
+            cur.execute("""
+                SELECT pr.brand, count(*) as cnt
+                FROM pipeline_errors pe
+                JOIN pipeline_runs pr ON pe.run_id = pr.run_id
+                WHERE pr.pipeline_name = 'auto_crawling_pipeline'
+                GROUP BY pr.brand
+                ORDER BY cnt DESC;
+            """)
+            for r in cur.fetchall():
+                error_brands.append({
+                    "brand": r["brand"],
+                    "count": r["cnt"]
+                })
+                
+        return {
+            "success": True,
+            "top_error_types": top_error_types,
+            "error_brands": error_brands
+        }
+    except Exception as e:
+        logger.error(f"자동 크롤링 통계 조회 에러: {e}")
+        return {"success": False, "detail": str(e)}

@@ -567,10 +567,11 @@ def main():
     
     args = parser.parse_args()
     
-    # pipeline_runs 로깅용 시작 레코드 등록
+    # pipeline_runs 로깅용 시작 레코드 등록 (GitHub Actions 여부에 따라 분기)
     run_id = None
     if not args.dry_run:
-        run_id = log_pipeline_start(args.brand)
+        pipeline_name = "auto_crawling_pipeline" if os.getenv("GITHUB_ACTIONS") == "true" else "manual_crawling_pipeline"
+        run_id = log_pipeline_start(args.brand, pipeline_name=pipeline_name)
 
     try:
         metrics = asyncio.run(run_pipeline(

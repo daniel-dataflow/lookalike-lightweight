@@ -245,7 +245,18 @@ async def favicon():
     favicon_path = os.path.join(_static_dir, "images", "favicon.ico")
     if os.path.isfile(favicon_path):
         return FileResponse(favicon_path)
+    from fastapi.responses import HTMLResponse
     return HTMLResponse(status_code=404)
+
+# 크롬 개발자 도구(DevTools) 자동 조회 시 발생하는 404 노이즈 로그 방지 더미 핸들러
+@app.get("/.well-known/appspecific/com.chrome.devtools.json", include_in_schema=False)
+async def chrome_devtools_json():
+    return {"status": "ignored"}
+
+@app.get("/.well-known/appspecific/com.chrome.devtools.js", include_in_schema=False)
+async def chrome_devtools_js():
+    from fastapi.responses import PlainTextResponse
+    return PlainTextResponse("// ignored", media_type="application/javascript")
 
 @app.get("/health", tags=["system"])
 async def health_check():
