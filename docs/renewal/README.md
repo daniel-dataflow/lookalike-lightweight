@@ -7,17 +7,17 @@
 ## 1. 주요 아키텍처 변경 요약 (Architectural Shifts)
 
 1. **분산 레거시 미들웨어 제거**:
-   - 대규모 인프라 의존성인 **Elasticsearch, MongoDB, Hadoop HDFS, Apache Kafka**를 완전히 제거했습니다.
-   - 검색 로그, 파이프라인 지표, 상품 데이터 수집 이력을 모두 **PostgreSQL** 테이블로 단일화했습니다.
-   - 백엔드의 백그라운드 Kafka 로그/메트릭 컨슈머 서비스(`kafka_log_consumer.py`, `kafka_metric_consumer.py`)를 삭제하고, FastAPI 라우터 진입점에서 PostgreSQL 직접 적재로 전환하여 인프라를 극적으로 경량화했습니다.
+   * 대규모 인프라 의존성인 **Elasticsearch, MongoDB, Hadoop HDFS, Apache Kafka**를 완전히 제거했습니다.
+   * 검색 로그, 파이프라인 지표, 상품 데이터 수집 이력을 모두 **PostgreSQL** 테이블로 단일화했습니다.
+   * 백엔드의 백그라운드 Kafka 로그/메트릭 컨슈머 서비스(`kafka_log_consumer.py`, `kafka_metric_consumer.py`)를 삭제하고, FastAPI 라우터 진입점에서 PostgreSQL 직접 적재로 전환하여 인프라를 극적으로 경량화했습니다.
 2. **벡터 유사도 검색 전환 (pgvector)**:
-   - Elasticsearch Dense Vector 검색 방식을 **PostgreSQL pgvector 익스텐션 및 `product_embeddings` 테이블**을 활용하는 방식으로 마이그레이션했습니다.
-   - AI/ML 모델 서빙을 위해 HuggingFace의 Space(VLM, YOLO, CLIP) 및 Gemini API를 연동하여 이미지 특징 추출 및 텍스트 쿼리 임베딩을 수행하고, Cosine Similarity 계산을 SQL 레벨에서 처리합니다.
+   * Elasticsearch Dense Vector 검색 방식을 **PostgreSQL pgvector 익스텐션 및 `product_embeddings` 테이블**을 활용하는 방식으로 마이그레이션했습니다.
+   * AI/ML 모델 서빙을 위해 HuggingFace of Space(VLM, YOLO, CLIP) 및 Gemini API를 연동하여 이미지 특징 추출 및 텍스트 쿼리 임베딩을 수행하고, Cosine Similarity 계산을 SQL 레벨에서 처리합니다.
 3. **데이터 파이프라인(Airflow) 구조 단순화**:
-   - 기존의 병렬 데이터 파이프라인 단계를 HDFS/MongoDB 적재 대신 **로컬 JSON 보존 + PostgreSQL 직접 삽입** 구조로 대폭 간소화했습니다.
+   * 기존의 병렬 데이터 파이프라인 단계를 HDFS/MongoDB 적재 대신 **로컬 JSON 보존 + PostgreSQL 직접 삽입** 구조로 대폭 간소화했습니다.
 4. **SQLAlchemy 기반 표준 데이터베이스 연동 & SSL 강화**:
-   - 기존의 raw `psycopg2` 커넥션 풀 대신 **SQLAlchemy 엔진 및 세션 팩토리**로 전환하여 연결 안정성과 세션 관리를 현대화했습니다.
-   - 클라우드 프로덕션 환경(Render 등)의 필수 요구사항인 SSL 보안 연동을 위해 원격지 접속 판별 시 `sslmode=require` 접속 인자가 자동으로 동적 주입되도록 풀 구성을 고도화했습니다.
+   * 기존의 raw `psycopg2` 커넥션 풀 대신 **SQLAlchemy 엔진 및 세션 팩토리**로 전환하여 연결 안정성과 세션 관리를 현대화했습니다.
+   * 클라우드 프로덕션 환경(Render 등)의 필수 요구사항인 SSL 보안 연동을 위해 원격지 접속 판별 시 `sslmode=require` 접속 인자가 자동으로 동적 주입되도록 풀 구성을 고도화했습니다.
 
 ---
 
@@ -80,12 +80,28 @@
 
 ---
 
-## 3. 핵심 수정 파일 요약 표 (Change Registry)
+## 3. 3대 핵심 리뉴얼 아키텍처 요약 (Core Pillars)
+
+이전 버전의 아키텍처 마이그레이션 이후 추가된 고도화 및 환경 최적화 설계의 중심축은 다음과 같습니다.
+
+### Pillar 1. 완벽하게 격리된 이중화 개발/상용 환경 (DEV vs PROD)
+* **물리적 스토리지 격리**: Cloudinary 서버의 최상위 디렉터리 경로를 `DEV/`와 `PROD/`로 완전히 격리 분기하여 개발 테스트가 실제 상용 서비스의 이미지 데이터를 오염시키지 않도록 원천 가두었습니다.
+* **샌드박스 검증**: 스위칭(Swap) 전 데이터가 정상적으로 조립되는지 독립적으로 테스트하기 위해 운영 DB와 구조가 100% 동일한 격리형 `TEST DB` 세트를 갖추었습니다.
+
+### Pillar 2. 역할 및 용량 분담형 멀티 DB 설계 (DB vs DW DB)
+* **메인 서비스 DB**: `products`, `naver_prices`, `product_embeddings` 등 검색 매칭 실 서비스 노출 테이블만 보관하여 Neon DB의 0.5GB 무료 용량을 방어하고 쿼리 속도를 최대로 확보합니다.
+* **DW(데이터웨어하우스) DB**: 크롤러가 수집 격리한 임시 상품 목록(`staging_`), 실시간 생성 부하 방지를 위해 수집 단계에서 선(Pre) 연산한 CLIP 이미지/Gemini 텍스트 임베딩 정보, 그리고 시스템 장애 로그 및 메트릭 기록을 전담하도록 나누어 물리적 분산 배치를 완료했습니다.
+
+### Pillar 3. 실시간 리소스 동적 감지 및 클라우드 실측 관제
+* **cgroups 기반 감지**: 512MB RAM, 1vCPU가 할당된 클라우드 컨테이너의 물리 사양을 하드코딩 마스킹하지 않고 cgroups 커널 시스템 파일을 읽어 동적으로 점유율을 추적합니다.
+* **Neon DB 이중 용량 감지**: 어드민 대시보드 화면 내에서 DEV DB 세트와 PROD DB 세트의 상세 크기 및 합계 용량을 직관적으로 분리 모니터링할 수 있도록 렌더링을 고도화했습니다.
+
+---
+
+## 4. 핵심 수정 파일 요약 표 (Change Registry)
 
 | 컴포넌트 | 파일 경로 | 변경 구분 | 핵심 사유 및 내용 |
 | :--- | :--- | :---: | :--- |
-| **Airflow** | `fashion_total_pipeline.py` | `MODIFY` | HDFS/Kafka 오퍼레이터 배제 후 PostgreSQL 위주 수집 최적화 |
-| **Docker** | `docker-compose.yml` | `MODIFY` | 레거시 분산 솔루션 컨테이너(Elasticsearch, MongoDB 등) 6개 서비스 영구 격하 |
 | **Backend** | `web/backend/app/routers/auth.py` | `MODIFY` | `/admin/login` 엔드포인트 신설, 로컬용 세션 쿠키 정책(`Lax`, `Secure=False`) 조정 |
 | **Backend** | `web/backend/app/routers/inquiry.py` | `MODIFY` | 세션 하이재킹 방지를 위해 일반/어드민 세션 인증 헬퍼 전면 격리 및 분리 |
 | **Backend** | `web/backend/app/routers/search.py` | `MODIFY` | 네이버 최저가 검색 예외 복구 및 검색 기록 DB 저장 복구 |
@@ -94,5 +110,35 @@
 | **Backend** | `web/backend/app/services/kafka_*_consumer.py` | `DELETE` | 불필요한 백그라운드 Kafka 로그 및 지표 컨슈머 코드 제거 |
 | **Frontend** | `web/frontend/static/js/common.js` | `MODIFY` | 좋아요 및 최근 본 상품의 렌더링 영역이 상호 오염 및 혼선되던 버그 분기 수정 |
 | **Frontend** | `web/frontend/templates/base.html` | `MODIFY` | 템플릿 스크립트 캐싱 방지용 난수 캐시 버스터(`Cache Buster`) 추가 |
-| **Scripts** | `init_db.py` | `NEW` | Neon DB 및 원격지 데이터베이스용 DDL 스키마 초기화 자동화 스크립트 |
-| **Scripts** | `migrate_to_neon.py` | `NEW` | 로컬 DB 상품/임베딩/최저가 등 12,000+건 데이터를 Neon DB로 고속 배치 마이그레이션 스크립트 |
+| **Frontend** | `web/frontend/static/js/admin_infra.js` | `MODIFY` | Cloudinary API 마이너스 지표 응답 시 Math.max(0, ...) 보정 예외 필터 장치 주입 |
+| **Scripts** | `scripts/insert_DB/init_dev_db.py` | `NEW` | 신규 개발용 Neon 데이터베이스 DDL 스키마 및 pgvector 생성 스크립트 구축 |
+| **Scripts** | `scripts/insert_DB/init_dw_db.py` | `NEW` | 분산 배치 처리를 위한 데이터웨어하우스 DB 구조화 자동 생성 스크립트 구축 |
+| **Scripts** | `scripts/supabase/` | `DELETE` | 루트의 supabase/migrations 와 꼬여있던 중복 레거시 마이그레이션 폴더 영구 삭제 |
+| **Scripts** | `scripts/start_all.sh 등 쉘` | `DELETE` | 로컬 도커 컨테이너를 더 이상 띄울 필요가 없으므로 불필요한 레거시 쉘 파일 6종 영구 격하 |
+
+---
+
+## 5. 6차 리팩토링 및 3세대 격리 아키텍처 보강 (2026-06-02)
+
+Neon DB 다중 계정 분리 및 로컬 런타임 최적화를 위해 프로젝트 전반에 남아있던 레거시 및 임시 파일들을 완전히 정리하고 환경을 3세대 경량 아키텍처에 맞게 고도화했습니다.
+
+### A. Cloudinary 계정 및 데이터베이스 분기 정돈
+* `DEV_CLOUDINARY_...` 환경 변수의 등호(`=`) 전후에 있던 공백을 제거하여 런타임 시 파싱 및 바인딩 오류가 발생할 수 있는 소지를 제거했습니다.
+* 기존에 사용 중인 서버가 존재하지 않는 레거시 컨테이너용 변수(MongoDB, Redis, Jupyter, Airflow, Spark, Hadoop, Kafka, ES 통신용 변수) 및 GCP 가상머신 접속 주소(`GCP_PG_HOST` 등)를 주석(`#`) 처리하여 환경 변수 오염을 원천 차단했습니다.
+* 이로써 `ENV_MODE` 분기(`local`/`dev` vs `production`)에 따라 알맞은 Cloudinary 및 Neon DB 주소가 자동으로 동적 바인딩되도록 정비했습니다.
+
+### B. Neon 데이터베이스 뼈대 스키마(migrations) 정리 및 신규 DB 구성
+* **신규 개발/용량 분담 DB 테이블 구축**:
+  * 신규 개발용 데이터베이스(`DEV_DATABASE_URL`)의 테이블을 독립적으로 안전하게 초기화할 수 있도록 지원하는 전용 스크립트(`init_dev_db.py`, `init_dw_db.py`)를 작성하여 구동했습니다.
+  * 이 스크립트를 통해 새로운 개발용 Neon DB에 `pgvector` 확장을 자동으로 로드하고 상품/임베딩/관리자 관련 테이블을 성공적으로 구축했습니다.
+* **마이그레이션 도면 단일화**:
+  * 프로젝트 내에 이중으로 저장되어 유지보수 혼선을 주던 `scripts/supabase/migrations` 디렉토리를 완전히 삭제하고, 데이터베이스의 근간 설계도인 `001_create_tables.sql`과 `002_admin_tables.sql`을 루트 경로의 `supabase/migrations/`로 이관하여 스키마 관리 일관성을 확보했습니다.
+
+### C. 미사용 임시 스크립트 및 레거시 쉘 파일 정리
+* 작업 중 HTML 복구를 위해 임시로 만들어 활용했던 `scratch/` 폴더 내 `restore_html.py` 스크립트를 삭제했습니다.
+* Git 민감 정보 히스토리 치환용 임시 스크립트(`clean_git_history.sh`) 및 캐시 강제 갱신용 임시 파일(`.github_cache_refresh`)을 삭제했습니다.
+* 로컬 DB 초기화용 중복 파일 `init_db.py`를 제거했습니다.
+* 로컬 환경에서 더 이상 도커를 구동 및 제어할 필요가 없으므로 `scripts/` 바로 하위에 남아있던 `start_all.sh`, `stop_all.sh`, `restart_all.sh`, `init-db.sh`, `restore_prod.sh`, `check_status.sh` 등 쉘 스크립트 6개를 일괄 영구 삭제했습니다.
+
+### D. 프론트엔드 모니터링 수치 보정
+* Cloudinary API 캐시 지연 등으로 인해 일시적으로 전송량이나 리소스 개수가 음수(-) 값으로 반환될 경우, UI 대시보드 상에서 마이너스 수치가 노출되던 화면 오류를 발견하여 `Math.max(0, ...)` 보정 코드를 적용해 `0` 단위로 출력되도록 수정했습니다.

@@ -57,6 +57,14 @@
                     </a>
                 </li>
                 <li class="nav-item">
+                    <a href="/admin/crawling"
+                        class="nav-link {% if request.url.path == '/admin/crawling' %}active{% endif %}"
+                        data-tooltip="크롤링 모니터링">
+                        <i class="fas fa-spider"></i>
+                        <span class="sidebar-text">크롤링 모니터링</span>
+                    </a>
+                </li>
+                <li class="nav-item">
                     <a href="/admin/inquiry"
                         class="nav-link {% if request.url.path == '/admin/inquiry' %}active{% endif %}"
                         data-tooltip="문의 관리">
@@ -135,6 +143,12 @@
                     <a href="/admin/logs"
                         class="nav-link link-dark {% if request.url.path == '/admin/logs' %}active{% endif %}">
                         <i class="fas fa-file-alt me-2"></i> 로그 모니터링
+                    </a>
+                </li>
+                <li>
+                    <a href="/admin/crawling"
+                        class="nav-link link-dark {% if request.url.path == '/admin/crawling' %}active{% endif %}">
+                        <i class="fas fa-spider me-2"></i> 크롤링 모니터링
                     </a>
                 </li>
                 <li>

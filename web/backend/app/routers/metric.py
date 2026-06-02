@@ -12,7 +12,7 @@ from datetime import datetime
 
 from fastapi import APIRouter
 
-from ..database import get_pg_cursor
+from ..database import get_dw_cursor
 
 logger = logging.getLogger(__name__)
 
@@ -35,13 +35,13 @@ def _collect_and_store() -> dict:
     mem = psutil.virtual_memory().percent
 
     try:
-        with get_pg_cursor() as cur:
+        with get_dw_cursor() as cur:
             cur.execute(
                 "INSERT INTO infra_metrics (cpu_usage, memory_usage) VALUES (%s, %s);",
                 (cpu, mem),
             )
             cur.execute(
-                "DELETE FROM infra_metrics WHERE timestamp < NOW() - INTERVAL '1 hour';",
+                "DELETE FROM infra_metrics WHERE timestamp < CURRENT_TIMESTAMP - INTERVAL '1 hour';",
             )
     except Exception as e:
         logger.warning(f"infra_metrics 저장 실패: {e}")
@@ -89,7 +89,7 @@ async def get_metrics_stream():
     """
     try:
         def _query():
-            with get_pg_cursor() as cur:
+            with get_dw_cursor() as cur:
                 cur.execute("""
                     SELECT
                         cpu_usage   AS cpu_percent,
@@ -150,14 +150,14 @@ async def get_metric_stats():
     # DB 에 쌓인 최근 1시간 평균
     try:
         def _agg():
-            with get_pg_cursor() as cur:
+            with get_dw_cursor() as cur:
                 cur.execute("""
                     SELECT
                         AVG(cpu_usage)    AS avg_cpu,
                         AVG(memory_usage) AS avg_mem,
                         MAX(memory_usage) AS max_mem
                     FROM infra_metrics
-                    WHERE timestamp >= NOW() - INTERVAL '1 hour';
+                    WHERE timestamp >= CURRENT_TIMESTAMP - INTERVAL '1 hour';
                 """)
                 return cur.fetchone()
 

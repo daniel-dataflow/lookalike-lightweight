@@ -5,7 +5,6 @@ import re
 import json
 from datetime import datetime
 from playwright.async_api import async_playwright
-from hdfs import InsecureClient
 
 # --- [설정] ---
 BRAND_NAME = "uniqlo"
@@ -338,36 +337,9 @@ async def run():
     if os.path.exists(LOCAL_SAVE_DIR):
         local_files = [f for f in os.listdir(LOCAL_SAVE_DIR) if f.endswith('.json')]
         if local_files:
-            print(f"\n📦 로컬 수집 완료 ({len(local_files)}건). HDFS 저장을 시작합니다...")
-            try:
-                client = InsecureClient(HDFS_NAMENODE_URL, user=HDFS_USER)
-                
-                # 디렉토리 생성 시도
-                try:
-                    client.makedirs(HDFS_ROOT_PATH)
-                    print(f"   📁 HDFS 타겟 디렉토리 확인: {HDFS_ROOT_PATH}")
-                except Exception as e:
-                    print(f"   ℹ️ HDFS 디렉토리 메시지: {e}")
-
-                saved_count = 0
-                for filename in local_files:
-                    local_file_path = os.path.join(LOCAL_SAVE_DIR, filename)
-                    hdfs_file_path = f"{HDFS_ROOT_PATH}/{filename}"
-                    
-                    try:
-                        # 로컬 파일을 HDFS로 업로드 (덮어쓰기 허용)
-                        client.upload(hdfs_file_path, local_file_path, overwrite=True)
-                        saved_count += 1
-                    except Exception as e:
-                        print(f"   ❌ HDFS 저장 실패 ({filename}): {e}")
-
-                print(f"\n✨ 총 {saved_count}개 파일 HDFS 업로드 성공!")
-                print(f"   👉 저장 위치: {HDFS_ROOT_PATH}")
-
-            except Exception as e:
-                print(f"\n🚨 HDFS 연결/접근 오류: {e}")
+            print(f"\n📦 로컬 수집 완료 ({len(local_files)}건). 저장 경로: {LOCAL_SAVE_DIR}")
         else:
-            print("\n❌ 로컬에 수집된 파일이 없어 HDFS 업로드를 생략합니다.")
+            print("\n❌ 로컬에 수집된 파일이 없습니다.")
     else:
         print("\n❌ 저장 디렉토리를 찾을 수 없습니다.")
 

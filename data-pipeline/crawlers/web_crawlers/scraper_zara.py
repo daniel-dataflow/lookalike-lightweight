@@ -5,7 +5,6 @@ import os
 import sys
 from datetime import datetime
 from playwright.async_api import async_playwright
-from hdfs import InsecureClient
 
 # --- 설정 ---
 BRAND_NAME = "zara"
@@ -245,41 +244,8 @@ async def run():
                     await crawl_category(gender, category, url, context, collected_data)
         await browser.close()
 
-    # --- HDFS 파일 저장 로직 ---
     if collected_data:
-        print(f"\n📦 {len(collected_data)}건 수집 완료. HDFS 저장 시작...")
-        
-        target_dir = f"/raw/{BRAND_NAME}/{TODAY_STR}" 
-        
-        try:
-            client = InsecureClient(HDFS_NAMENODE_URL, user=HDFS_USER)
-            
-            try:
-                client.makedirs(target_dir)
-                print(f"   📁 HDFS 타겟 디렉토리 확인: {target_dir}")
-            except Exception as e:
-                print(f"   ℹ️ HDFS 디렉토리 생성 메시지(이미 존재할 수 있음): {e}")
-
-            saved_count = 0
-            for item in collected_data:
-                try:
-                    safe_goods_no = str(item['data'].get('goodsNo', item['product_id'])).replace('/', '-')
-                    filename = f"{BRAND_NAME}_{item['gender'].lower()}_{item['category'].lower()}_{safe_goods_no}.json"
-                    
-                    hdfs_file_path = f"{target_dir}/{filename}"
-                    final_data = item['data']
-                    
-                    with client.write(hdfs_file_path, encoding='utf-8', overwrite=True) as writer:
-                        json.dump(final_data, writer, ensure_ascii=False, indent=4)
-                    saved_count += 1
-                except Exception as e:
-                    print(f"   ❌ HDFS 저장 실패 ({item.get('product_id')}): {e}")
-
-            print(f"\n✨ 총 {saved_count}개 파일 HDFS 저장 완료")
-            print(f"   👉 저장 위치: {target_dir}")
-
-        except Exception as e:
-            print(f"\n🚨 HDFS 연결/저장 오류: {e}")
+        print(f"\n📦 {len(collected_data)}건 수집 완료.")
     else:
         print("\n❌ 수집된 데이터가 없습니다.")
 

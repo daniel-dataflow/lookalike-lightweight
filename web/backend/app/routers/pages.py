@@ -154,6 +154,14 @@ async def admin_inquiry(request: Request):
         return RedirectResponse(url="/admin/login", status_code=302)
     return templates.TemplateResponse("admin_inquiry.html", {"request": request})
 
+@router.get("/admin/crawling", response_class=HTMLResponse)
+async def admin_crawling(request: Request):
+    """크롤링 파이프라인 모니터링 — 스테이징 현황 및 수동 스위칭 페이지"""
+    session = _get_admin_session(request)
+    if not session or not session.get("is_admin"):
+        return RedirectResponse(url="/admin/login", status_code=302)
+    return templates.TemplateResponse("admin_crawling.html", {"request": request})
+
 @router.get("/admin/logs", response_class=HTMLResponse)
 async def admin_logs(request: Request):
     session = _get_admin_session(request)

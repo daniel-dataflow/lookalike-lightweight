@@ -125,51 +125,103 @@
 
 <!-- 데이터베이스 상태 -->
 <div class="row g-3 mb-4">
-    <div class="col-md-4">
-        <div class="card border-0 shadow-sm">
+    <div class="col-md-4 col-12">
+        <div class="card border-0 shadow-sm h-100">
             <div class="card-body">
                 <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h6 class="mb-0"><i class="fas fa-database me-2 text-primary"></i>PostgreSQL</h6>
+                    <h6 class="mb-0 fw-bold"><i class="fas fa-database me-2 text-primary"></i>PostgreSQL (Neon DB 모니터링)
+                    </h6>
                     <span id="pgStatus" class="badge bg-secondary">확인 중</span>
                 </div>
                 <div id="pgDetails">
-                    <div class="d-flex justify-content-between mb-2">
-                        <span class="text-muted">활성 연결</span>
-                        <span id="pgConnections">-</span>
+                    <div class="d-flex justify-content-between mb-3 align-items-center pb-2 border-bottom">
+                        <span class="text-muted small">현재 런타임 활성 연결 수</span>
+                        <span class="fw-bold" id="pgConnections">-</span>
                     </div>
-                    <div class="d-flex justify-content-between">
-                        <span class="text-muted">DB 크기</span>
-                        <span id="pgSize">-</span>
+
+                    <!-- Neon DB 환경별 현황 상세 뷰 (ENV_MODE에 따라 DEV 또는 PROD 선택 노출) -->
+                    <div class="table-responsive">
+                        <table class="table table-sm table-borderless align-middle mb-0" style="font-size: 0.82rem;">
+                            <thead>
+                                <tr class="text-muted border-bottom" style="font-size: 0.75rem;">
+                                    <th>구분 (환경)</th>
+                                    <th>상태 (Neon 검증)</th>
+                                    <th class="text-end">용량</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <!-- DEV 환경 (ENV_MODE가 local 또는 dev일 때만 노출) -->
+                                <tr id="neonDevRowGroup1" class="border-bottom-0">
+                                    <td class="fw-bold text-success">운영 DB</td>
+                                    <td><span class="badge badge-sm" id="neonDevDbBadge">-</span> DEV_DB</td>
+                                    <td class="text-end fw-bold text-dark" id="neonDevDbSize">-</td>
+                                </tr>
+                                <tr id="neonDevRowGroup2">
+                                    <td class="fw-bold text-success">로그&크롤링 DB</td>
+                                    <td><span class="badge badge-sm" id="neonDevDwDbBadge">-</span> DEV_DW_DB</td>
+                                    <td class="text-end fw-bold text-dark" id="neonDevDwDbSize">-</td>
+                                </tr>
+                                <tr id="neonDevRowGroup3" class="table-light">
+                                    <td colspan="2" class="text-muted">DEV 합계 용량</td>
+                                    <td class="text-end fw-bold text-success" id="neonDevTotalSize">-</td>
+                                </tr>
+
+                                <!-- PROD 환경 (ENV_MODE가 production일 때만 노출) -->
+                                <tr id="neonProdRowGroup1" class="border-bottom-0">
+                                    <td class="fw-bold text-primary">운영 DB</td>
+                                    <td><span class="badge badge-sm" id="neonProdDbBadge">-</span> PROD_DB</td>
+                                    <td class="text-end fw-bold text-dark" id="neonProdDbSize">-</td>
+                                </tr>
+                                <tr id="neonProdRowGroup2">
+                                    <td class="fw-bold text-primary">로그&크롤링 DB</td>
+                                    <td><span class="badge badge-sm" id="neonProdDwDbBadge">-</span> PROD_DW_DB</td>
+                                    <td class="text-end fw-bold text-dark" id="neonProdDwDbSize">-</td>
+                                </tr>
+                                <tr id="neonProdRowGroup3" class="table-light">
+                                    <td colspan="2" class="text-muted">PROD 합계 용량</td>
+                                    <td class="text-end fw-bold text-primary" id="neonProdTotalSize">-</td>
+                                </tr>
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             </div>
         </div>
     </div>
-    <div class="col-md-4">
-        <div class="card border-0 shadow-sm">
+    <div class="col-md-4 col-12">
+        <div class="card border-0 shadow-sm h-100">
             <div class="card-body">
                 <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h6 class="mb-0"><i class="fas fa-cloud me-2 text-info"></i>Cloudinary 이미지</h6>
+                    <h6 class="mb-0 fw-bold"><i class="fas fa-cloud me-2 text-info"></i>Cloudinary 이미지</h6>
                     <span id="cloudinaryStatus" class="badge bg-secondary">확인 중</span>
                 </div>
                 <div id="cloudinaryDetails">
                     <div class="d-flex justify-content-between mb-2">
-                        <span class="text-muted">사용량</span>
+                        <span class="text-muted">Credit 사용량 (30일)</span>
+                        <span class="fw-bold text-dark" id="cloudinaryCreditsUsage">-</span>
+                    </div>
+                    <div class="d-flex justify-content-between mb-2">
+                        <span class="text-muted">실제 저장 용량</span>
                         <span id="cloudinaryUsage">-</span>
                     </div>
-                    <div class="d-flex justify-content-between">
+                    <div class="d-flex justify-content-between mb-2">
                         <span class="text-muted">업로드 수</span>
                         <span id="cloudinaryResources">-</span>
+                    </div>
+                    <div class="d-flex justify-content-between pt-2 border-top">
+                        <span class="text-muted small">남은 Credit</span>
+                        <span class="fw-bold small" id="cloudinaryCreditsFree">-</span>
                     </div>
                 </div>
             </div>
         </div>
     </div>
-    <div class="col-md-4">
-        <div class="card border-0 shadow-sm">
+    <div class="col-md-4 col-12">
+        <div class="card border-0 shadow-sm h-100">
             <div class="card-body">
                 <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h6 class="mb-0"><i class="fas fa-brain me-2 text-violet" style="color: #8E44AD;"></i>HuggingFace Space</h6>
+                    <h6 class="mb-0 fw-bold"><i class="fas fa-brain me-2 text-violet"
+                            style="color: #8E44AD;"></i>HuggingFace Space</h6>
                     <span id="hfStatus" class="badge bg-secondary">확인 중</span>
                 </div>
                 <div id="hfDetails">
@@ -177,9 +229,13 @@
                         <span class="text-muted">모델 API 상태</span>
                         <span id="hfModelStatus">-</span>
                     </div>
-                    <div class="d-flex justify-content-between">
+                    <div class="d-flex justify-content-between mb-2">
                         <span class="text-muted">호출 응답 속도</span>
                         <span id="hfLatency">-</span>
+                    </div>
+                    <div class="d-flex justify-content-between pt-2 border-top align-items-center">
+                        <span class="text-muted small">Git Storage 사용량</span>
+                        <span class="fw-bold small" id="hfStorageUsage">-</span>
                     </div>
                 </div>
             </div>

@@ -25,6 +25,21 @@
 
 ---
 
+## 💡 엔지니어의 핵심 설계 철학 (Architectural Decisions)
+
+하드웨어 스펙이 지극히 제한된 클라우드 무료 서버 환경에서 중단 없는 웹 서비스를 서비스하기 위해 도입된 **3대 인프라 최적화 전략**입니다.
+
+1. **연산 위탁을 통한 리소스 분리 (Decoupled Inference)**:
+   * 512MB 메모리 서버에서 딥러닝 객체 검출(YOLO) 및 패션 임베딩 추출(Fashion-CLIP)을 직접 수행하는 것은 불가능합니다.
+   * 이에 고성능 GPU 연산 자원을 무료로 호스팅할 수 있는 **HuggingFace Space API로 AI/ML 연산 단계를 완전히 위탁 분리**하여 로컬 API 서버의 안정성을 무한대로 늘렸습니다.
+2. **역할/용량 분리형 독립 멀티 데이터베이스 (Dual DB Setup)**:
+   * Neon DB 무료 티어의 0.5GB 용량 제한을 우회하기 위해, 사용자 요청 및 실시간 매칭에 기여하는 메인 운영 DB와 크롤링 격리 버퍼 및 대량의 로그 데이터를 쌓는 DW(데이터웨어하우스) DB로 역할을 물리적으로 이중 분할하였습니다.
+   * 이를 통해 상용 서비스 테이블의 스토리지 누수를 방지하고 HNSW 인덱싱 쿼리 효율을 상시 최대로 보존합니다.
+3. **Cloudinary를 통한 개발/상용 파일 스토리지 격리 (Media Sandbox)**:
+   * 개발 테스트 단계에서 발생한 상품 이미지가 상용 라이브 서비스 이미지를 덮어쓰거나 오염시키는 것을 방지하기 위해, 환경변수(`.env`) 세팅에 따라 이미지 CDN 주소 최상위 루트 디렉토리를 `DEV/`와 `PROD/` 경로로 엄격하게 가두어 이중화했습니다.
+
+---
+
 ## 📋 프로젝트 개요 및 핵심 기능
 
 ### 🎯 핵심 기능
@@ -34,7 +49,7 @@
 4. **실시간 최저가 연동**: 검색된 유사 상품들에 대해 Naver 쇼핑 API를 통해 최저가 5개 쇼핑몰 가격을 실시간으로 비교 제공합니다.
 5. **초경량 어드민 모니터링**: 
    - cgroups(v1 & v2)와 psutil을 이용해 컨테이너의 실제 리소스 한계치(512MB RAM, 1vCPU)를 자동 추적합니다.
-   - 데이터베이스 용량 초과 방지를 위한 24시간 제한 로그 링 버퍼가 Neon DB 상에 매끄럽게 흐릅니다.
+   - 개발용/운영용 DB 용량 실측값을 명확히 이중화 표시하고, Cloudinary API 캐시 수치 음수(-) 반환 방어 필터를 적용하여 정보 정확성을 높였습니다.
 
 ---
 
@@ -43,15 +58,19 @@
 ```text
 snap-match/
 ├── docs/                          # 📚 3세대 경량 서버 인프라 및 로그 모니터링 명세서
-│   └── renewal/                   # admin_infra_renewal.md, admin_logs_renewal.md
-├── ml-models/                     # 🤖 머신러닝 인퍼런스 레이어 (HuggingFace Space 배포용)
-│   └── api/                       # hf_space_app.py (YOLO 탐지 및 Fashion-CLIP 임베딩 추출)
+│   └── renewal/                   # admin_infra_renewal.md, crawling.md, README.md (종합 명세)
+├── data-pipeline/                 # ⚙️ 크롤러 모듈 및 수집 CLI 도구
+│   └── crawlers/web_crawlers/     # crawling_pipeline_cli.py, 브랜드별 스파이더 코드들
+├── supabase/                      # 🗄️ Neon DB 재생성을 위한 원천 SQL 스키마 DDL
+│   └── migrations/                # 001_create_tables.sql, 002_admin_tables.sql
+├── scripts/                       # 🛠️ DB 초기화 및 관리 자동화 스크립트
+│   └── insert_DB/                 # init_dev_db.py, init_dw_db.py
 ├── web/                           # 🌐 코어 백엔드 및 웹 프론트엔드
 │   ├── backend/                   # 메인 FastAPI 앱 엔진
 │   │   ├── app/
 │   │   │   ├── config/            # Pydantic 기반 환경변수 매핑 (base.py)
 │   │   │   ├── database.py        # Neon DB 연결, 테이블 자동 생성 및 세션 관리
-│   │   │   ├── routers/           # /api/* 라우터 (YOLO detect API 내장)
+│   │   │   ├── routers/           # /api/* 라우터
 │   │   │   └── services/          # RRF 검색 로직, HF Space 호출 및 Cloudinary 연동
 │   │   └── requirements.txt
 │   └── frontend/                  # 초경량 SSR Jinja2 뷰
@@ -84,26 +103,40 @@ snap-match/
 ## 🔧 시작하기 및 실행 방법
 
 ### 1. 환경 변수 설정
-프로젝트 루트 디렉터리에 `.env` 파일을 생성하고 필수 설정값들을 기입합니다:
+프로젝트 루트 디렉터리에 `.env` 파일을 생성하고 필수 설정값들을 기입합니다.
+* **중요**: 개발(local/dev) 및 실서버(production) 계정은 별도로 분리되어 바인딩됩니다.
 ```ini
-# 공통 설정
-ENV_MODE=production
-DATABASE_URL=postgresql://[Neon_DB_User]:[Password]@[Host]/[DB_Name]?sslmode=require
+# 공통 설정 (local | dev | production)
+ENV_MODE=local
 
-# HuggingFace & Cloudinary (필수)
-HF_SPACE_URL=https://[Your-HF-Space-Name].hf.space
-CLOUDINARY_CLOUD_NAME=[Cloud_Name]
-CLOUDINARY_API_KEY=[API_Key]
-CLOUDINARY_API_SECRET=[API_Secret]
+# 1) PRODUCTION 용 DB/Cloudinary 세트
+PROD_DATABASE_URL=postgresql://neondb_owner:[prod_pw]@[prod_host]/neondb?sslmode=require
+PROD_DW_DATABASE_URL=postgresql://neondb_owner:[prod_dw_pw]@[prod_dw_host]/neondb?sslmode=require
+PROD_CLOUDINARY_CLOUD_NAME=[PROD_Cloud_Name]
+PROD_CLOUDINARY_API_KEY=[PROD_API_Key]
+PROD_CLOUDINARY_API_SECRET=[PROD_API_Secret]
 
-# Naver API (최저가 검색용)
+# 2) DEVELOPMENT 용 DB/Cloudinary 세트
+DEV_DATABASE_URL=postgresql://neondb_owner:[dev_pw]@[dev_host]/neondb?sslmode=require
+DEV_DW_DATABASE_URL=postgresql://neondb_owner:[dev_dw_pw]@[dev_dw_host]/neondb?sslmode=require
+DEV_CLOUDINARY_CLOUD_NAME=[DEV_Cloud_Name]
+DEV_CLOUDINARY_API_KEY=[DEV_API_Key]
+DEV_CLOUDINARY_API_SECRET=[DEV_API_Secret]
+
+# HuggingFace & Naver API 공용 설정
+HF_SPACE_URL=[HuggingFace_Space_URL]
 NAVER_CLIENT_ID=[Naver_Client_ID]
 NAVER_CLIENT_SECRET=[Naver_Client_Secret]
 ```
 
 ### 2. 로컬 실행 방법
 ```bash
-# 의존성 설치
+# 1. 데이터베이스 초기화 및 테이블 생성
+# Neon DB 접속 정보를 .env에 기입한 후, 아래 스크립트를 통해 스키마 DDL을 주입합니다.
+python scripts/insert_DB/init_dev_db.py
+python scripts/insert_DB/init_dw_db.py
+
+# 2. 의존성 설치 및 백엔드 실행
 cd web/backend
 pip install -r requirements.txt
 

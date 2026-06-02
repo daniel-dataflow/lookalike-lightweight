@@ -5,7 +5,6 @@ import sys
 import json
 from datetime import datetime
 from playwright.async_api import async_playwright
-from hdfs import InsecureClient
 
 # --- 설정 ---
 BRAND_NAME = "musinsa"
@@ -267,6 +266,7 @@ async def crawl_category(gender, category, base_url, context):
 
 async def run():
     print(f"--- [START] {BRAND_NAME.upper()} 크롤링 시작 (로컬 저장 + HDFS 연동) ---")
+    print(f"--- [START] {BRAND_NAME.upper()} 크롤링 시작 ---")
     
     os.makedirs(LOCAL_OUTPUT_PATH, exist_ok=True)
     
@@ -284,34 +284,7 @@ async def run():
     if os.path.exists(LOCAL_OUTPUT_PATH):
         local_files = [f for f in os.listdir(LOCAL_OUTPUT_PATH) if f.endswith('.json')]
         if local_files:
-            print(f"\n📦 로컬 수집 완료 ({len(local_files)}건). HDFS 저장을 시작합니다...")
-            try:
-                client = InsecureClient(HDFS_NAMENODE_URL, user=HDFS_USER)
-                
-                # HDFS 폴더 생성
-                try:
-                    client.makedirs(HDFS_ROOT_PATH)
-                    print(f"   📁 HDFS 타겟 디렉토리 확인: {HDFS_ROOT_PATH}")
-                except Exception as e:
-                    print(f"   ℹ️ HDFS 디렉토리 메시지: {e}")
-
-                saved_count = 0
-                for filename in local_files:
-                    local_file_path = os.path.join(LOCAL_OUTPUT_PATH, filename)
-                    hdfs_file_path = f"{HDFS_ROOT_PATH}/{filename}"
-                    
-                    try:
-                        # 파일 업로드 (덮어쓰기 허용)
-                        client.upload(hdfs_file_path, local_file_path, overwrite=True)
-                        saved_count += 1
-                    except Exception as e:
-                        print(f"   ❌ HDFS 저장 실패 ({filename}): {e}")
-
-                print(f"\n✨ 총 {saved_count}개 파일 HDFS 업로드 성공!")
-                print(f"   👉 저장 위치: {HDFS_ROOT_PATH}")
-
-            except Exception as e:
-                print(f"\n🚨 HDFS 연결/접근 오류: {e}")
+            print(f"\n📦 로컬 수집 완료 ({len(local_files)}건). 저장 경로: {LOCAL_OUTPUT_PATH}")
         else:
             print("\n❌ 로컬에 수집된 파일이 없어 HDFS 업로드를 생략합니다.")
     else:

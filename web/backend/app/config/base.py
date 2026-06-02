@@ -58,10 +58,32 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: str = ""
     GEMINI_EMBED_MODEL: str = "text-embedding-004"
 
+    # === Neon DB API 설정 ===
+    NEON_KEY_ACCOUNT_1: str = ""
+    NEON_KEY_ACCOUNT_2: str = ""
+    NEON_PROD_PROJECT_ID: str = ""
+    NEON_PROD_API_KEY: str = ""
+    NEON_PROD_DW_PROJECT_ID: str = ""
+    NEON_PROD_DW_API_KEY: str = ""
+    NEON_DEV_PROJECT_ID: str = ""
+    NEON_DEV_API_KEY: str = ""
+    NEON_DEV_DW_PROJECT_ID: str = ""
+    NEON_DEV_DW_API_KEY: str = ""
+
     # === Cloudinary 이미지 저장소 ===
     CLOUDINARY_CLOUD_NAME: str = ""
     CLOUDINARY_API_KEY: str = ""
     CLOUDINARY_API_SECRET: str = ""
+
+    # === Neon DB 환경별 상세 매핑 설정 ===
+    PROD_DATABASE_URL: str = ""
+    PROD_DW_DATABASE_URL: str = ""
+    DEV_DATABASE_URL: str = ""
+    DEV_DW_DATABASE_URL: str = ""
+
+    # === DB 런타임 적용 필드 ===
+    PROD_DATABASE_URL_ACTIVE: str = ""
+    DW_DATABASE_URL: str = ""
 
     # === 이미지 업로드 ===
     MAX_UPLOAD_SIZE_MB: int = 10
@@ -80,6 +102,9 @@ class Settings(BaseSettings):
         if self.DATABASE_URL:
             is_local = any(h in self.DATABASE_URL for h in ["localhost", "127.0.0.1"])
             if not is_local:
+                # 런타임 적용 필드 폴백 채우기
+                self.PROD_DATABASE_URL_ACTIVE = self.PROD_DATABASE_URL_ACTIVE or self.DATABASE_URL
+                self.DW_DATABASE_URL = self.DW_DATABASE_URL or self.DATABASE_URL
                 return self
 
         # 2. 로컬 및 도커 컨테이너 환경의 기본값 생성
@@ -98,7 +123,39 @@ class Settings(BaseSettings):
             # 프로덕션 모드에서는 시스템 환경 변수(DATABASE_URL)를 최우선으로 하며, 없으면 SUPABASE_DB_URL을 사용합니다.
             if not self.DATABASE_URL:
                 self.DATABASE_URL = self.SUPABASE_DB_URL
+
+        # 3. ENV_MODE에 맞는 DB 런타임 적용 필드 및 Cloudinary 계정 분기 바인딩 설정
+        if mode == "local" or mode == "dev":
+            self.PROD_DATABASE_URL_ACTIVE = self.DEV_DATABASE_URL or self.DATABASE_URL
+            self.DW_DATABASE_URL = self.DEV_DW_DATABASE_URL or self.DEV_DATABASE_URL or self.DATABASE_URL
+            
+            # Cloudinary 바인딩
+            self.CLOUDINARY_FOLDER = "DEV"
+            self.CLOUDINARY_CLOUD_NAME = self.DEV_CLOUDINARY_CLOUD_NAME or self.CLOUDINARY_CLOUD_NAME
+            self.CLOUDINARY_API_KEY = self.DEV_CLOUDINARY_API_KEY or self.CLOUDINARY_API_KEY
+            self.CLOUDINARY_API_SECRET = self.DEV_CLOUDINARY_API_SECRET or self.CLOUDINARY_API_SECRET
+        else:
+            self.PROD_DATABASE_URL_ACTIVE = self.PROD_DATABASE_URL or self.DATABASE_URL
+            self.DW_DATABASE_URL = self.PROD_DW_DATABASE_URL or self.DATABASE_URL
+            
+            # Cloudinary 바인딩
+            self.CLOUDINARY_FOLDER = "PROD"
+            self.CLOUDINARY_CLOUD_NAME = self.PROD_CLOUDINARY_CLOUD_NAME or self.CLOUDINARY_CLOUD_NAME
+            self.CLOUDINARY_API_KEY = self.PROD_CLOUDINARY_API_KEY or self.CLOUDINARY_API_KEY
+            self.CLOUDINARY_API_SECRET = self.PROD_CLOUDINARY_API_SECRET or self.CLOUDINARY_API_SECRET
+            
         return self
+
+    # === Cloudinary 환경별 매핑 설정 ===
+    PROD_CLOUDINARY_CLOUD_NAME: str = ""
+    PROD_CLOUDINARY_API_KEY: str = ""
+    PROD_CLOUDINARY_API_SECRET: str = ""
+
+    DEV_CLOUDINARY_CLOUD_NAME: str = ""
+    DEV_CLOUDINARY_API_KEY: str = ""
+    DEV_CLOUDINARY_API_SECRET: str = ""
+
+    CLOUDINARY_FOLDER: str = "DEV"
 
     def is_oauth_configured(self, provider: str) -> bool:
         if provider == "google":

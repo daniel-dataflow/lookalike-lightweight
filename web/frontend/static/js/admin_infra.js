@@ -249,7 +249,60 @@ async function fetchDbStatus() {
         document.getElementById('pgStatus').className = `badge bg-${pgOk ? 'success' : 'danger'}`;
         document.getElementById('pgStatus').textContent = pgOk ? '정상' : '오류';
         document.getElementById('pgConnections').textContent = data.db_active_connections || '-';
-        document.getElementById('pgSize').textContent = data.db_size_mb ? `${data.db_size_mb} MB` : '-';
+        
+        // Neon DB 세부 정보 바인딩
+        const updateNeonBadge = (elemId, status) => {
+            const el = document.getElementById(elemId);
+            if (!el) return;
+            if (status === 'Neon') {
+                el.className = 'badge bg-success';
+                el.textContent = 'Neon';
+            } else if (status === 'Other') {
+                el.className = 'badge bg-secondary';
+                el.textContent = 'Other';
+            } else if (status === 'Error') {
+                el.className = 'badge bg-danger';
+                el.textContent = 'Error';
+            } else {
+                el.className = 'badge bg-light text-muted';
+                el.textContent = 'None';
+            }
+        };
+
+        const neonStatus = data.db_urls_neon_status || {};
+        updateNeonBadge('neonDevDbBadge', neonStatus.DEV_DATABASE_URL);
+        updateNeonBadge('neonDevDwDbBadge', neonStatus.DEV_DW_DATABASE_URL);
+        updateNeonBadge('neonProdDbBadge', neonStatus.PROD_DATABASE_URL);
+        updateNeonBadge('neonProdDwDbBadge', neonStatus.PROD_DW_DATABASE_URL);
+
+        document.getElementById('neonDevDbSize').textContent = data.db_dev_size_mb ? `${data.db_dev_size_mb} MB` : '0.0 MB';
+        document.getElementById('neonDevDwDbSize').textContent = data.db_dev_dw_size_mb ? `${data.db_dev_dw_size_mb} MB` : '0.0 MB';
+        document.getElementById('neonDevTotalSize').textContent = data.db_dev_total_size_mb ? `${data.db_dev_total_size_mb} MB` : '0.0 MB';
+        
+        document.getElementById('neonProdDbSize').textContent = data.db_prod_size_mb ? `${data.db_prod_size_mb} MB` : '0.0 MB';
+        document.getElementById('neonProdDwDbSize').textContent = data.db_prod_dw_size_mb ? `${data.db_prod_dw_size_mb} MB` : '0.0 MB';
+        document.getElementById('neonProdTotalSize').textContent = data.db_prod_total_size_mb ? `${data.db_prod_total_size_mb} MB` : '0.0 MB';
+
+        // ENV_MODE에 따라서 DEV 또는 PROD 행만 노출
+        const isLocalEnv = (data.environment && (data.environment.toLowerCase() === 'local' || data.environment.toLowerCase() === 'dev'));
+        const devElements = ['neonDevRowGroup1', 'neonDevRowGroup2', 'neonDevRowGroup3'];
+        const prodElements = ['neonProdRowGroup1', 'neonProdRowGroup2', 'neonProdRowGroup3'];
+
+        devElements.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) {
+                el.style.display = isLocalEnv ? 'table-row' : 'none';
+            }
+        });
+        prodElements.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) {
+                el.style.display = isLocalEnv ? 'none' : 'table-row';
+            }
+        });
+
+
+
 
         // 운영체제 표시 동적 반영
         if (data.environment === 'local') {
@@ -265,9 +318,36 @@ async function fetchDbStatus() {
             cloudinaryStatusEl.className = `badge bg-${cloudOk ? 'success' : 'danger'}`;
             cloudinaryStatusEl.textContent = cloudOk ? '정상' : '오류';
             
-            const usageMB = (data.cloudinary_usage_bytes / 1024 / 1024).toFixed(2);
-            document.getElementById('cloudinaryUsage').textContent = `${usageMB} MB`;
-            document.getElementById('cloudinaryResources').textContent = `${data.cloudinary_resources_count.toLocaleString()}개`;
+            // 크레딧(Credit) 데이터 바인딩 (음수값 0으로 보정)
+            const credUsage = Math.max(0, data.cloudinary_credits_usage || 0.0);
+            const credLimit = data.cloudinary_credits_limit || 25.0;
+            const credPercent = Math.max(0, data.cloudinary_credits_percent || 0.0);
+            
+            document.getElementById('cloudinaryCreditsUsage').textContent = `${credUsage.toFixed(2)} / ${credLimit.toFixed(0)} (${credPercent.toFixed(1)}%)`;
+            
+            // GB 단위 변환 (usage_bytes / 1024^3) (음수값 0으로 보정)
+            const usageBytes = Math.max(0, data.cloudinary_usage_bytes || 0);
+            const usageGB = (usageBytes / 1024 / 1024 / 1024).toFixed(3);
+            document.getElementById('cloudinaryUsage').textContent = `${usageGB} GB`;
+            
+            const resourcesCount = Math.max(0, data.cloudinary_resources_count || 0);
+            document.getElementById('cloudinaryResources').textContent = `${resourcesCount.toLocaleString()}개`;
+            
+            // 남은 크레딧 계산 및 클래스 바인딩
+            const freeCredits = Math.max(0, credLimit - credUsage);
+            const freePercent = 100 - credPercent;
+            
+            const freeEl = document.getElementById('cloudinaryCreditsFree');
+            if (freeEl) {
+                freeEl.textContent = `${freeCredits.toFixed(2)} Credit 남음`;
+                if (freePercent < 10) {
+                    freeEl.className = 'text-danger fw-bold small';
+                } else if (freePercent < 30) {
+                    freeEl.className = 'text-warning fw-bold small';
+                } else {
+                    freeEl.className = 'text-success fw-bold small';
+                }
+            }
         }
 
         // HuggingFace Space 상태 반영
@@ -284,6 +364,18 @@ async function fetchDbStatus() {
             
             document.getElementById('hfModelStatus').textContent = data.hf_model_status || '-';
             document.getElementById('hfLatency').textContent = data.hf_latency_ms ? `${data.hf_latency_ms} ms` : '-';
+            
+            // Git Storage 사용량 정보 반영 (HuggingFace 콘솔은 10진수 Decimal MB/GB 단위를 사용하므로 10^6 및 10^9 기준으로 계산)
+            const hfUsedBytes = data.hf_used_storage_bytes || 0;
+            const hfLimitBytes = data.hf_storage_limit_bytes || (1024 * 1024 * 1024);
+            const hfUsedMB = (hfUsedBytes / 1000000).toFixed(1);
+            const hfLimitGB = (hfLimitBytes / 1000000000).toFixed(0);
+            const hfHw = data.hf_hardware ? ` (${data.hf_hardware})` : '';
+            
+            const hfStorageEl = document.getElementById('hfStorageUsage');
+            if (hfStorageEl) {
+                hfStorageEl.textContent = `${hfUsedMB} MB / ${hfLimitGB} GB${hfHw}`;
+            }
         }
     } catch (e) {
         console.error('데이터베이스 상태 조회 실패:', e);

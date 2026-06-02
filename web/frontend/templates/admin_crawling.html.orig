@@ -1,0 +1,60 @@
+{% extends "admin_base.html" %}
+
+{% block page_title %}크롤링 파이프라인 모니터링{% endblock %}
+
+{% block content %}
+<style>
+  /* ─── 카드 및 배지 스타일 ─── */
+  .status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+  }
+  .badge-ready    { background: #d1fae5; color: #065f46; }
+  .badge-waiting  { background: #fef3c7; color: #92400e; }
+  .badge-img-missing { background: #fee2e2; color: #991b1b; }
+  .badge-empty    { background: #f3f4f6; color: #6b7280; }
+  .badge-running  { background: #dbeafe; color: #1e40af; }
+  .badge-blocked  { background: #fce7f3; color: #9d174d; }
+  .badge-success  { background: #d1fae5; color: #065f46; }
+  .badge-failed   { background: #fee2e2; color: #991b1b; }
+  .badge-unknown  { background: #f3f4f6; color: #6b7280; }
+
+  /* ─── 상단 요약 카드 ─── */
+  .summary-card {
+    border-radius: 14px;
+    border: none;
+    padding: 22px 26px;
+    background: #fff;
+    box-shadow: 0 1px 8px rgba(0,0,0,.08);
+    transition: transform .15s;
+  }
+  .summary-card:hover { transform: translateY(-2px); }
+  .summary-card .icon-wrap {
+    width: 48px; height: 48px;
+    border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.3rem;
+  }
+  .icon-blue   { background: #dbeafe; color: #1d4ed8; }
+  .icon-green  { background: #d1fae5; color: #059669; }
+  .icon-yellow { background: #fef9c3; color: #b45309; }
+  .icon-red    { background: #fee2e2; color: #dc2626; }
+
+  /* ─── 브랜드 카드 ─── */
+  .brand-card {
+    border-radius: 14px;
+    border: 1px solid #e5e7eb;
+    background: #fff;
+    transition: box-shadow .15s;
+  }
+  .brand-card:hover { box-shadow: 0 4px 18px rgba(0,0,0,.1); }
+  .brand-card .card-header {
+    border-radius: 14px 14px 0 0;
+    background: linear-gradient(135deg, #1e40af 0%, #7c3a
+<truncated 27330 bytes>

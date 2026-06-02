@@ -580,6 +580,49 @@ $PG_CMD -U ${POSTGRES_USER} -d ${POSTGRES_DB} -c "
 "
 echo "   ✅ naver_prices 신규 컬럼 추가 완료"
 
+# ---- 14. 크롤러 데이터 원자적 교체를 위한 스테이징 테이블(Staging Table) 생성 ----
+echo ""
+echo "1️⃣4️⃣  크롤러 스테이징 테이블(Staging Table) 확인 및 생성..."
+$PG_CMD -U ${POSTGRES_USER} -d ${POSTGRES_DB} -c "
+    -- staging_products 테이블 생성 (products와 동일 구조)
+    CREATE TABLE IF NOT EXISTS staging_products (
+        product_id VARCHAR(20) PRIMARY KEY,
+        model_code VARCHAR(50),
+        brand_name VARCHAR(50),
+        prod_name VARCHAR(512),
+        base_price INTEGER,
+        gender VARCHAR(10),
+        category_code VARCHAR(50),
+        img_hdfs_path VARCHAR(512),
+        origin_url VARCHAR(512),
+        create_dt TIMESTAMP DEFAULT NOW(),
+        update_dt TIMESTAMP DEFAULT NOW()
+    );
+
+    -- staging_naver_prices 테이블 생성 (naver_prices와 동일 구조)
+    CREATE TABLE IF NOT EXISTS staging_naver_prices (
+        nprice_id BIGSERIAL PRIMARY KEY,
+        product_id VARCHAR(20),
+        brand VARCHAR(100),
+        model_code VARCHAR(100),
+        original_name VARCHAR(255),
+        original_price INTEGER,
+        rank SMALLINT,
+        naver_title VARCHAR(255),
+        naver_price INTEGER,
+        mall_name VARCHAR(100),
+        mall_url VARCHAR(512),
+        image_url VARCHAR(512),
+        similarity_score NUMERIC(5, 2),
+        create_dt TIMESTAMP DEFAULT NOW(),
+        update_dt TIMESTAMP DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_staging_naver_prices_product_id 
+        ON staging_naver_prices(product_id);
+"
+echo "   ✅ 스테이징 테이블 생성 완료"
+
 echo ""
 echo "============================================"
 echo "  ✅ 모든 DB 변경사항 적용 완료!"
@@ -600,4 +643,6 @@ echo "    ✅ product_features 테이블 crop_path 컬럼 추가"
 echo "    ✅ social_id → provider_id 컬럼명 변경"
 echo "    ✅ recent_views, likes 테이블 생성"
 echo "    ✅ brand_sequences 테이블 생성"
+echo "    ✅ staging_products 및 staging_naver_prices 테이블 생성"
 echo "============================================"
+

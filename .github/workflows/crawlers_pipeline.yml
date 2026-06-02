@@ -1,0 +1,229 @@
+name: Lookalike Fashion Crawling Pipeline
+
+on:
+  schedule:
+    # 매일 새벽 3시(KST) 정기 Phase 1 수집 배치 실행
+    - cron: '0 18 * * *'
+    # 매일 새벽 5시(KST) 정기 Phase 2 스위칭 배치 실행 (수집 2시간 뒤 — staging 생성 후 24h 대기 중인 전날 데이터 정합성 검사 및 교체)
+    - cron: '0 20 * * *'
+  workflow_dispatch:
+    inputs:
+      brand:
+        description: '크롤링할 타겟 브랜드를 선택하세요'
+        required: true
+        default: '8seconds'
+        type: choice
+        options:
+          - 8seconds
+          - musinsa
+          - topten
+          - uniqlo
+          - zara
+      action:
+        description: '실행할 파이프라인 액션'
+        required: true
+        default: 'crawl'
+        type: choice
+        options:
+          - crawl   # Phase 1: 수집 → staging 적재
+          - swap    # Phase 2: staging → production 스위칭
+      target_env:
+        description: '실행할 대상 환경을 선택하세요 (dev 또는 prod)'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - prod
+      limit:
+        description: '최대 수집 상품 개수 (crawl 액션 시)'
+        required: false
+        default: '100'
+        type: string
+      gender:
+        description: '성별 분할 수집 필터 (비워두면 전체, 무신사 등 대용량 분할용)'
+        required: false
+        default: ''
+        type: choice
+        options:
+          - ''
+          - Men
+          - Women
+      category:
+        description: '카테고리 분할 수집 필터 (비워두면 전체)'
+        required: false
+        default: ''
+        type: choice
+        options:
+          - ''
+          - Outer
+          - Top
+          - Bottom
+      force:
+        description: 'swap 액션 시 24시간 대기 조건 무시하고 즉시 강제 스위칭'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
+
+jobs:
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Phase 1 배치 잡: 수동 트리거(crawl) 또는 정기 schedule(18:00 UTC = 03:00 KST)
+  # ─────────────────────────────────────────────────────────────────────────────
+  crawl_phase1:
+    name: "Phase 1 — 크롤링 및 Staging 적재"
+    runs-on: ubuntu-latest
+    # 수동으로 'crawl' 액션을 선택하거나, 18:00 UTC 정기 스케줄에만 실행
+    if: |
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'crawl') ||
+      (github.event_name == 'schedule' && github.event.schedule == '0 18 * * *')
+
+    steps:
+      - name: 저장소 체크아웃
+        uses: actions/checkout@v4
+
+      - name: Python 3.11 셋업
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: 의존성 설치
+        run: |
+          python -m pip install --upgrade pip
+          pip install playwright psycopg2-binary aiohttp cloudinary python-dotenv requests
+
+      - name: Playwright 브라우저 설치
+        run: |
+          python -m playwright install --with-deps chromium
+
+      - name: Phase 1 크롤링 실행 (수동 트리거)
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          ENV_MODE: ${{ github.event.inputs.target_env }}
+          DATABASE_URL: ${{ github.event.inputs.target_env == 'prod' && secrets.PROD_DATABASE_URL || secrets.DEV_DATABASE_URL }}
+          DW_DATABASE_URL: ${{ github.event.inputs.target_env == 'prod' && secrets.PROD_DW_DATABASE_URL || secrets.DEV_DW_DATABASE_URL }}
+          CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
+          CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
+          CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          # 분할 수집 옵션 동적 구성
+          EXTRA_ARGS=""
+          if [ -n "${{ github.event.inputs.gender }}" ]; then
+            EXTRA_ARGS="$EXTRA_ARGS --gender ${{ github.event.inputs.gender }}"
+          fi
+          if [ -n "${{ github.event.inputs.category }}" ]; then
+            EXTRA_ARGS="$EXTRA_ARGS --category ${{ github.event.inputs.category }}"
+          fi
+
+          echo ">>> 🚀 Starting Phase 1 crawl for ${{ github.event.inputs.brand }} (limit=${{ github.event.inputs.limit }}) $EXTRA_ARGS on environment: ${{ github.event.inputs.target_env }}"
+          python data-pipeline/crawlers/web_crawlers/crawling_pipeline_cli.py \
+            --brand "${{ github.event.inputs.brand }}" \
+            --limit "${{ github.event.inputs.limit }}" \
+            --action crawl \
+            $EXTRA_ARGS
+
+      - name: Phase 1 크롤링 실행 (정기 자동 배치 — 전 브랜드 순차 수집)
+        if: github.event_name == 'schedule'
+        env:
+          ENV_MODE: prod
+          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
+          DW_DATABASE_URL: ${{ secrets.PROD_DW_DATABASE_URL }}
+          CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
+          CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
+          CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          # 브랜드별 분리 수집 — 무신사는 시간 제한 우회를 위해 성별로 분할
+          for brand in 8seconds topten uniqlo zara; do
+            echo ">>> 🎬 Starting pipeline for $brand..."
+            python data-pipeline/crawlers/web_crawlers/crawling_pipeline_cli.py \
+              --brand "$brand" --limit 200 --action crawl \
+              || echo "⚠️ $brand 크롤링 실패 (스킵 후 다음 브랜드 진행)"
+          done
+
+          # 무신사: 남성/여성 분할 수집 (6시간 GitHub Actions 제한 우회)
+          echo ">>> 🎬 Starting musinsa Men..."
+          python data-pipeline/crawlers/web_crawlers/crawling_pipeline_cli.py \
+            --brand musinsa --limit 150 --action crawl --gender Men \
+            || echo "⚠️ musinsa Men 크롤링 실패"
+
+          echo ">>> 🎬 Starting musinsa Women..."
+          python data-pipeline/crawlers/web_crawlers/crawling_pipeline_cli.py \
+            --brand musinsa --limit 150 --action crawl --gender Women \
+            || echo "⚠️ musinsa Women 크롤링 실패"
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Phase 2 배치 잡: 수동 트리거(swap) 또는 정기 schedule(20:00 UTC = 05:00 KST)
+  # ─────────────────────────────────────────────────────────────────────────────
+  swap_phase2:
+    name: "Phase 2 — Staging → Production 스위칭"
+    runs-on: ubuntu-latest
+    # 수동으로 'swap' 액션을 선택하거나, 20:00 UTC 정기 스케줄에만 실행
+    if: |
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'swap') ||
+      (github.event_name == 'schedule' && github.event.schedule == '0 20 * * *')
+
+    steps:
+      - name: 저장소 체크아웃
+        uses: actions/checkout@v4
+
+      - name: Python 3.11 셋업
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: 의존성 설치
+        run: |
+          python -m pip install --upgrade pip
+          pip install psycopg2-binary aiohttp cloudinary python-dotenv requests
+
+      - name: Phase 2 스위칭 실행 (수동 트리거)
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          ENV_MODE: ${{ github.event.inputs.target_env }}
+          DATABASE_URL: ${{ github.event.inputs.target_env == 'prod' && secrets.PROD_DATABASE_URL || secrets.DEV_DATABASE_URL }}
+          DW_DATABASE_URL: ${{ github.event.inputs.target_env == 'prod' && secrets.PROD_DW_DATABASE_URL || secrets.DEV_DW_DATABASE_URL }}
+          CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
+          CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
+          CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          FORCE_FLAG=""
+          if [ "${{ github.event.inputs.force }}" = "true" ]; then
+            FORCE_FLAG="--force"
+            echo "⚡ Force 스위칭 모드 활성화"
+          fi
+
+          echo ">>> 🔄 Starting Phase 2 swap for ${{ github.event.inputs.brand }} $FORCE_FLAG on environment: ${{ github.event.inputs.target_env }}"
+          python data-pipeline/crawlers/web_crawlers/crawling_pipeline_cli.py \
+            --brand "${{ github.event.inputs.brand }}" \
+            --action swap \
+            $FORCE_FLAG
+
+      - name: Phase 2 스위칭 실행 (정기 자동 배치 — 전 브랜드 24h 대기 데이터 스위칭)
+        if: github.event_name == 'schedule'
+        env:
+          ENV_MODE: prod
+          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
+          DW_DATABASE_URL: ${{ secrets.PROD_DW_DATABASE_URL }}
+          CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
+          CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
+          CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          # 전 브랜드 순차 스위칭 (24시간 조건 자동 체크 — force 없음)
+          for brand in 8seconds musinsa topten uniqlo zara; do
+            echo ">>> 🔄 Phase 2 swap for $brand..."
+            python data-pipeline/crawlers/web_crawlers/crawling_pipeline_cli.py \
+              --brand "$brand" --action swap \
+              || echo "⚠️ $brand 스위칭 실패 (스킵 후 다음 브랜드 진행)"
+          done

@@ -11,7 +11,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import StreamingResponse
 
-from ..database import get_pg_cursor
+from ..database import get_dw_cursor
 
 logger = logging.getLogger(__name__)
 
@@ -31,12 +31,14 @@ async def get_log_dashboard():
     """
     try:
         def _fetch_all():
-            with get_pg_cursor() as cur:
+            with get_dw_cursor() as cur:
+                # 한국 시간 보장을 위한 타임존 설정
+                cur.execute("SET TIME ZONE 'Asia/Seoul';")
                 # ① stats: 최근 1시간 레벨별 집계
                 cur.execute("""
                     SELECT level, COUNT(*) as cnt 
                     FROM app_logs 
-                    WHERE timestamp >= NOW() - INTERVAL '1 hour'
+                    WHERE timestamp >= CURRENT_TIMESTAMP - INTERVAL '1 hour'
                     GROUP BY level;
                 """)
                 stats_rows = cur.fetchall()
@@ -55,7 +57,7 @@ async def get_log_dashboard():
                         COUNT(CASE WHEN level = 'WARN' THEN 1 END) AS warn_cnt,
                         COUNT(CASE WHEN level = 'INFO' THEN 1 END) AS info_cnt
                     FROM app_logs
-                    WHERE timestamp >= NOW() - INTERVAL '24 hours'
+                    WHERE timestamp >= CURRENT_TIMESTAMP - INTERVAL '24 hours'
                     GROUP BY DATE_TRUNC('hour', timestamp)
                     ORDER BY DATE_TRUNC('hour', timestamp) ASC;
                 """)
@@ -165,7 +167,7 @@ async def get_pipeline_status():
     """로그 적재 파이프라인 상태 반환"""
     try:
         def _get_stats():
-            with get_pg_cursor() as cur:
+            with get_dw_cursor() as cur:
                 cur.execute("SELECT COUNT(*) as count FROM app_logs;")
                 count = cur.fetchone()["count"]
                 
@@ -221,7 +223,7 @@ async def get_logs_stream(
                 
             where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
             
-            with get_pg_cursor() as cur:
+            with get_dw_cursor() as cur:
                 cur.execute(f"""
                     SELECT level, service, message, error_type, timestamp 
                     FROM app_logs
@@ -279,7 +281,7 @@ async def get_logs_download(
                 
             where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
             
-            with get_pg_cursor() as cur:
+            with get_dw_cursor() as cur:
                 cur.execute(f"""
                     SELECT level, service, message, timestamp 
                     FROM app_logs
@@ -351,7 +353,7 @@ async def purge_all_logs():
     """로그 전체 삭제"""
     try:
         def _delete():
-            with get_pg_cursor() as cur:
+            with get_dw_cursor() as cur:
                 cur.execute("TRUNCATE TABLE app_logs;")
                 return cur.rowcount
 

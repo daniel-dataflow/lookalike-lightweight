@@ -77,8 +77,8 @@ class NeonLogHandler(logging.Handler):
             level_str = record.levelname
 
             # Neon PostgreSQL에 삽입 및 24시간 만료 데이터 삭제
-            from .database import get_pg_cursor, engine
-            if engine is not None:
+            from .database import get_pg_cursor, get_engine
+            if get_engine() is not None:
                 with get_pg_cursor() as cur:
                     cur.execute(
                         "INSERT INTO app_logs (level, service, message, error_type) VALUES (%s, %s, %s, %s);",

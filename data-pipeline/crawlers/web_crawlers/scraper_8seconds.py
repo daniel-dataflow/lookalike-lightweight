@@ -5,7 +5,6 @@ import json
 import shutil
 from datetime import datetime
 from playwright.async_api import async_playwright
-from hdfs import InsecureClient
 
 # --- [설정] ---
 BRAND_NAME = "8seconds"
@@ -266,26 +265,7 @@ async def run():
         await browser.close()
 
     if os.path.exists(LOCAL_TEMP_DIR) and os.listdir(LOCAL_TEMP_DIR):
-        print(f"\n📦 수집 완료. HDFS({HDFS_ROOT_PATH}) 업로드 시작...")
-        try:
-            hdfs_client = InsecureClient(HDFS_URL, user='root')
-            
-            # 폴더 생성
-            hdfs_client.makedirs(HDFS_ROOT_PATH)
-            
-            # JSON 파일 하나씩 업로드
-            upload_count = 0
-            for filename in os.listdir(LOCAL_TEMP_DIR):
-                if filename.endswith(".json"):
-                    local_file = os.path.join(LOCAL_TEMP_DIR, filename)
-                    hdfs_file = f"{HDFS_ROOT_PATH}/{filename}"
-                    hdfs_client.upload(hdfs_file, local_file, overwrite=True)
-                    upload_count += 1
-                    
-            print(f"✅ HDFS 업로드 성공! (총 {upload_count}개 파일) -> {HDFS_ROOT_PATH}")
-            
-        except Exception as e:
-            print(f"❌ HDFS 업로드 에러: {e}")
+        print(f"\n📦 수집 완료. (로컬 데이터 저장 경로: {LOCAL_TEMP_DIR})")
     else:
         print("\n❌ 저장된 데이터가 없습니다.")
 

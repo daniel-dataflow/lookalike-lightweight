@@ -76,16 +76,33 @@ class SystemHealthResponse(BaseModel):
     db_size_mb: float = 0.0
     app_version: str = ""
     environment: str = ""
-    
+    # Neon DB 상세 모니터링 필드 추가
+    db_dev_size_mb: Optional[float] = 0.0
+    db_dev_dw_size_mb: Optional[float] = 0.0
+    db_dev_total_size_mb: Optional[float] = 0.0
+    db_prod_size_mb: Optional[float] = 0.0
+    db_prod_dw_size_mb: Optional[float] = 0.0
+    db_prod_total_size_mb: Optional[float] = 0.0
+    db_urls_neon_status: Dict[str, str] = {} # 각 DB URL이 Neon DB를 바라보고 있는지 여부 ("Neon" | "Other" | "Error")
+
     # Cloudinary 이미지 저장소 정보
     cloudinary_status: str = "unknown"
     cloudinary_usage_bytes: int = 0
+    cloudinary_limit_bytes: int = 25 * 1024 * 1024 * 1024 # 무료 플랜 기본 25 GB
+    cloudinary_credits_usage: Optional[float] = 0.0 # 크레딧 기반 실제 사용량 (18.49 등)
+    cloudinary_credits_limit: Optional[float] = 25.0 # 크레딧 제한 (25)
+    cloudinary_credits_percent: Optional[float] = 0.0 # 크레딧 사용률 %
     cloudinary_resources_count: int = 0
     
     # HuggingFace Space 정보
     hf_status: str = "unknown"
     hf_model_status: str = "unknown"
     hf_latency_ms: float = 0.0
+    hf_used_storage_bytes: Optional[int] = 0
+    hf_storage_limit_bytes: Optional[int] = 1 * 1024 * 1024 * 1024 # 1 GB
+    hf_hardware: Optional[str] = ""
+
+
 
 
 # ──────────────────────────────────────

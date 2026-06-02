@@ -1,0 +1,711 @@
+{% extends "admin_base.html" %}
+
+{% block title %}크롤링 파이프라인 모니터링 - Lookalike Admin{% endblock %}
+
+{% block page_title %}크롤링 파이프라인 모니터링{% endblock %}
+
+{% block content %}
+<style>
+  /* ─── 카드 및 배지 스타일 ─── */
+  .status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+  }
+  .badge-ready    { background: #d1fae5; color: #065f46; }
+  .badge-waiting  { background: #fef3c7; color: #92400e; }
+  .badge-img-missing { background: #fee2e2; color: #991b1b; }
+  .badge-empty    { background: #f3f4f6; color: #6b7280; }
+  .badge-running  { background: #dbeafe; color: #1e40af; }
+  .badge-blocked  { background: #fce7f3; color: #9d174d; }
+  .badge-success  { background: #d1fae5; color: #065f46; }
+  .badge-failed   { background: #fee2e2; color: #991b1b; }
+  .badge-unknown  { background: #f3f4f6; color: #6b7280; }
+
+  /* ─── 상단 요약 카드 ─── */
+  .summary-card {
+    border-radius: 14px;
+    border: none;
+    padding: 22px 26px;
+    background: #fff;
+    box-shadow: 0 1px 8px rgba(0,0,0,.08);
+    transition: transform .15s;
+  }
+  .summary-card:hover { transform: translateY(-2px); }
+  .summary-card .icon-wrap {
+    width: 48px; height: 48px;
+    border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.3rem;
+  }
+  .icon-blue   { background: #dbeafe; color: #1d4ed8; }
+  .icon-green  { background: #d1fae5; color: #059669; }
+  .icon-yellow { background: #fef9c3; color: #b45309; }
+  .icon-red    { background: #fee2e2; color: #dc2626; }
+
+  /* ─── 브랜드 카드 ─── */
+  .brand-card {
+    border-radius: 14px;
+    border: 1px solid #e5e7eb;
+    background: #fff;
+    transition: box-shadow .15s;
+  }
+  .brand-card:hover { box-shadow: 0 4px 18px rgba(0,0,0,.1); }
+  .brand-card .card-header {
+    border-radius: 14px 14px 0 0;
+    background: linear-gradient(135deg, #1e40af 0%, #1d4ed8 100%);
+    color: #fff;
+  }
+  .brand-card .card-body {
+    padding: 1.25rem;
+  }
+  
+  .metric-label {
+    font-size: 0.75rem;
+    color: #6b7280;
+    font-weight: 500;
+  }
+  .metric-value {
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: #1f2937;
+  }
+
+  .pulse-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+  }
+  .dot-ready   { background: #10b981; }
+  .dot-waiting { background: #f59e0b; }
+  .dot-failed  { background: #ef4444; }
+  .dot-running { background: #3b82f6; animation: pulse 1s infinite; }
+  .dot-blocked { background: #ec4899; }
+  .dot-unknown { background: #9ca3af; }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.4; }
+  }
+
+  /* ─── 새로고침 표시 ─── */
+  .refresh-indicator { font-size: 0.75rem; color: #9ca3af; }
+
+  /* ─── Slack 알림 배너 ─── */
+  .alert-banner {
+    border-radius: 12px;
+    border-left: 5px solid;
+    font-size: 0.85rem;
+  }
+  .alert-warning-banner { border-color: #f59e0b; background: #fffbeb; }
+  .alert-danger-banner  { border-color: #ef4444; background: #fef2f2; }
+  .alert-success-banner { border-color: #10b981; background: #ecfdf5; }
+</style>
+
+<!-- ─────────────── 상단 헤더 ─────────────── -->
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h4 class="fw-bold mb-1">🔍 크롤링 파이프라인 모니터링</h4>
+    <p class="text-muted mb-0" style="font-size:.85rem;">
+      스테이징 현황 · 임베딩/최저가 추출 · 정합성 검사 · 수동 스위칭 · 백그라운드 수집 실행
+    </p>
+  </div>
+  <div class="d-flex gap-2 align-items-center">
+    <span class="refresh-indicator" id="lastRefreshTime">마지막 새로고침: —</span>
+    <button class="btn btn-sm btn-outline-secondary" onclick="loadAll()">
+      <i class="fas fa-sync-alt me-1"></i>새로고침
+    </button>
+  </div>
+</div>
+
+<!-- ─────────────── 요약 카드 행 ─────────────── -->
+<div class="row g-3 mb-4" id="summaryCards">
+  <div class="col-12 col-xl-4">
+    <div class="summary-card">
+      <div class="d-flex justify-content-between align-items-start">
+        <div>
+          <div class="text-muted mb-1" style="font-size:.78rem;">대기 상품 수</div>
+          <div class="fw-bold fs-4" id="totalStagingCount">0</div>
+        </div>
+        <div class="icon-wrap icon-blue">
+          <i class="fas fa-box-open"></i>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-12 col-xl-4">
+    <div class="summary-card">
+      <div class="d-flex justify-content-between align-items-start">
+        <div>
+          <div class="text-muted mb-1" style="font-size:.78rem;">대기 임베딩 수</div>
+          <div class="fw-bold fs-4" id="totalEmbeddingCount">0</div>
+        </div>
+        <div class="icon-wrap icon-green">
+          <i class="fas fa-project-diagram"></i>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-12 col-xl-4">
+    <div class="summary-card">
+      <div class="d-flex justify-content-between align-items-start">
+        <div>
+          <div class="text-muted mb-1" style="font-size:.78rem;">대기 최저가 수</div>
+          <div class="fw-bold fs-4" id="totalNaverCount">0</div>
+        </div>
+        <div class="icon-wrap icon-yellow">
+          <i class="fas fa-tags"></i>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─────────────── 브랜드별 상태 그리드 ─────────────── -->
+<h5 class="fw-bold mb-3"><i class="fas fa-tags text-primary me-2"></i>브랜드별 파이프라인 관리</h5>
+<div class="row g-3 mb-5" id="brandStatusGrid">
+  <div class="col-12 text-center py-5">
+    <div class="spinner-border text-primary" role="status">
+      <span class="visually-hidden">로딩 중...</span>
+    </div>
+  </div>
+</div>
+
+<!-- ─────────────── 파이프라인 로그 및 에러 내역 ─────────────── -->
+<div class="row g-4">
+  <!-- 최근 파이프라인 로그 -->
+  <div class="col-lg-5">
+    <div class="card border-0 shadow-sm d-flex flex-column h-100">
+      <div class="card-header bg-white fw-bold d-flex justify-content-between align-items-center py-3">
+        <span><i class="fas fa-history me-2 text-secondary"></i>최근 파이프라인 구동 내역</span>
+      </div>
+      <div class="card-body p-0 flex-grow-1">
+        <div class="table-responsive">
+          <table class="table table-hover mb-0 align-middle">
+            <thead class="table-light text-muted" style="font-size:.8rem;">
+              <tr>
+                <th>브랜드</th>
+                <th>상태</th>
+                <th class="text-end">수집</th>
+                <th class="text-end">신규/갱신</th>
+                <th class="text-end">에러</th>
+                <th>시간</th>
+              </tr>
+            </thead>
+            <tbody id="runsTableBody" style="font-size:.85rem;">
+              <tr>
+                <td colspan="6" class="text-center py-4 text-muted">구동 내역이 없습니다.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <!-- 구동 내역 페이징 영역 -->
+      <div class="card-footer bg-white border-0 py-2 d-flex justify-content-between align-items-center">
+        <button class="btn btn-xs btn-outline-secondary py-1 px-2" style="font-size: 0.72rem;" id="btnRunPrev" onclick="changeRunPage(-1)" disabled>이전</button>
+        <span class="text-muted" style="font-size: 0.75rem;" id="txtRunPage">1 / 1 쪽</span>
+        <button class="btn btn-xs btn-outline-secondary py-1 px-2" style="font-size: 0.72rem;" id="btnRunNext" onclick="changeRunPage(1)" disabled>다음</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 최근 에러 로그 -->
+  <div class="col-lg-7">
+    <div class="card border-0 shadow-sm d-flex flex-column h-100">
+      <div class="card-header bg-white fw-bold py-3 text-danger">
+        <i class="fas fa-exclamation-triangle me-2"></i>실시간 파이프라인 에러 내역 (브랜드 및 식별정보 상세 제공)
+      </div>
+      <div class="card-body p-0 flex-grow-1">
+        <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+          <table class="table table-hover mb-0 align-middle">
+            <thead class="table-light text-muted" style="font-size:.8rem;">
+              <tr>
+                <th style="width: 15%;">시간/번호</th>
+                <th style="width: 25%;">에러 유형</th>
+                <th style="width: 60%;">상세 원인 내용</th>
+              </tr>
+            </thead>
+            <tbody id="errorsTableBody" style="font-size:.8rem;">
+              <tr>
+                <td colspan="3" class="text-center py-4 text-muted">최근 에러 내역이 없습니다.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <!-- 에러 내역 페이징 영역 -->
+      <div class="card-footer bg-white border-0 py-2 d-flex justify-content-between align-items-center">
+        <button class="btn btn-xs btn-outline-secondary py-1 px-2" style="font-size: 0.72rem;" id="btnErrPrev" onclick="changeErrPage(-1)" disabled>이전</button>
+        <span class="text-muted" style="font-size: 0.75rem;" id="txtErrPage">1 / 1 쪽</span>
+        <button class="btn btn-xs btn-outline-secondary py-1 px-2" style="font-size: 0.72rem;" id="btnErrNext" onclick="changeErrPage(1)" disabled>다음</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─────────────── 수동 크롤링 트리거 실행 모달 ─────────────── -->
+<div class="modal fade" id="runCrawlModal" tabindex="-1" aria-labelledby="runCrawlModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title fw-bold" id="runCrawlModalLabel">🚀 수동 크롤링 실행</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <form id="crawlForm">
+          <input type="hidden" id="crawlBrand" name="brand">
+          <div class="mb-3">
+            <label class="form-label fw-semibold" style="font-size:.85rem;">브랜드</label>
+            <input type="text" class="form-control bg-light" id="crawlBrandDisplay" readonly>
+          </div>
+          <div class="mb-3">
+            <label for="crawlLimit" class="form-label fw-semibold" style="font-size:.85rem;">최대 수집 상품 수 (기본 10)</label>
+            <input type="number" class="form-control" id="crawlLimit" name="limit" value="10" min="1" max="100">
+            <div class="form-text">로컬 테스트 보호 모드로 최대 100건으로 제한됩니다.</div>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">취소</button>
+        <button type="button" class="btn btn-primary btn-sm" id="confirmRunCrawlBtn" onclick="submitCrawl()">백그라운드 실행</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─────────────── 스위칭(Swap) 확인 모달 ─────────────── -->
+<div class="modal fade" id="swapConfirmModal" tabindex="-1" aria-labelledby="swapConfirmModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title fw-bold" id="swapConfirmModalLabel">🔄 데이터 정합성 검사 및 스위칭</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body" id="swapModalBody">
+        <!-- JS로 채워집니다. -->
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">취소</button>
+        <button type="button" class="btn btn-success btn-sm" id="confirmSwapBtn" onclick="executeSwap()">스위칭 시작</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─────────────── UI 조작 JavaScript ─────────────── -->
+<script>
+let pendingSwapBrand = null;
+let currentStagingCounts = {};
+let currentRunPage = 1;
+let currentErrPage = 1;
+const pageSize = 10;
+</script>
+
+{% raw %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  loadAll();
+  // 5초 주기로 데이터 상태 및 실행로그 자동 새로고침
+  setInterval(loadAll, 5000);
+});
+
+function loadAll() {
+  fetchStagingStatus();
+  fetchLogs();
+}
+
+async function fetchStagingStatus() {
+  const grid = document.getElementById('brandStatusGrid');
+  try {
+    const res = await fetch('/api/admin/crawling/staging');
+    const data = await res.json();
+    if (!data.success) {
+      grid.innerHTML = `<div class="col-12 text-center text-danger py-4">현황 조회 실패: ${data.detail}</div>`;
+      return;
+    }
+
+    // 상단 요약 카드 데이터 업데이트
+    document.getElementById('totalStagingCount').textContent = data.total_staging.toLocaleString();
+    
+    let totalEmbed = 0;
+    let totalNaver = 0;
+    
+    // 그리드 생성
+    let html = '';
+    data.brands.forEach(b => {
+      totalEmbed += b.embed_count;
+      totalNaver += b.naver_count;
+      
+      currentStagingCounts[b.brand] = {
+        staging: b.staging_count,
+        prod: b.prod_count,
+        embed: b.embed_count,
+        naver: b.naver_count,
+        img: b.img_count,
+        status: b.integrity_status
+      };
+
+      const statusBadge = getStatusBadge(b.integrity_status);
+      const isStagingEmpty = b.staging_count === 0;
+      const isReadyOrWaiting = b.integrity_status === 'ready' || b.integrity_status === 'waiting' || b.integrity_status === 'img_missing';
+
+      // 포맷팅
+      const latestDtStr = b.latest_dt ? new Date(b.latest_dt).toLocaleString('ko-KR') : '구동 이력 없음';
+      const hoursLeft = 24 - b.hours_elapsed;
+      const waitingText = (b.integrity_status === 'waiting' && hoursLeft > 0) 
+        ? `<div class="text-warning small mt-1"><i class="far fa-clock me-1"></i>배치 이관 대기: ${hoursLeft}시간 남음</div>`
+        : '';
+
+      html += `
+      <div class="col-12 col-md-6 col-xl-4">
+        <div class="brand-card">
+          <div class="card-header px-3 py-2 d-flex justify-content-between align-items-center">
+            <span class="fw-bold">${b.brand}</span>
+            ${statusBadge}
+          </div>
+          <div class="card-body px-3 py-3">
+            <div class="row g-2 mb-3">
+              <div class="col-6">
+                <div class="metric-label">대기 상품 수</div>
+                <div class="metric-value">${b.staging_count.toLocaleString()}</div>
+              </div>
+              <div class="col-6">
+                <div class="metric-label">운영 상품 수</div>
+                <div class="metric-value text-secondary">${b.prod_count.toLocaleString()}</div>
+              </div>
+              <div class="col-6">
+                <div class="metric-label">대기 임베딩 수</div>
+                <div class="fw-semibold">${b.embed_count.toLocaleString()} <span class="text-muted" style="font-size:.75rem;">개</span></div>
+              </div>
+              <div class="col-6">
+                <div class="metric-label">대기 최저가 수</div>
+                <div class="fw-semibold">${b.naver_count.toLocaleString()} <span class="text-muted" style="font-size:.75rem;">개</span></div>
+              </div>
+              <div class="col-12">
+                <div class="metric-label">이미지 업로드</div>
+                <div class="progress mt-1" style="height: 6px;">
+                  <div class="progress-bar bg-success" role="progressbar" style="width: ${b.staging_count > 0 ? (b.img_count / b.staging_count * 100) : 0}%"></div>
+                </div>
+                <small class="text-muted d-flex justify-content-between mt-1" style="font-size:.7rem;">
+                  <span>업로드율: ${b.staging_count > 0 ? Math.round(b.img_count / b.staging_count * 100) : 0}%</span>
+                  <span>(${b.img_count}/${b.staging_count})</span>
+                </small>
+              </div>
+            </div>
+
+            ${waitingText}
+
+            <div class="pt-2 border-top">
+              <small class="text-muted d-block mb-2" style="font-size:.75rem;">
+                <i class="fas fa-hourglass-half me-1"></i>최근 파이프라인: ${latestDtStr}
+                ${b.pipeline_error_count > 0 ? `<span class="badge bg-danger ms-1">에러 ${b.pipeline_error_count}</span>` : ''}
+              </small>
+
+              <div class="d-flex gap-2">
+                <button class="btn btn-sm btn-primary flex-fill" onclick="openCrawlModal('${b.brand}')">
+                  <i class="fas fa-play me-1"></i>크롤링 실행
+                </button>
+                <button class="btn btn-sm btn-success flex-fill" ${!isReadyOrWaiting ? 'disabled' : ''} onclick="openSwapModal('${b.brand}')">
+                  <i class="fas fa-exchange-alt me-1"></i>스위칭(Swap)
+                </button>
+                <button class="btn btn-sm btn-outline-danger" title="스테이징 비우기" ${isStagingEmpty ? 'disabled' : ''} onclick="clearStaging('${b.brand}')">
+                  <i class="fas fa-trash-alt"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>`;
+    });
+
+    grid.innerHTML = html;
+    document.getElementById('totalEmbeddingCount').textContent = totalEmbed.toLocaleString();
+    document.getElementById('totalNaverCount').textContent = totalNaver.toLocaleString();
+    
+    // 마지막 갱신 시간 표시
+    document.getElementById('lastRefreshTime').textContent = `마지막 새로고침: ${new Date().toLocaleTimeString()}`;
+  } catch (err) {
+    grid.innerHTML = `<div class="col-12 text-center text-danger py-4">서버 오류: ${err.message}</div>`;
+  }
+}
+
+function getStatusBadge(status) {
+  switch(status) {
+    case 'ready': return `<span class="status-badge badge-ready"><span class="pulse-dot dot-ready"></span>대기 완료 (Ready)</span>`;
+    case 'waiting': return `<span class="status-badge badge-waiting"><span class="pulse-dot dot-waiting"></span>검증 대기 (Waiting)</span>`;
+    case 'img_missing': return `<span class="status-badge badge-img-missing"><span class="pulse-dot dot-failed"></span>이미지 누락</span>`;
+    case 'empty': return `<span class="status-badge badge-empty"><span class="pulse-dot dot-unknown"></span>수집 대기 (Empty)</span>`;
+    case 'running': return `<span class="status-badge badge-running"><span class="pulse-dot dot-running"></span>수집 중 (Running)</span>`;
+    case 'blocked': return `<span class="status-badge badge-blocked"><span class="pulse-dot dot-blocked"></span>차단됨 (Blocked)</span>`;
+    default: return `<span class="status-badge badge-unknown"><span class="pulse-dot dot-unknown"></span>상태 불명</span>`;
+  }
+}
+
+// ─── 수동 크롤링 실행 모달 오픈 ───
+function openCrawlModal(brand) {
+  document.getElementById('crawlBrand').value = brand;
+  document.getElementById('crawlBrandDisplay').value = brand.toUpperCase();
+  document.getElementById('crawlLimit').value = 10;
+  
+  const modal = new bootstrap.Modal(document.getElementById('runCrawlModal'));
+  modal.show();
+}
+
+async function submitCrawl() {
+  const brand = document.getElementById('crawlBrand').value;
+  const limit = parseInt(document.getElementById('crawlLimit').value, 10);
+  
+  const btn = document.getElementById('confirmRunCrawlBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>요청 중...';
+  
+  try {
+    const res = await fetch('/api/admin/crawling/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ brand, limit, force_download: true })
+    });
+    const data = await res.json();
+    
+    // 모달 숨기기
+    bootstrap.Modal.getInstance(document.getElementById('runCrawlModal')).hide();
+    
+    if (res.ok) {
+      alert(data.message || '수동 크롤링이 성공적으로 시작되었습니다.');
+    } else {
+      alert(`크롤링 실행 에러: ${data.detail || '알 수 없는 서버 오류'}`);
+    }
+  } catch (err) {
+    alert(`네트워크 통신 오류: ${err.message}`);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '백그라운드 실행';
+    // 2초 뒤 스테이징 상태 갱신
+    setTimeout(loadAll, 2000);
+  }
+}
+
+// ─── 수동 스위칭 모달 오픈 ───
+function openSwapModal(brand) {
+  pendingSwapBrand = brand;
+
+  const stats = currentStagingCounts[brand] || { staging: 0, prod: 0, embed: 0, naver: 0, img: 0, status: 'unknown' };
+  const stagingCount = stats.staging;
+  const prodCount = stats.prod;
+  const imgCount = stats.img;
+  const embedCount = stats.embed;
+  const naverCount = stats.naver;
+
+  let imgMsg = '';
+  if (imgCount < stagingCount) {
+    imgMsg = `<div class="alert-banner alert-danger-banner p-3 mb-3">
+      <i class="fas fa-exclamation-triangle me-1"></i> 이미지 업로드 누락 건이 발견되었습니다. 
+      스위칭 시 일부 상품에 이미지가 표시되지 않을 수 있습니다.
+    </div>`;
+  }
+
+  let countDetails = `
+    <div class="row g-2 mb-3">
+      <div class="col-6 text-center p-3 rounded-3" style="background:#f0f9ff;">
+        <div class="text-muted mb-1" style="font-size:.78rem;">수집 데이터 (Staging)</div>
+        <div class="fw-bold fs-4 text-primary">${stagingCount.toLocaleString()}</div>
+        <div class="text-muted text-start mt-2 border-top pt-1" style="font-size:.7rem;">
+          - 이미지 벡터: ${embedCount.toLocaleString()} 개<br>
+          - 네이버 최저가: ${naverCount.toLocaleString()} 개
+        </div>
+      </div>
+      <div class="col-6 text-center p-3 rounded-3" style="background:#f0fdf4;">
+        <div class="text-muted mb-1" style="font-size:.78rem;">운영 데이터 (Production)</div>
+        <div class="fw-bold fs-4 text-success">${prodCount.toLocaleString()}</div>
+        <div class="text-muted text-start mt-2 border-top pt-1" style="font-size:.7rem;">
+          이관 시 기존 운영 데이터가 Staging 데이터로 완전히 교체되며, Staging의 기생성된 이미지/텍스트 벡터와 네이버 쇼핑 데이터가 초고속 이관(1초 미만)됩니다.
+        </div>
+      </div>
+    </div>`;
+
+  document.getElementById('swapModalBody').innerHTML = `
+    ${imgMsg}
+    ${countDetails}
+    <p class="text-muted mb-0 mt-3" style="font-size:.82rem;">
+      <strong>${brand.toUpperCase()}</strong> 브랜드의 스테이징 데이터를 운영 테이블로 전환합니다.<br>
+      이 작업은 트랜잭션 방식으로 안전하게 수행됩니다.
+    </p>`;
+
+  const modal = new bootstrap.Modal(document.getElementById('swapConfirmModal'));
+  modal.show();
+}
+
+async function executeSwap() {
+  const brand = pendingSwapBrand;
+  if (!brand) return;
+
+  const btn = document.getElementById('confirmSwapBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>처리 중...';
+
+  try {
+    const res = await fetch('/api/admin/crawling/swap', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ brand, force: true }),
+    });
+    const data = await res.json();
+
+    if (res.ok && data.success) {
+      alert(data.message || '스위칭이 성공적으로 완료되었습니다.');
+      bootstrap.Modal.getInstance(document.getElementById('swapConfirmModal')).hide();
+      loadAll();
+    } else {
+      alert(`스위칭 실패: ${data.detail || '알 수 없는 서버 에러'}`);
+    }
+  } catch (err) {
+    alert(`네트워크 통신 에러: ${err.message}`);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '스위칭 시작';
+  }
+}
+
+// ─── 스테이징 임시 데이터 삭제 ───
+async function clearStaging(brand) {
+  if (!confirm(`${brand.toUpperCase()} 브랜드의 모든 스테이징 임시 데이터(상품, 임베딩, 네이버 최저가 포함)를 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`)) {
+    return;
+  }
+
+  try {
+    const res = await fetch(`/api/admin/crawling/staging/${brand}`, {
+      method: 'DELETE'
+    });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      alert(`${brand.toUpperCase()} 스테이징 데이터가 성공적으로 초기화되었습니다.`);
+      loadAll();
+    } else {
+      alert(`삭제 에러: ${data.detail || '알 수 없는 오류'}`);
+    }
+  } catch (err) {
+    alert(`삭제 요청 중 에러 발생: ${err.message}`);
+  }
+}
+
+// ─── 최근 로그/에러 조회 ───
+async function fetchLogs() {
+  try {
+    const res = await fetch(`/api/admin/crawling/logs?run_page=${currentRunPage}&run_limit=${pageSize}&err_page=${currentErrPage}&err_limit=${pageSize}`);
+    const data = await res.json();
+    if (!data.success) return;
+
+    // 1) 구동 내역 테이블 바인딩
+    const runsBody = document.getElementById('runsTableBody');
+    if (data.runs && data.runs.length > 0) {
+      let runsHtml = '';
+      data.runs.forEach(r => {
+        let statusBadge = `<span class="badge bg-secondary">${r.status}</span>`;
+        if (r.status === 'SUCCESS' || r.status === 'completed') {
+          if (r.error_count > 0) {
+            statusBadge = `<span class="badge bg-warning text-dark"><i class="fas fa-exclamation-circle me-1"></i>일부성공</span>`;
+          } else {
+            statusBadge = `<span class="badge bg-success">성공</span>`;
+          }
+        } else if (r.status === 'FAILED' || r.status === 'failed') {
+          statusBadge = `<span class="badge bg-danger">실패</span>`;
+        } else if (r.status === 'RUNNING' || r.status === 'running') {
+          statusBadge = `<span class="badge bg-primary spinner-grow-sm">실행 중</span>`;
+        }
+
+        const dateStr = r.finished_at ? new Date(r.finished_at).toLocaleString() : new Date(r.started_at).toLocaleString();
+        
+        // 크롤링 vs 스위칭 구분 배지
+        let actionBadge = '';
+        if (r.pipeline_name === 'swap_pipeline') {
+          actionBadge = `<span class="badge bg-info text-dark me-1" style="font-size:0.68rem; padding: 2px 4px;">이관</span>`;
+        } else {
+          actionBadge = `<span class="badge bg-warning text-dark me-1" style="font-size:0.68rem; padding: 2px 4px;">수집</span>`;
+        }
+        
+        runsHtml += `
+          <tr>
+            <td>
+              <div class="d-flex align-items-center">
+                ${actionBadge}
+                <strong>[#${r.run_id}] ${r.brand || 'ALL'}</strong>
+              </div>
+            </td>
+            <td>${statusBadge}</td>
+            <td class="text-end">${r.total_items.toLocaleString()}</td>
+            <td class="text-end">${r.new_items}/${r.updated_items}</td>
+            <td class="text-end text-danger fw-semibold">${r.error_count.toLocaleString()}</td>
+            <td><small class="text-muted">${dateStr}</small></td>
+          </tr>`;
+      });
+      runsBody.innerHTML = runsHtml;
+    } else {
+      runsBody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted">구동 내역이 없습니다.</td></tr>';
+    }
+
+    // 구동 내역 페이징 UI 업데이트
+    const totalRunPages = Math.max(1, Math.ceil(data.total_runs / pageSize));
+    document.getElementById('txtRunPage').textContent = `${currentRunPage} / ${totalRunPages} 쪽`;
+    document.getElementById('btnRunPrev').disabled = currentRunPage <= 1;
+    document.getElementById('btnRunNext').disabled = currentRunPage >= totalRunPages;
+
+    // 2) 에러 내역 테이블 바인딩
+    const errorsBody = document.getElementById('errorsTableBody');
+    if (data.errors && data.errors.length > 0) {
+      let errHtml = '';
+      data.errors.forEach(e => {
+        const timeStr = new Date(e.created_at).toLocaleTimeString();
+        const runIdStr = e.run_id ? `[#${e.run_id}]` : '[#-]';
+        
+        // 브랜드명 및 상품 식별 정보 가공
+        const brandPrefix = e.brand ? `<span class="badge bg-secondary me-1">[${e.brand}]</span>` : '';
+        const prodSuffix = e.product_id ? `<span class="badge bg-light text-dark border ms-1" style="font-size:.68rem;">ID: ${e.product_id}</span>` : '';
+        
+        errHtml += `
+          <tr>
+            <td><small class="text-muted">${timeStr} <span class="text-primary fw-bold" style="font-size:.7rem;">${runIdStr}</span></small></td>
+            <td><span class="text-danger fw-semibold" style="font-size:.73rem;">${e.error_type}</span></td>
+            <td>
+              <div class="d-flex align-items-center flex-wrap" style="gap: 2px;">
+                ${brandPrefix}
+                <div class="text-wrap text-break" style="font-size:.75rem; max-width: 480px;" title="${e.error_message}">
+                  ${e.error_message}
+                </div>
+                ${prodSuffix}
+              </div>
+            </td>
+          </tr>`;
+      });
+      errorsBody.innerHTML = errHtml;
+    } else {
+      errorsBody.innerHTML = '<tr><td colspan="3" class="text-center py-4 text-muted">최근 에러 내역이 없습니다.</td></tr>';
+    }
+
+    // 에러 내역 페이징 UI 업데이트
+    const totalErrPages = Math.max(1, Math.ceil(data.total_errors / pageSize));
+    document.getElementById('txtErrPage').textContent = `${currentErrPage} / ${totalErrPages} 쪽`;
+    document.getElementById('btnErrPrev').disabled = currentErrPage <= 1;
+    document.getElementById('btnErrNext').disabled = currentErrPage >= totalErrPages;
+
+  } catch (err) {
+    console.error("로그 조회 실패:", err);
+  }
+}
+
+// ─── 페이징 이벤트 핸들러 ───
+function changeRunPage(direction) {
+  currentRunPage += direction;
+  fetchLogs();
+}
+
+function changeErrPage(direction) {
+  currentErrPage += direction;
+  fetchLogs();
+}
+</script>
+{% endraw %}
+{% endblock %}
