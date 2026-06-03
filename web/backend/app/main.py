@@ -138,6 +138,23 @@ if SENTRY_DSN:
 async def lifespan(app: FastAPI):
     """서버 구동/종료 시 DB 연결 초기화/해제 (ENV_MODE에 따라 자동 분기)"""
     logger.info(f"앱 시작 [모드: {settings.ENV_MODE}] - DB 연결 초기화")
+    
+    # 서버 기동 시 기존 진행률 JSON 파일들을 삭제하여 모든 대시보드를 대기 중(Idle) 상태로 초기화
+    try:
+        import glob
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        progress_pattern = os.path.normpath(
+            os.path.join(base_dir, "..", "..", "..", "logs", "progress_*.json")
+        )
+        for f_path in glob.glob(progress_pattern):
+            try:
+                os.remove(f_path)
+                logger.info(f"🧹 서버 기동으로 인한 진행률 파일 초기화: {os.path.basename(f_path)}")
+            except Exception as fe:
+                logger.warning(f"진행률 파일 초기화 실패 ({f_path}): {fe}")
+    except Exception as init_err:
+        logger.warning(f"진행률 파일 초기화 중 예외 발생: {init_err}")
+
     try:
         init_all_databases()
     except Exception as e:

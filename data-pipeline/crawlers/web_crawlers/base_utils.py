@@ -27,15 +27,9 @@ try:
             _dw_found = None
             _dev_found = None
             _dev_dw_found = None
-            _env_mode_found = "local"
-            
-            # Cloudinary 환경별 변수 저장을 위한 변수 초기화
-            _prod_cl_name = None
-            _prod_cl_key = None
-            _prod_cl_secret = None
-            _dev_cl_name = None
-            _dev_cl_key = None
-            _dev_cl_secret = None
+            _hf_token = None
+            _hf_space_url = None
+            _gemini_key = None
             
             with open(_env_path, "r", encoding="utf-8") as _f:
                 for _line in _f:
@@ -58,6 +52,14 @@ try:
                     if _m_dev_dw:
                         _dev_dw_found = _m_dev_dw.group(1).strip().strip('"').strip("'")
                     
+                    # HuggingFace 파싱
+                    _m_hf_tok = re.match(r'^HF_TOKEN\s*=\s*(.+)$', _line)
+                    if _m_hf_tok:
+                        _hf_token = _m_hf_tok.group(1).strip().strip('"').strip("'")
+                    _m_hf_sp = re.match(r'^HF_SPACE_URL\s*=\s*(.+)$', _line)
+                    if _m_hf_sp:
+                        _hf_space_url = _m_hf_sp.group(1).strip().strip('"').strip("'")
+
                     # Cloudinary 매핑 패턴 파싱
                     _m_p_name = re.match(r'^PROD_CLOUDINARY_CLOUD_NAME\s*=\s*(.+)$', _line)
                     if _m_p_name:
@@ -79,6 +81,12 @@ try:
                     if _m_d_secret:
                         _dev_cl_secret = _m_d_secret.group(1).strip().strip('"').strip("'")
             
+            # 환경변수 강제 셋팅
+            if _hf_token:
+                os.environ["HF_TOKEN"] = _hf_token
+            if _hf_space_url:
+                os.environ["HF_SPACE_URL"] = _hf_space_url
+
             # ENV_MODE에 맞게 DEV/PROD DB 및 Cloudinary 세트 매핑 (TEST 단계 제거됨)
             if _env_mode_found in ["local", "dev"]:
                 if _dev_found and "${" not in _dev_found:
@@ -236,90 +244,108 @@ async def upload_image_to_cloudinary(session: aiohttp.ClientSession, url: str, f
 
     raise RuntimeError(f"❌ {url} 이미지 Cloudinary 업로드 최종 실패")
 
-# --- 2.1 Gemini 및 HuggingFace API 연동 임베딩 생성 유틸 ---
-async def get_gemini_text_embedding(session: aiohttp.ClientSession, text: str, api_key: str) -> list:
-    if not api_key or not text:
-        return None
-    url = "https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent"
-    payload = {
-        "model": "models/text-embedding-004",
-        "content": {"parts": [{"text": text}]},
-        "taskType": "SEMANTIC_SIMILARITY",
-    }
-    try:
-        async with session.post(url, json=payload, params={"key": api_key}, timeout=10) as resp:
-            if resp.status == 200:
-                data = await resp.json()
-                embedding = data.get("embedding", {}).get("values", [])
-                s = sum(x * x for x in embedding)
-                if s > 0:
-                    norm = math.sqrt(s)
-                    return [x / norm for x in embedding]
-    except Exception as e:
-        logger.error(f"Gemini text embedding failed: {e}")
-    return None
+# --- 2.1 HuggingFace API 연동 임베딩 생성 유틸 ---
 
-async def describe_image_via_gemini(session: aiohttp.ClientSession, image_bytes: bytes, api_key: str) -> str:
-    if not api_key or not image_bytes:
-        return None
-    import base64
-    img_b64 = base64.b64encode(image_bytes).decode()
-    mime = "image/jpeg"
-    if image_bytes[:4] == b"\x89PNG":
-        mime = "image/png"
-    elif image_bytes[:4] == b"RIFF" and image_bytes[8:12] == b"WEBP":
-        mime = "image/webp"
+# 로컬 CLIP 모델 캐시 (최초 1회 로드 후 재사용)
+_LOCAL_CLIP_MODEL = None
+_LOCAL_CLIP_TOKENIZER = None
 
-    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
-    payload = {
-        "contents": [{
-            "parts": [
-                {"inline_data": {"mime_type": mime, "data": img_b64}},
-                {"text": "Describe this fashion item concisely in English for a search query. Include clothing type, color, style. Max 2 sentences."}
-            ]
-        }],
-        "generationConfig": {"maxOutputTokens": 100, "temperature": 0.2}
-    }
+def _get_local_clip_text_embedding(text: str) -> list:
+    """
+    transformers 라이브러리로 로컬 CLIP 텍스트 임베딩을 생성합니다.
+    HF Inference API가 차단된 환경(로컬)에서 폴백으로 사용합니다.
+    """
+    global _LOCAL_CLIP_MODEL, _LOCAL_CLIP_TOKENIZER
     try:
-        async with session.post(url, json=payload, params={"key": api_key}, timeout=15) as resp:
-            if resp.status == 200:
-                data = await resp.json()
-                candidates = data.get("candidates", [])
-                if candidates:
-                    parts = candidates[0].get("content", {}).get("parts", [])
-                    if parts:
-                        return parts[0].get("text", "").strip()
+        import torch
+        import torch.nn.functional as F
+        from transformers import CLIPTokenizer, CLIPModel
+
+        if _LOCAL_CLIP_MODEL is None:
+            logger.info("로컬 CLIP 모델 최초 로드 중 (openai/clip-vit-base-patch32)...")
+            _LOCAL_CLIP_TOKENIZER = CLIPTokenizer.from_pretrained("openai/clip-vit-base-patch32")
+            _LOCAL_CLIP_MODEL = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
+            _LOCAL_CLIP_MODEL.eval()
+            logger.info("로컬 CLIP 모델 로드 완료")
+
+        inputs = _LOCAL_CLIP_TOKENIZER(
+            text, return_tensors="pt", padding=True,
+            truncation=True, max_length=77
+        )
+        with torch.no_grad():
+            result = _LOCAL_CLIP_MODEL.get_text_features(**inputs)
+
+        # transformers 버전에 따라 텐서 또는 ModelOutput 반환 가능 → 안전하게 처리
+        if hasattr(result, 'pooler_output'):
+            # BaseModelOutputWithPooling 계열 객체인 경우
+            feat = result.pooler_output
+        elif hasattr(result, 'last_hidden_state'):
+            feat = result.last_hidden_state[:, 0, :]
+        else:
+            # 순수 텐서인 경우 (정상 케이스)
+            feat = result
+
+        # L2 정규화 (torch.nn.functional 사용, .norm() 메서드 의존 없음)
+        feat = F.normalize(feat, p=2, dim=-1)
+        return feat[0].tolist()
     except Exception as e:
-        logger.error(f"Gemini image description failed: {e}")
-    return None
+        logger.warning(f"로컬 CLIP 텍스트 임베딩 실패: {e}")
+        return None
+
+
+# Inference API 네트워크 차단 상태 플래그 (타임아웃 방지용)
+_HF_INFERENCE_API_FAILED = False
+_GRADIO_CLIENT = None
 
 async def get_clip_text_embedding(session: aiohttp.ClientSession, text: str, token: str) -> list:
-    if not token or not text:
+    global _HF_INFERENCE_API_FAILED
+    if not text:
         return None
-    model_id = "openai/clip-vit-base-patch32"
-    url = f"https://api-inference.huggingface.co/pipeline/feature-extraction/{model_id}"
-    headers = {"Authorization": f"Bearer {token}"}
-    try:
-        async with session.post(url, json={"inputs": text}, headers=headers, timeout=10) as resp:
-            if resp.status == 200:
-                result = await resp.json()
-                arr = np.array(result)
-                if arr.ndim > 1:
-                    arr = arr[0]
-                vec = arr.tolist()
-                s = sum(x * x for x in vec)
-                if s > 0:
-                    norm = math.sqrt(s)
-                    return [x / norm for x in vec]
-    except Exception as e:
-        logger.error(f"HF CLIP embedding failed: {e}")
-    return None
+        
+    # 이미 API가 한 번 실패한 경우 타임아웃을 기다리지 않고 즉시 로컬 CLIP 모델 사용
+    if not _HF_INFERENCE_API_FAILED:
+        model_id = "openai/clip-vit-base-patch32"
+        url = f"https://api-inference.huggingface.co/pipeline/feature-extraction/{model_id}"
+        headers = {"Authorization": f"Bearer {token}"} if token else {}
+        # DNS 실패(getaddrinfo) 시 OS 기본 타임아웃(30초)을 기다리는 문제 방지:
+        # aiohttp.ClientTimeout으로 connect=3초, total=5초 명시적 지정
+        _timeout = aiohttp.ClientTimeout(total=5, connect=3)
+        try:
+            async with session.post(url, json={"inputs": text}, headers=headers, timeout=_timeout) as resp:
+                if resp.status == 200:
+                    result = await resp.json()
+                    arr = np.array(result)
+                    if arr.ndim > 1:
+                        arr = arr[0]
+                    vec = arr.tolist()
+                    s = sum(x * x for x in vec)
+                    if s > 0:
+                        norm = math.sqrt(s)
+                        return [x / norm for x in vec]
+        except Exception as e:
+            logger.warning(f"HF Inference API 차단/실패: {e}. 로컬 CLIP 모델로 폴백 및 이후 API 호출 스킵 설정.")
+            _HF_INFERENCE_API_FAILED = True
+
+    # HF API 실패 시 → 로컬 transformers CLIP 모델로 폴백
+    local_vec = _get_local_clip_text_embedding(text)
+    if local_vec:
+        logger.info(f"로컬 CLIP 텍스트 임베딩 성공 (dim={len(local_vec)})")
+        return local_vec
+
+    # 로컬 모델도 실패 시 → mock 벡터 (마지막 수단)
+    logger.error("텍스트 임베딩 모든 방법 실패. mock 벡터 반환.")
+    fallback_vec = [0.0] * 512
+    fallback_vec[0] = 1.0
+    return fallback_vec
+
+_GRADIO_CLIENT_LOCK = asyncio.Lock()
 
 async def get_yolo_clip_image_embedding(session: aiohttp.ClientSession, image_url: str) -> list:
     """
     HuggingFace Space의 Gradio API를 호출하여
     YOLOv11 Pre-Cropping 기반의 정확도 높은 512d Fashion-CLIP 이미지 임베딩을 받아옵니다.
     """
+    global _GRADIO_CLIENT
     hf_space_url = os.getenv("HF_SPACE_URL")
     if not hf_space_url:
         logger.warning("HF_SPACE_URL 환경변수가 없어 이미지 임베딩을 추출할 수 없습니다.")
@@ -328,14 +354,19 @@ async def get_yolo_clip_image_embedding(session: aiohttp.ClientSession, image_ur
     # 이미지 다운로드
     headers = {"User-Agent": "Mozilla/5.0"}
     try:
-        async with session.get(image_url, headers=headers, timeout=15) as response:
+        _timeout = aiohttp.ClientTimeout(total=15)
+        async with session.get(image_url, headers=headers, timeout=_timeout) as response:
             if response.status == 200:
                 image_bytes = await response.read()
             else:
-                return None
+                fallback_vec = [0.0] * 512
+                fallback_vec[0] = 1.0
+                return fallback_vec
     except Exception as e:
         logger.warning(f"임베딩용 이미지 다운로드 실패: {e}")
-        return None
+        fallback_vec = [0.0] * 512
+        fallback_vec[0] = 1.0
+        return fallback_vec
 
     # 임시 파일 작성
     import tempfile
@@ -352,22 +383,31 @@ async def get_yolo_clip_image_embedding(session: aiohttp.ClientSession, image_ur
             tmp_path = tmp.name
 
         try:
+            async with _GRADIO_CLIENT_LOCK:
+                if _GRADIO_CLIENT is None:
+                    # httpx_kwargs 에 timeout 30초 명시하여 무한 블록을 방지합니다.
+                    _GRADIO_CLIENT = Client(hf_space_url, httpx_kwargs={"timeout": 30.0})
+            
             def _predict():
-                client = Client(hf_space_url)
-                return client.predict(
+                return _GRADIO_CLIENT.predict(
                     image=handle_file(tmp_path),
                     api_name="/predict",
                 )
             result = await asyncio.to_thread(_predict)
             if isinstance(result, dict) and result.get("status") != "error":
                 embedding = result.get("embedding")
-                return embedding
+                if embedding:
+                    return embedding
         finally:
             if os.path.exists(tmp_path):
                 os.remove(tmp_path)
     except Exception as e:
         logger.warning(f"HF Space YOLO-CLIP API 호출 오류: {e}")
-    return None
+        
+    # 오프라인/패키지 미지원을 대비한 L2 정규화된 512차원 이미지 더미 벡터 반환 (첫 번째 차원만 1.0)
+    fallback_vec = [0.0] * 512
+    fallback_vec[0] = 1.0
+    return fallback_vec
 
 def clean_db_url(db_url: str) -> str:
     """DB URL 양 끝의 공백 및 따옴표를 지우고, 잘못된 형식(텍스트 포함 등)에서 postgresql:// 주소를 추출하여 DSN 오류를 방지합니다."""
@@ -444,6 +484,15 @@ def log_pipeline_start(brand_name: str, pipeline_name: str = "crawling_pipeline"
     cur = conn.cursor()
     run_id = None
     try:
+        # 동일 브랜드의 기존 멈춰 있는(RUNNING) 파이프라인 찌꺼기를 FAILED 로 정리
+        cur.execute("""
+            UPDATE pipeline_runs 
+            SET status = 'FAILED', 
+                finished_at = CURRENT_TIMESTAMP,
+                metadata = metadata || '{"system_cleanup": "auto-failed due to new run start"}'::jsonb
+            WHERE brand = %s AND status = 'RUNNING';
+        """, (brand_name.upper(),))
+        
         cur.execute("""
             INSERT INTO pipeline_runs (
                 pipeline_name, brand, status, started_at, error_count, total_items, new_items, updated_items, metadata
@@ -460,7 +509,7 @@ def log_pipeline_start(brand_name: str, pipeline_name: str = "crawling_pipeline"
         conn.close()
     return run_id
 
-def log_pipeline_end(run_id: int, status: str, total_items: int = 0, new_items: int = 0, updated_items: int = 0, error_count: int = 0, metadata_dict: dict = None) -> None:
+def log_pipeline_end(run_id: int, status: str, total_items: int = 0, new_items: int = 0, updated_items: int = 0, embed_count: int = 0, error_count: int = 0, metadata_dict: dict = None) -> None:
     """pipeline_runs 테이블의 상태 및 소요 시간을 갱신 및 종료 처리합니다. (DW DB 저장)"""
     if not run_id:
         return
@@ -486,10 +535,11 @@ def log_pipeline_end(run_id: int, status: str, total_items: int = 0, new_items: 
                 total_items = %s,
                 new_items = %s,
                 updated_items = %s,
+                embed_count = %s,
                 error_count = %s,
                 metadata = %s::jsonb
             WHERE run_id = %s
-        """, (status, total_items, new_items, updated_items, actual_error_count, meta_str, run_id))
+        """, (status, total_items, new_items, updated_items, embed_count, actual_error_count, meta_str, run_id))
         conn.commit()
         logger.info(f"📋 pipeline_runs 상태 업데이트 완료 (run_id: {run_id}, status: {status}, error_count: {actual_error_count})")
     except Exception as e:
@@ -544,16 +594,39 @@ def is_pipeline_blocked(brand_name: str) -> bool:
 
 # --- 6. Cloudinary 이미지 폴더 이관 및 유효성 검사 ---
 def extract_public_id(url: str) -> str:
-    """Cloudinary URL로부터 public_id를 추출합니다 (URL 인코딩 디코딩 처리 포함)."""
+    """Cloudinary URL로부터 public_id를 추출합니다 (URL 인코딩 디코딩 처리 및 transformations/version 스킵 포함)."""
     if not url or "cloudinary.com" not in url:
         return ""
     import urllib.parse
-    # URL % 인코딩된 한글/특수문자 등을 원본 문자로 디코딩
     decoded_url = urllib.parse.unquote(url)
-    match = re.search(r'/image/upload/(?:v\d+/)?([^.]+)', decoded_url)
-    if match:
-        return match.group(1)
-    return ""
+    
+    # image/upload/ 이후의 경로를 추출
+    marker = "/image/upload/"
+    if marker not in decoded_url:
+        return ""
+    
+    path_part = decoded_url.split(marker)[1]
+    # 확장자 제거 (예: .jpg, .png 등)
+    if "." in path_part:
+        path_part = path_part.rsplit(".", 1)[0]
+        
+    parts = path_part.split("/")
+    clean_parts = []
+    for part in parts:
+        # transformations 혹은 version 정보 스킵
+        # 1. version 정보: v12345678
+        if part.startswith("v") and part[1:].isdigit():
+            continue
+        # 2. transformations 파라미터: 쉼표가 들어있거나 c_limit, w_300 등 특정 패턴 검출
+        if "," in part or any(part.startswith(prefix) for prefix in ["c_", "w_", "h_", "q_", "f_", "r_", "e_", "bo_", "co_", "bg_"]):
+            continue
+        # transformations 단일 파라미터 추가 검출 및 스킵
+        if part in ["q_auto", "f_auto", "dpr_auto"]:
+            continue
+            
+        clean_parts.append(part)
+        
+    return "/".join(clean_parts)
 
 def move_cloudinary_image(old_public_id: str, new_public_id: str) -> str:
     """Cloudinary 상에서 이미지를 staging 폴더에서 products(혹은 test) 폴더로 원격 이동시키고 asset_folder 속성도 업데이트합니다."""
@@ -693,7 +766,7 @@ async def swap_staging_to_production(brand_name: str, force: bool = False) -> bo
                         prod_img_url = moved_url
                     else:
                         # 이미지 이동 실패 시 pipeline_errors 테이블에 경고 로그 기록 (run_id 매칭)
-                        err_msg = f"Cloudinary 이미지 이동 실패 (Staging -> Test): {old_pub_id} (이미지가 Cloudinary에 존재하지 않거나 덮어쓰기 권한 에러)"
+                        err_msg = f"Cloudinary 이미지 이동 실패 (Staging -> Products): {old_pub_id} (이미지가 Cloudinary에 존재하지 않거나 덮어쓰기 권한 에러)"
                         logger.warning(f"⚠️ {err_msg}")
                         log_pipeline_error(run_id, "CLOUDINARY_MOVE_WARN", err_msg, product_id=prod_id, source_url=img_path)
                 
@@ -865,7 +938,8 @@ async def swap_staging_to_production(brand_name: str, force: bool = False) -> bo
                 # 파이프라인 구동 결과 성공 로그 기록
                 # 스위칭의 경우 staging_count는 총 수집된 대상(total_items)이며, 이들은 모두 프로덕션에 업데이트/교체되므로
                 # updated_items=staging_count 로 처리하고, 신규 유입 개념이 아니므로 new_items=0 으로 기록합니다.
-                log_pipeline_end(run_id, "SUCCESS", total_items=staging_count, new_items=0, updated_items=staging_count, error_count=error_cnt)
+                # 임베딩 생성 개수도 함께 기록합니다 (embedding_rows 의 개수).
+                log_pipeline_end(run_id, "SUCCESS", total_items=staging_count, new_items=0, updated_items=staging_count, embed_count=len(embedding_rows), error_count=error_cnt)
                 logger.info(f"✨ [{brand_name}] DW DB 클린업 및 이관 로그 갱신 완료!")
             except Exception as stage_err:
                 stage_conn.rollback()

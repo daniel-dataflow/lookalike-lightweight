@@ -259,6 +259,7 @@
                     <th>브랜드</th>
                     <th>상태</th>
                     <th class="text-end">수집</th>
+                    <th class="text-end">임베딩</th>
                     <th class="text-end">신규/갱신</th>
                     <th class="text-end">에러</th>
                     <th>시간</th>
@@ -266,7 +267,7 @@
                 </thead>
                 <tbody id="runsTableBody" style="font-size:.85rem;">
                   <tr>
-                    <td colspan="6" class="text-center py-4 text-muted">구동 내역이 없습니다.</td>
+                    <td colspan="7" class="text-center py-4 text-muted">구동 내역이 없습니다.</td>
                   </tr>
                 </tbody>
               </table>
@@ -421,13 +422,14 @@
                     <th>배치 정보</th>
                     <th>상태</th>
                     <th class="text-end">수집</th>
+                    <th class="text-end">임베딩</th>
                     <th class="text-end">신규/갱신</th>
                     <th class="text-end">에러</th>
                   </tr>
                 </thead>
                 <tbody id="autoRunsTableBody" style="font-size:.85rem;">
                   <tr>
-                    <td colspan="5" class="text-center py-4 text-muted">자동 배치 구동 내역이 없습니다.</td>
+                    <td colspan="6" class="text-center py-4 text-muted">자동 배치 구동 내역이 없습니다.</td>
                   </tr>
                 </tbody>
               </table>
@@ -606,6 +608,7 @@ let selectedRunId = null; // 특정 파이프라인 구동 건 필터링 ID
 let cachedManualErrors = []; // 프론트엔드 실시간 필터링 캐시 저장소
 let fetchController = null; // 경합 방지용 비동기 요청 취소 컨트롤러
 let isFetchingManual = false; // 현재 수동 로그가 fetch 중인지 추적하는 플래그
+let cachedProgressState = {}; // 브랜드별 진행 상태 보존 캐시 (깜빡임 예방)
 </script>
 
 {% raw %}
@@ -650,13 +653,83 @@ function loadManualData(isSilent = false) {
   fetchManualLogs(isSilent);
 }
 
+// 브랜드별 실시간 크롤링/파이프라인 진행 상황 체크 API 연동
+async function checkBrandProgress(brand) {
+  const container = document.getElementById(`progress-container-${brand}`);
+  const stepEl = document.getElementById(`progress-step-${brand}`);
+  const percentEl = document.getElementById(`progress-percent-${brand}`);
+  const barEl = document.getElementById(`progress-bar-${brand}`);
+  const itemEl = document.getElementById(`progress-item-${brand}`);
+  const timeEl = document.getElementById(`progress-time-${brand}`);
+  const countEl = document.getElementById(`progress-count-${brand}`);
+
+  if (!container) return;
+
+  try {
+    const res = await fetch(`/api/admin/crawling/progress?brand=${brand}&t=${Date.now()}`);
+    const data = await res.json();
+    
+    if (data.success && data.found && (data.status === 'running' || data.status === 'done')) {
+      const isRunning = data.status === 'running';
+      const step = isRunning ? (data.step || '수집 진행 중') : '수집 완료';
+      const percent = `${data.percent}%`;
+      const item = isRunning
+        ? (data.current_item ? `처리 중: ${data.current_item}` : '대기 중...')
+        : (data.current_item ? `완료: ${data.current_item}` : '완료');
+      
+      let time = '경과 시간: 0초';
+      const elapsed = data.elapsed_sec || 0;
+      if (elapsed > 60) {
+        const min = Math.floor(elapsed / 60);
+        const sec = elapsed % 60;
+        time = `경과 시간: ${min}분 ${sec}초`;
+      } else {
+        time = `경과 시간: ${elapsed}초`;
+      }
+      const count = `${data.current} / ${data.total}`;
+      
+      // 캐시 업데이트
+      cachedProgressState[brand] = {
+        step, percent, width: `${data.percent}%`, item, time, count, isRunning: isRunning
+      };
+      
+      stepEl.textContent = step;
+      percentEl.textContent = percent;
+      barEl.style.width = `${data.percent}%`;
+      if (isRunning) {
+        barEl.classList.add('progress-bar-animated', 'progress-bar-striped');
+      } else {
+        barEl.classList.remove('progress-bar-animated', 'progress-bar-striped');
+      }
+      itemEl.textContent = item;
+      timeEl.textContent = time;
+      countEl.textContent = count;
+    } else {
+      // 캐시 업데이트 (Idle 상태)
+      cachedProgressState[brand] = {
+        step: '대기 중 (Idle)', percent: '0%', width: '0%', item: '준비 완료', time: '경과 시간: 0초', count: '0 / 0', isRunning: false
+      };
+      
+      stepEl.textContent = '대기 중 (Idle)';
+      percentEl.textContent = '0%';
+      barEl.style.width = '0%';
+      barEl.classList.remove('progress-bar-animated', 'progress-bar-striped');
+      itemEl.textContent = '준비 완료';
+      timeEl.textContent = '경과 시간: 0초';
+      countEl.textContent = '0 / 0';
+    }
+  } catch (err) {
+    console.error(`[${brand}] progress check error:`, err);
+  }
+}
+
 // ──────────────────────────────────────
 // Tab 1: 수동 스테이징 상태 및 로그 조회
 // ──────────────────────────────────────
 async function fetchStagingStatus() {
   const grid = document.getElementById('brandStatusGrid');
   try {
-    const res = await fetch('/api/admin/crawling/staging');
+    const res = await fetch(`/api/admin/crawling/staging?t=${Date.now()}`);
     const data = await res.json();
     if (!data.success) {
       grid.innerHTML = `<div class="col-12 text-center text-danger py-4">현황 조회 실패: ${data.detail}</div>`;
@@ -730,13 +803,44 @@ async function fetchStagingStatus() {
               </div>
             </div>
 
-            ${waitingText}
+            <!-- 실시간 진행률 영역 (숨김 없이 항시 표시, 캐시를 뼈대에 매핑해 화면 깜빡임 해결) -->
+            ${(() => {
+              const pCache = cachedProgressState[b.brand] || {
+                step: '대기 중 (Idle)', percent: '0%', width: '0%', item: '준비 완료', time: '경과 시간: 0초', count: '0 / 0', isRunning: false
+              };
+              const animClasses = pCache.isRunning ? 'progress-bar-striped progress-bar-animated' : '';
+              
+              // 현재 구동 중(Running)이면 대기 시간을 숨기고 '작업 진행 중'으로 임시 표기 (작업 완료 후 대기 표기 적용)
+              const actualWaitingBadge = pCache.isRunning 
+                ? `<span class="text-primary text-end fw-semibold" style="font-size:.7rem;"><i class="fas fa-spinner fa-spin me-1"></i>작업 진행 중</span>`
+                : (waitingText ? `<span class="text-warning text-end fw-semibold" style="font-size:.7rem;"><i class="far fa-clock me-1"></i>대기: ${hoursLeft}h</span>` : `<span class="text-muted" style="font-size:.7rem;">이관 대기 없음</span>`);
 
-            <div class="pt-2 border-top">
-              <small class="text-muted d-block mb-2" style="font-size:.75rem;">
-                <i class="fas fa-hourglass-half me-1"></i>최근 파이프라인: ${latestDtStr}
-                ${b.pipeline_error_count > 0 ? `<span class="badge bg-danger ms-1">에러 ${b.pipeline_error_count}</span>` : ''}
-              </small>
+              return `
+              <div id="progress-container-${b.brand}" class="mt-3 p-2 border rounded bg-light" style="font-size: 0.73rem;">
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                  <span class="fw-bold text-secondary" id="progress-step-${b.brand}">${pCache.step}</span>
+                  <span class="fw-bold text-secondary" id="progress-percent-${b.brand}">${pCache.percent}</span>
+                </div>
+                <div class="progress mb-1" style="height: 6px;">
+                  <div class="progress-bar ${animClasses} bg-primary" id="progress-bar-${b.brand}" role="progressbar" style="width: ${pCache.width}"></div>
+                </div>
+                <div class="text-truncate text-muted mb-1" id="progress-item-${b.brand}" style="font-size: 0.68rem; max-width: 100%;">${pCache.item}</div>
+                <div class="d-flex justify-content-between text-muted" style="font-size: 0.63rem;">
+                  <span id="progress-time-${b.brand}">${pCache.time}</span>
+                  <span id="progress-count-${b.brand}">${pCache.count}</span>
+                </div>
+              </div>
+              
+              <div class="pt-2 mt-2 border-top">
+                <div class="d-flex justify-content-between align-items-center mb-2" style="font-size:.73rem;">
+                  <span class="text-muted text-truncate" style="max-width: 60%;" title="최근 파이프라인: ${latestDtStr}">
+                    <i class="fas fa-history me-1"></i>${latestDtStr.split('오')[1] ? '오' + latestDtStr.split('오')[1] : latestDtStr}
+                    ${b.pipeline_error_count > 0 ? `<span class="badge bg-danger ms-1">에러 ${b.pipeline_error_count}</span>` : ''}
+                  </span>
+                  ${actualWaitingBadge}
+                </div>
+              `;
+            })()}
 
               <div class="d-flex gap-2">
                 <button class="btn btn-sm btn-primary flex-fill" onclick="openCrawlModal('${b.brand}')">
@@ -759,6 +863,11 @@ async function fetchStagingStatus() {
     document.getElementById('totalEmbeddingCount').textContent = totalEmbed.toLocaleString();
     document.getElementById('totalNaverCount').textContent = totalNaver.toLocaleString();
     document.getElementById('lastRefreshTimeManual').textContent = `마지막 새로고침: ${new Date().toLocaleTimeString()}`;
+    
+    // 브랜드별 실시간 진행 상황 조회 구동
+    data.brands.forEach(b => {
+      checkBrandProgress(b.brand);
+    });
   } catch (err) {
     grid.innerHTML = `<div class="col-12 text-center text-danger py-4">서버 오류: ${err.message}</div>`;
   }
@@ -782,7 +891,7 @@ async function fetchManualLogs(isSilent = false) {
 
   try {
     // 최신 수동 에러를 100건 한 번에 가져와서 로컬 메모리 캐시에 탑재
-    let url = `/api/admin/crawling/logs?run_page=${currentRunPage}&run_limit=${pageSize}&err_page=1&err_limit=100`;
+    let url = `/api/admin/crawling/logs?run_page=${currentRunPage}&run_limit=${pageSize}&err_page=1&err_limit=100&t=${Date.now()}`;
     if (selectedRunId) {
       url += `&run_id=${selectedRunId}`;
     }
@@ -831,6 +940,7 @@ async function fetchManualLogs(isSilent = false) {
             </td>
             <td>${statusBadge}</td>
             <td class="text-end">${r.total_items.toLocaleString()}</td>
+            <td class="text-end">${(r.embed_count || 0).toLocaleString()}</td>
             <td class="text-end">${r.new_items}/${r.updated_items}</td>
             <td class="text-end text-danger fw-semibold">${r.error_count.toLocaleString()}</td>
             <td><small class="text-muted">${dateStr}</small></td>
@@ -838,7 +948,7 @@ async function fetchManualLogs(isSilent = false) {
       });
       runsBody.innerHTML = runsHtml;
     } else {
-      runsBody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted">구동 내역이 없습니다.</td></tr>';
+      runsBody.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-muted">구동 내역이 없습니다.</td></tr>';
     }
 
     const totalRunPages = Math.max(1, Math.ceil(data.total_runs / pageSize));
@@ -974,13 +1084,14 @@ async function fetchAutoLogs() {
             <td><strong>[#${r.run_id}] ${r.brand}</strong></td>
             <td>${statusBadge}</td>
             <td class="text-end">${r.total_items.toLocaleString()}</td>
+            <td class="text-end">${(r.embed_count || 0).toLocaleString()}</td>
             <td class="text-end">${r.new_items}/${r.updated_items}</td>
             <td class="text-end text-danger fw-semibold">${r.error_count.toLocaleString()}</td>
           </tr>`;
       });
       autoRunsBody.innerHTML = runsHtml;
     } else {
-      autoRunsBody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-muted">자동 배치 구동 내역이 없습니다.</td></tr>';
+      autoRunsBody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted">자동 배치 구동 내역이 없습니다.</td></tr>';
     }
 
     const totalRunPages = Math.max(1, Math.ceil(data.total_runs / pageSize));
@@ -1153,7 +1264,8 @@ function openSwapModal(brand) {
         <div class="text-muted mb-1" style="font-size:.78rem;">수집 데이터 (Staging)</div>
         <div class="fw-bold fs-4 text-primary">${stagingCount.toLocaleString()}</div>
         <div class="text-muted text-start mt-2 border-top pt-1" style="font-size:.7rem;">
-          - 이미지 벡터: ${embedCount.toLocaleString()} 개<br>
+          - 이미지 업로드: ${imgCount.toLocaleString()} 개<br>
+          - 임베딩(벡터): ${embedCount.toLocaleString()} 개<br>
           - 네이버 최저가: ${naverCount.toLocaleString()} 개
         </div>
       </div>

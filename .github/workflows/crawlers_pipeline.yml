@@ -157,17 +157,17 @@ jobs:
           fi
 
           if [ "$ENV_MODE" = "prod" ]; then
-            export DATABASE_URL=$(echo "$PROD_DATABASE_URL" | xargs)
-            export DW_DATABASE_URL=$(echo "$PROD_DW_DATABASE_URL" | xargs)
-            export CLOUDINARY_CLOUD_NAME=$(echo "$PROD_CLOUDINARY_CLOUD_NAME" | xargs)
-            export CLOUDINARY_API_KEY=$(echo "$PROD_CLOUDINARY_API_KEY" | xargs)
-            export CLOUDINARY_API_SECRET=$(echo "$PROD_CLOUDINARY_API_SECRET" | xargs)
+            export DATABASE_URL="$PROD_DATABASE_URL"
+            export DW_DATABASE_URL="$PROD_DW_DATABASE_URL"
+            export CLOUDINARY_CLOUD_NAME="$PROD_CLOUDINARY_CLOUD_NAME"
+            export CLOUDINARY_API_KEY="$PROD_CLOUDINARY_API_KEY"
+            export CLOUDINARY_API_SECRET="$PROD_CLOUDINARY_API_SECRET"
           else
-            export DATABASE_URL=$(echo "$DEV_DATABASE_URL" | xargs)
-            export DW_DATABASE_URL=$(echo "$DEV_DW_DATABASE_URL" | xargs)
-            export CLOUDINARY_CLOUD_NAME=$(echo "$DEV_CLOUDINARY_CLOUD_NAME" | xargs)
-            export CLOUDINARY_API_KEY=$(echo "$DEV_CLOUDINARY_API_KEY" | xargs)
-            export CLOUDINARY_API_SECRET=$(echo "$DEV_CLOUDINARY_API_SECRET" | xargs)
+            export DATABASE_URL="$DEV_DATABASE_URL"
+            export DW_DATABASE_URL="$DEV_DW_DATABASE_URL"
+            export CLOUDINARY_CLOUD_NAME="$DEV_CLOUDINARY_CLOUD_NAME"
+            export CLOUDINARY_API_KEY="$DEV_CLOUDINARY_API_KEY"
+            export CLOUDINARY_API_SECRET="$DEV_CLOUDINARY_API_SECRET"
           fi
 
           EXTRA_ARGS=""
@@ -255,17 +255,17 @@ jobs:
           fi
 
           if [ "$ENV_MODE" = "prod" ]; then
-            export DATABASE_URL=$(echo "$PROD_DATABASE_URL" | xargs)
-            export DW_DATABASE_URL=$(echo "$PROD_DW_DATABASE_URL" | xargs)
-            export CLOUDINARY_CLOUD_NAME=$(echo "$PROD_CLOUDINARY_CLOUD_NAME" | xargs)
-            export CLOUDINARY_API_KEY=$(echo "$PROD_CLOUDINARY_API_KEY" | xargs)
-            export CLOUDINARY_API_SECRET=$(echo "$PROD_CLOUDINARY_API_SECRET" | xargs)
+            export DATABASE_URL="$PROD_DATABASE_URL"
+            export DW_DATABASE_URL="$PROD_DW_DATABASE_URL"
+            export CLOUDINARY_CLOUD_NAME="$PROD_CLOUDINARY_CLOUD_NAME"
+            export CLOUDINARY_API_KEY="$PROD_CLOUDINARY_API_KEY"
+            export CLOUDINARY_API_SECRET="$PROD_CLOUDINARY_API_SECRET"
           else
-            export DATABASE_URL=$(echo "$DEV_DATABASE_URL" | xargs)
-            export DW_DATABASE_URL=$(echo "$DEV_DW_DATABASE_URL" | xargs)
-            export CLOUDINARY_CLOUD_NAME=$(echo "$DEV_CLOUDINARY_CLOUD_NAME" | xargs)
-            export CLOUDINARY_API_KEY=$(echo "$DEV_CLOUDINARY_API_KEY" | xargs)
-            export CLOUDINARY_API_SECRET=$(echo "$DEV_CLOUDINARY_API_SECRET" | xargs)
+            export DATABASE_URL="$DEV_DATABASE_URL"
+            export DW_DATABASE_URL="$DEV_DW_DATABASE_URL"
+            export CLOUDINARY_CLOUD_NAME="$DEV_CLOUDINARY_CLOUD_NAME"
+            export CLOUDINARY_API_KEY="$DEV_CLOUDINARY_API_KEY"
+            export CLOUDINARY_API_SECRET="$DEV_CLOUDINARY_API_SECRET"
           fi
 
           FORCE_FLAG=""

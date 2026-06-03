@@ -624,12 +624,15 @@ async def get_crawling_staging():
                     if r:
                         img_count = r["cnt"] or 0
                         
-                    # 최근 24시간 동안의 파이프라인 에러 집계
+                    # 해당 브랜드의 가장 최근 파이프라인 run_id를 찾아서 그 구동 건에 속한 에러만 집계 (과거 에러 누적 방지)
                     cur.execute(
                         """
                         SELECT count(*) as cnt FROM pipeline_errors pe
-                        JOIN pipeline_runs pr ON pe.run_id = pr.run_id
-                        WHERE pr.brand = %s AND pe.created_at >= NOW() - INTERVAL '24 hours';
+                        WHERE pe.run_id = (
+                            SELECT run_id FROM pipeline_runs 
+                            WHERE brand = %s 
+                            ORDER BY run_id DESC LIMIT 1
+                        );
                         """,
                         (brand,)
                     )
@@ -762,11 +765,17 @@ async def run_manual_crawling(data: dict):
         logger.info(f"수동 크롤링 백그라운드 구동 명령: {' '.join(cmd)} (Python: {python_exe})")
         
         # 비동기로 subprocess 실행 (로그 파일로 출력 저장)
+        # Windows 환경에서 한글 깨짐 방지를 위해 PYTHONIOENCODING=utf-8 강제 주입
+        import os as _os
+        env = _os.environ.copy()
+        env["PYTHONIOENCODING"] = "utf-8"
+        
         with open(log_file_path, "a", encoding="utf-8") as log_f:
             subprocess.Popen(
                 cmd,
                 stdout=log_f,
                 stderr=log_f,
+                env=env,
                 close_fds=True if os.name != 'nt' else False
             )
         
@@ -790,19 +799,32 @@ async def execute_manual_swap(data: dict):
             
         # sys.path 설정하여 base_utils 가져옴
         import sys
+        import importlib
         utils_dir = os.path.normpath(
             os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "..", "data-pipeline", "crawlers", "web_crawlers")
         )
         if utils_dir not in sys.path:
             sys.path.append(utils_dir)
             
-        from base_utils import swap_staging_to_production
+        import base_utils
+        importlib.reload(base_utils)
         
         # 비동기 함수 실행을 위해 백그라운드 태스크로 구동 또는 동기 래핑
         # 프론트엔드가 결과를 대기하므로 여기서는 바로 await 실행
-        success = await swap_staging_to_production(brand, force=force)
+        success = await base_utils.swap_staging_to_production(brand, force=force)
         
         if success:
+            # 스위칭 성공 시 실시간 진행률 JSON 파일이 존재하면 삭제하여 대기 중(Idle)으로 즉시 리셋 유도
+            try:
+                base_dir = os.path.dirname(os.path.abspath(__file__))
+                progress_path = os.path.normpath(
+                    os.path.join(base_dir, "..", "..", "..", "..", "logs", f"progress_{brand.lower()}.json")
+                )
+                if os.path.exists(progress_path):
+                    os.remove(progress_path)
+            except Exception as file_err:
+                logger.warning(f"스위칭 후 진행률 파일 삭제 실패: {file_err}")
+                
             return {"success": True, "message": f"{brand.upper()} 브랜드 스테이징 데이터가 활성 운영 DB로 성공적으로 스위칭 이관되었습니다."}
         else:
             return {"success": False, "detail": "스위칭 프로세스 도중 에러가 발생했거나 정합성 검사를 통과하지 못했습니다. 상세 내역은 에러 로그를 확인하세요."}
@@ -818,17 +840,30 @@ async def clear_staging_data_api(brand: str):
     """
     try:
         import sys
+        import importlib
         utils_dir = os.path.normpath(
             os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "..", "data-pipeline", "crawlers", "web_crawlers")
         )
         if utils_dir not in sys.path:
             sys.path.append(utils_dir)
             
-        from base_utils import clear_staging_data
+        import base_utils
+        importlib.reload(base_utils)
         
         # 동기 호출 수행
-        clear_staging_data(brand)
+        base_utils.clear_staging_data(brand)
         
+        # 스테이징 비우기 성공 시 실시간 진행률 JSON 파일 삭제하여 Idle 초기화
+        try:
+            base_dir = os.path.dirname(os.path.abspath(__file__))
+            progress_path = os.path.normpath(
+                os.path.join(base_dir, "..", "..", "..", "..", "logs", f"progress_{brand.lower()}.json")
+            )
+            if os.path.exists(progress_path):
+                os.remove(progress_path)
+        except Exception as file_err:
+            logger.warning(f"스테이징 비우기 후 진행률 파일 삭제 실패: {file_err}")
+            
         return {"success": True, "message": f"{brand.upper()} 브랜드의 모든 스테이징 데이터 및 Cloudinary 임시 업로드가 초기화되었습니다."}
     except Exception as e:
         logger.error(f"스테이징 비우기 에러: {e}")
@@ -864,7 +899,7 @@ async def get_crawling_logs(
             
             cur.execute(
                 """
-                SELECT run_id, pipeline_name, brand, status, total_items, new_items, updated_items, 
+                SELECT run_id, pipeline_name, brand, status, total_items, new_items, updated_items, embed_count, 
                        (SELECT COALESCE(count(*), 0) FROM pipeline_errors pe WHERE pe.run_id = pr.run_id) as error_count, 
                        started_at, finished_at, duration_sec
                 FROM pipeline_runs pr
@@ -883,6 +918,7 @@ async def get_crawling_logs(
                     "total_items": r["total_items"] or 0,
                     "new_items": r["new_items"] or 0,
                     "updated_items": r["updated_items"] or 0,
+                    "embed_count": r["embed_count"] or 0,
                     "error_count": r["error_count"] or 0,
                     "started_at": r["started_at"].isoformat() if r["started_at"] else None,
                     "finished_at": r["finished_at"].isoformat() if r["finished_at"] else None,
@@ -970,7 +1006,7 @@ async def get_crawling_auto_logs(
             
             cur.execute(
                 """
-                SELECT run_id, pipeline_name, brand, status, total_items, new_items, updated_items, error_count, started_at, finished_at, duration_sec
+                SELECT run_id, pipeline_name, brand, status, total_items, new_items, updated_items, embed_count, error_count, started_at, finished_at, duration_sec
                 FROM pipeline_runs
                 WHERE pipeline_name = 'auto_crawling_pipeline'
                 ORDER BY started_at DESC
@@ -987,6 +1023,7 @@ async def get_crawling_auto_logs(
                     "total_items": r["total_items"] or 0,
                     "new_items": r["new_items"] or 0,
                     "updated_items": r["updated_items"] or 0,
+                    "embed_count": r["embed_count"] or 0,
                     "error_count": r["error_count"] or 0,
                     "started_at": r["started_at"].isoformat() if r["started_at"] else None,
                     "finished_at": r["finished_at"].isoformat() if r["finished_at"] else None,
@@ -1090,4 +1127,102 @@ async def get_crawling_auto_stats():
         }
     except Exception as e:
         logger.error(f"자동 크롤링 통계 조회 에러: {e}")
+        return {"success": False, "detail": str(e)}
+
+
+# ─────────────────────────────────────────────────────
+# [실시간 진행률 API] 크롤링 파이프라인 현재 진행 상황 조회
+# ─────────────────────────────────────────────────────
+@router.get("/crawling/progress")
+async def get_crawling_progress(brand: str = Query(..., description="브랜드명 (topten, 8seconds 등)")):
+    """
+    크롤링 파이프라인의 실시간 진행 상황을 반환합니다.
+    CLI가 logs/progress_{brand}.json에 기록한 내용을 읽어 반환합니다.
+    프론트엔드에서 3초 간격으로 폴링하여 진행 현황 패널을 업데이트합니다.
+    """
+    import json as _json
+    import time as _time
+
+    # 진행률 파일 경로 (CLI와 동일한 위치)
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    progress_path = os.path.normpath(
+        os.path.join(base_dir, "..", "..", "..", "..", "logs", f"progress_{brand.lower()}.json")
+    )
+
+    if not os.path.exists(progress_path):
+        return {
+            "success": True,
+            "found": False,
+            "brand": brand.upper(),
+            "status": "idle",
+            "step": "대기 중",
+            "percent": 0,
+            "current": 0,
+            "total": 0,
+            "current_item": "",
+            "phases_done": [],
+            "phases_remaining": [],
+            "elapsed_sec": 0,
+            "run_id": None,
+            "error": "",
+            "started_at": "",
+            "updated_at": "",
+        }
+
+    try:
+        # progress_path의 실제 파일 수정 시간을 읽어 타임존 차이 없는 절대 물리 시간 계산
+        st = os.stat(progress_path)
+        file_mtime = st.st_mtime
+        file_ctime = st.st_ctime
+        
+        with open(progress_path, "r", encoding="utf-8") as f:
+            data = _json.load(f)
+
+        # JSON에 저장된 started_at 시각(로컬 타임)과 현재 백엔드 로컬 타임의 차이로 정확한 경과 시간 계산
+        elapsed_sec = 0
+        file_elapsed = max(0, int(_time.time() - file_ctime))
+        started_at_str = data.get("started_at")
+        if started_at_str:
+            try:
+                started_dt = datetime.strptime(started_at_str, "%Y-%m-%dT%H:%M:%S")
+                diff_sec = int((datetime.now() - started_dt).total_seconds())
+                # KST/UTC 타임존 미스매치 시 실제 파일 생성 시간(file_ctime) 경과로 안전하게 대체
+                if abs(diff_sec - file_elapsed) > 1800:
+                    elapsed_sec = file_elapsed
+                else:
+                    elapsed_sec = max(0, diff_sec)
+            except Exception as parse_err:
+                logger.warning(f"started_at 파싱 실패: {parse_err}")
+                elapsed_sec = file_elapsed
+        else:
+            elapsed_sec = file_elapsed
+
+        # 마지막 업데이트로부터 300초 이상 지났으면 비정상 종료(stale)로 판단
+        stale = False
+        now_ts = _time.time()
+        if data.get("status") == "running":
+            if (now_ts - file_mtime) > 300:
+                stale = True
+
+        return {
+            "success": True,
+            "found": True,
+            "brand": data.get("brand", brand.upper()),
+            "run_id": data.get("run_id"),
+            "status": "stale" if stale else data.get("status", "unknown"),
+            "step": data.get("step", ""),
+            "percent": data.get("percent", 0),
+            "current": data.get("current", 0),
+            "total": data.get("total", 0),
+            "current_item": data.get("current_item", ""),
+            "phases_done": data.get("phases_done", []),
+            "phases_remaining": data.get("phases_remaining", []),
+            "elapsed_sec": elapsed_sec,
+            "error": data.get("error", ""),
+            "started_at": data.get("started_at", ""),
+            "updated_at": data.get("updated_at", ""),
+            "stale": stale,
+        }
+    except Exception as e:
+        logger.error(f"진행률 파일 읽기 에러: {e}")
         return {"success": False, "detail": str(e)}
