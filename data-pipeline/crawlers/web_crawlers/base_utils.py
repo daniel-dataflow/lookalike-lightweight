@@ -368,11 +368,25 @@ async def get_yolo_clip_image_embedding(session: aiohttp.ClientSession, image_ur
         logger.warning(f"HF Space YOLO-CLIP API 호출 오류: {e}")
     return None
 
+def clean_db_url(db_url: str) -> str:
+    """DB URL 양 끝의 공백 및 따옴표를 지우고, 잘못된 형식(텍스트 포함 등)에서 postgresql:// 주소를 추출하여 DSN 오류를 방지합니다."""
+    if not db_url:
+        return db_url
+    db_url = db_url.strip()
+    # postgres:// 또는 postgresql://로 시작하는 패턴 추출
+    import re
+    match = re.search(r'(postgres(?:ql)?://\S+)', db_url)
+    if match:
+        cleaned = match.group(1)
+        return cleaned.strip("'\"")
+    return db_url.strip("'\"")
+
 def get_prod_db_connection():
     """PROD_DATABASE_URL 환경 변수로부터 PostgreSQL 커넥션을 가져옵니다. (PROD DB)"""
-    db_url = os.getenv("PROD_DATABASE_URL") or os.getenv("DATABASE_URL")
-    if not db_url:
+    raw_url = os.getenv("PROD_DATABASE_URL") or os.getenv("DATABASE_URL")
+    if not raw_url:
         raise ValueError("PROD_DATABASE_URL 또는 DATABASE_URL 환경 변수가 필요합니다.")
+    db_url = clean_db_url(raw_url)
     conn = psycopg2.connect(db_url)
     # 세션 타임존을 서울(KST)로 설정
     with conn.cursor() as cur:
@@ -382,9 +396,10 @@ def get_prod_db_connection():
 
 def get_dw_db_connection():
     """DW_DATABASE_URL 환경 변수로부터 PostgreSQL 커넥션을 가져옵니다. (DW DB)"""
-    db_url = os.getenv("DW_DATABASE_URL") or os.getenv("DATABASE_URL")
-    if not db_url:
+    raw_url = os.getenv("DW_DATABASE_URL") or os.getenv("DATABASE_URL")
+    if not raw_url:
         raise ValueError("DW_DATABASE_URL 또는 DATABASE_URL 환경 변수가 필요합니다.")
+    db_url = clean_db_url(raw_url)
     conn = psycopg2.connect(db_url)
     # 세션 타임존을 서울(KST)로 설정
     with conn.cursor() as cur:

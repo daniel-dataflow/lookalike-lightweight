@@ -136,15 +136,40 @@ jobs:
 
       - name: 크롤링 실행
         env:
-          ENV_MODE: ${{ github.event.inputs.target_env || 'dev' }}
-          DATABASE_URL: ${{ (github.event.inputs.target_env || 'dev') == 'prod' && secrets.PROD_DATABASE_URL || secrets.DEV_DATABASE_URL }}
-          DW_DATABASE_URL: ${{ (github.event.inputs.target_env || 'dev') == 'prod' && secrets.PROD_DW_DATABASE_URL || secrets.DEV_DW_DATABASE_URL }}
-          CLOUDINARY_CLOUD_NAME: ${{ (github.event.inputs.target_env || 'dev') == 'prod' && secrets.PROD_CLOUDINARY_CLOUD_NAME || secrets.DEV_CLOUDINARY_CLOUD_NAME }}
-          CLOUDINARY_API_KEY: ${{ (github.event.inputs.target_env || 'dev') == 'prod' && secrets.PROD_CLOUDINARY_API_KEY || secrets.DEV_CLOUDINARY_API_KEY }}
-          CLOUDINARY_API_SECRET: ${{ (github.event.inputs.target_env || 'dev') == 'prod' && secrets.PROD_CLOUDINARY_API_SECRET || secrets.DEV_CLOUDINARY_API_SECRET }}
+          TARGET_ENV: ${{ github.event.inputs.target_env || 'dev' }}
+          DEV_DATABASE_URL: ${{ secrets.DEV_DATABASE_URL }}
+          PROD_DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
+          DEV_DW_DATABASE_URL: ${{ secrets.DEV_DW_DATABASE_URL }}
+          PROD_DW_DATABASE_URL: ${{ secrets.PROD_DW_DATABASE_URL }}
+          DEV_CLOUDINARY_CLOUD_NAME: ${{ secrets.DEV_CLOUDINARY_CLOUD_NAME }}
+          PROD_CLOUDINARY_CLOUD_NAME: ${{ secrets.PROD_CLOUDINARY_CLOUD_NAME }}
+          DEV_CLOUDINARY_API_KEY: ${{ secrets.DEV_CLOUDINARY_API_KEY }}
+          PROD_CLOUDINARY_API_KEY: ${{ secrets.PROD_CLOUDINARY_API_KEY }}
+          DEV_CLOUDINARY_API_SECRET: ${{ secrets.DEV_CLOUDINARY_API_SECRET }}
+          PROD_CLOUDINARY_API_SECRET: ${{ secrets.PROD_CLOUDINARY_API_SECRET }}
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: |
+          # target_env 기본값 설정 및 공백 제거 처리
+          ENV_MODE="${TARGET_ENV}"
+          if [ -z "$ENV_MODE" ]; then
+            ENV_MODE="dev"
+          fi
+
+          if [ "$ENV_MODE" = "prod" ]; then
+            export DATABASE_URL=$(echo "$PROD_DATABASE_URL" | xargs)
+            export DW_DATABASE_URL=$(echo "$PROD_DW_DATABASE_URL" | xargs)
+            export CLOUDINARY_CLOUD_NAME=$(echo "$PROD_CLOUDINARY_CLOUD_NAME" | xargs)
+            export CLOUDINARY_API_KEY=$(echo "$PROD_CLOUDINARY_API_KEY" | xargs)
+            export CLOUDINARY_API_SECRET=$(echo "$PROD_CLOUDINARY_API_SECRET" | xargs)
+          else
+            export DATABASE_URL=$(echo "$DEV_DATABASE_URL" | xargs)
+            export DW_DATABASE_URL=$(echo "$DEV_DW_DATABASE_URL" | xargs)
+            export CLOUDINARY_CLOUD_NAME=$(echo "$DEV_CLOUDINARY_CLOUD_NAME" | xargs)
+            export CLOUDINARY_API_KEY=$(echo "$DEV_CLOUDINARY_API_KEY" | xargs)
+            export CLOUDINARY_API_SECRET=$(echo "$DEV_CLOUDINARY_API_SECRET" | xargs)
+          fi
+
           EXTRA_ARGS=""
           if [ -n "${{ matrix.gender }}" ]; then
             EXTRA_ARGS="$EXTRA_ARGS --gender ${{ matrix.gender }}"
@@ -209,15 +234,40 @@ jobs:
 
       - name: 스위칭 실행
         env:
-          ENV_MODE: ${{ github.event.inputs.target_env || 'dev' }}
-          DATABASE_URL: ${{ (github.event.inputs.target_env || 'dev') == 'prod' && secrets.PROD_DATABASE_URL || secrets.DEV_DATABASE_URL }}
-          DW_DATABASE_URL: ${{ (github.event.inputs.target_env || 'dev') == 'prod' && secrets.PROD_DW_DATABASE_URL || secrets.DEV_DW_DATABASE_URL }}
-          CLOUDINARY_CLOUD_NAME: ${{ (github.event.inputs.target_env || 'dev') == 'prod' && secrets.PROD_CLOUDINARY_CLOUD_NAME || secrets.DEV_CLOUDINARY_CLOUD_NAME }}
-          CLOUDINARY_API_KEY: ${{ (github.event.inputs.target_env || 'dev') == 'prod' && secrets.PROD_CLOUDINARY_API_KEY || secrets.DEV_CLOUDINARY_API_KEY }}
-          CLOUDINARY_API_SECRET: ${{ (github.event.inputs.target_env || 'dev') == 'prod' && secrets.PROD_CLOUDINARY_API_SECRET || secrets.DEV_CLOUDINARY_API_SECRET }}
+          TARGET_ENV: ${{ github.event.inputs.target_env || 'dev' }}
+          DEV_DATABASE_URL: ${{ secrets.DEV_DATABASE_URL }}
+          PROD_DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
+          DEV_DW_DATABASE_URL: ${{ secrets.DEV_DW_DATABASE_URL }}
+          PROD_DW_DATABASE_URL: ${{ secrets.PROD_DW_DATABASE_URL }}
+          DEV_CLOUDINARY_CLOUD_NAME: ${{ secrets.DEV_CLOUDINARY_CLOUD_NAME }}
+          PROD_CLOUDINARY_CLOUD_NAME: ${{ secrets.PROD_CLOUDINARY_CLOUD_NAME }}
+          DEV_CLOUDINARY_API_KEY: ${{ secrets.DEV_CLOUDINARY_API_KEY }}
+          PROD_CLOUDINARY_API_KEY: ${{ secrets.PROD_CLOUDINARY_API_KEY }}
+          DEV_CLOUDINARY_API_SECRET: ${{ secrets.DEV_CLOUDINARY_API_SECRET }}
+          PROD_CLOUDINARY_API_SECRET: ${{ secrets.PROD_CLOUDINARY_API_SECRET }}
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: |
+          # target_env 기본값 설정 및 공백 제거 처리
+          ENV_MODE="${TARGET_ENV}"
+          if [ -z "$ENV_MODE" ]; then
+            ENV_MODE="dev"
+          fi
+
+          if [ "$ENV_MODE" = "prod" ]; then
+            export DATABASE_URL=$(echo "$PROD_DATABASE_URL" | xargs)
+            export DW_DATABASE_URL=$(echo "$PROD_DW_DATABASE_URL" | xargs)
+            export CLOUDINARY_CLOUD_NAME=$(echo "$PROD_CLOUDINARY_CLOUD_NAME" | xargs)
+            export CLOUDINARY_API_KEY=$(echo "$PROD_CLOUDINARY_API_KEY" | xargs)
+            export CLOUDINARY_API_SECRET=$(echo "$PROD_CLOUDINARY_API_SECRET" | xargs)
+          else
+            export DATABASE_URL=$(echo "$DEV_DATABASE_URL" | xargs)
+            export DW_DATABASE_URL=$(echo "$DEV_DW_DATABASE_URL" | xargs)
+            export CLOUDINARY_CLOUD_NAME=$(echo "$DEV_CLOUDINARY_CLOUD_NAME" | xargs)
+            export CLOUDINARY_API_KEY=$(echo "$DEV_CLOUDINARY_API_KEY" | xargs)
+            export CLOUDINARY_API_SECRET=$(echo "$DEV_CLOUDINARY_API_SECRET" | xargs)
+          fi
+
           FORCE_FLAG=""
           if [ "${{ github.event.inputs.force }}" = "true" ]; then
             FORCE_FLAG="--force"
