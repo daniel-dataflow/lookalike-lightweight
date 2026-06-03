@@ -816,8 +816,9 @@ async def run_pipeline(
                 logger.info(f"📝 펜딩된 에러 로그 {len(pending_errors)}건을 단일 세션으로 일괄 적재 진행 중...")
                 for err_type, err_msg, p_id, src_url in pending_errors:
                     try:
-                        # log_pipeline_error 내부에서 별도로 커넥션을 열어 처리하도록 설계되어 있으므로 순차 실행
-                        log_pipeline_error(run_id, err_type, err_msg, product_id=p_id, source_url=src_url)
+                        # 에러 유형이 _WARN으로 끝날 경우 경고성(is_warning=True)으로 판별해 실행 횟수 에러 카운트를 올리지 않음
+                        is_warn = err_type.endswith("_WARN")
+                        log_pipeline_error(run_id, err_type, err_msg, product_id=p_id, source_url=src_url, is_warning=is_warn)
                     except Exception as log_err:
                         logger.error(f"❌ 펜딩 에러 일괄 적재 중 예외: {log_err}")
 

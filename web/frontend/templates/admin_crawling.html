@@ -159,13 +159,13 @@
 <!-- ─────────────── 탭 전환 네비게이션 ─────────────── -->
 <ul class="nav nav-tabs mb-4" id="crawlingTabs" role="tablist">
   <li class="nav-item" role="presentation">
-    <button class="nav-link active fw-bold" id="manual-tab" data-bs-toggle="tab" data-bs-target="#manual-content" type="button" role="tab" aria-controls="manual-content" aria-selected="true" onclick="switchDashboardMode('manual')">
-      <i class="fas fa-hand-paper me-1 text-primary"></i> 수동 크롤링 & 스테이징 현황
+    <button class="nav-link active fw-bold" id="auto-tab" data-bs-toggle="tab" data-bs-target="#auto-content" type="button" role="tab" aria-controls="auto-content" aria-selected="true" onclick="switchDashboardMode('auto')">
+      <i class="fas fa-robot me-1 text-success"></i> 자동 크롤링 모니터링
     </button>
   </li>
   <li class="nav-item" role="presentation">
-    <button class="nav-link fw-bold" id="auto-tab" data-bs-toggle="tab" data-bs-target="#auto-content" type="button" role="tab" aria-controls="auto-content" aria-selected="false" onclick="switchDashboardMode('auto')">
-      <i class="fas fa-robot me-1 text-success"></i> 자동 크롤링 모니터링
+    <button class="nav-link fw-bold" id="manual-tab" data-bs-toggle="tab" data-bs-target="#manual-content" type="button" role="tab" aria-controls="manual-content" aria-selected="false" onclick="switchDashboardMode('manual')">
+      <i class="fas fa-hand-paper me-1 text-primary"></i> 수동 크롤링 & 스테이징 현황
     </button>
   </li>
 </ul>
@@ -174,7 +174,7 @@
 <div class="tab-content" id="crawlingTabContent">
 
   <!-- ==================== [Tab 1] 수동 크롤링 & 스테이징 현황 ==================== -->
-  <div class="tab-pane fade show active" id="manual-content" role="tabpanel" aria-labelledby="manual-tab">
+  <div class="tab-pane fade" id="manual-content" role="tabpanel" aria-labelledby="manual-tab">
     <!-- 상단 헤더 -->
     <div class="d-flex justify-content-between align-items-center mb-4">
       <div>
@@ -183,6 +183,9 @@
       </div>
       <div class="d-flex gap-2 align-items-center">
         <span class="refresh-indicator" id="lastRefreshTimeManual">마지막 새로고침: —</span>
+        <button class="btn btn-sm btn-outline-danger" onclick="clearCrawlingHistory('manual')">
+          <i class="fas fa-trash-alt me-1"></i>히스토리 초기화
+        </button>
         <button class="btn btn-sm btn-outline-secondary" onclick="loadManualData()">
           <i class="fas fa-sync-alt me-1"></i>새로고침
         </button>
@@ -320,7 +323,7 @@
   </div>
 
   <!-- ==================== [Tab 2] 자동 크롤링 모니터링 ==================== -->
-  <div class="tab-pane fade" id="auto-content" role="tabpanel" aria-labelledby="auto-tab">
+  <div class="tab-pane fade show active" id="auto-content" role="tabpanel" aria-labelledby="auto-tab">
     <!-- 상단 헤더 -->
     <div class="d-flex justify-content-between align-items-center mb-4">
       <div>
@@ -329,6 +332,9 @@
       </div>
       <div class="d-flex gap-2 align-items-center">
         <span class="text-muted" style="font-size: 0.75rem;" id="lastRefreshTimeAuto">마지막 새로고침: —</span>
+        <button class="btn btn-sm btn-outline-danger" onclick="clearCrawlingHistory('auto')">
+          <i class="fas fa-trash-alt me-1"></i>히스토리 초기화
+        </button>
         <button class="btn btn-sm btn-outline-secondary" onclick="loadAutoData()">
           <i class="fas fa-sync-alt me-1"></i>새로고침
         </button>
@@ -411,8 +417,9 @@
       <!-- 최근 자동 구동 내역 -->
       <div class="col-12 col-xl-5">
         <div class="card border-0 shadow-sm d-flex flex-column h-100">
-          <div class="card-header bg-white fw-bold py-3">
-            <i class="fas fa-list-ul me-2 text-secondary"></i>최근 자동 구동 내역
+          <div class="card-header bg-white fw-bold py-3 d-flex justify-content-between align-items-center">
+            <span><i class="fas fa-list-ul me-2 text-secondary"></i>최근 자동 구동 내역</span>
+            <button id="clearAutoRunFilterBtn" class="btn btn-xs btn-outline-danger d-none" onclick="clearAutoRunFilter()" style="font-size: 0.68rem; padding: 2px 6px;">필터 해제</button>
           </div>
           <div class="card-body p-0 flex-grow-1">
             <div class="table-responsive">
@@ -602,9 +609,10 @@ let currentAutoRunPage = 1;
 let currentAutoErrPage = 1;
 const pageSize = 10;
 
-let activeDashboardMode = 'manual'; // 'manual' or 'auto'
+let activeDashboardMode = 'auto'; // 'manual' or 'auto' (기본 자동 크롤링 모니터링 활성화)
 let autoErrorsCache = {}; // 에러 정보 상세 모달 맵
 let selectedRunId = null; // 특정 파이프라인 구동 건 필터링 ID
+let selectedAutoRunId = null; // 특정 자동 파이프라인 구동 건 필터링 ID
 let cachedManualErrors = []; // 프론트엔드 실시간 필터링 캐시 저장소
 let fetchController = null; // 경합 방지용 비동기 요청 취소 컨트롤러
 let isFetchingManual = false; // 현재 수동 로그가 fetch 중인지 추적하는 플래그
@@ -614,18 +622,18 @@ let cachedProgressState = {}; // 브랜드별 진행 상태 보존 캐시 (깜�
 {% raw %}
 <script>
 document.addEventListener('DOMContentLoaded', () => {
-  const savedMode = localStorage.getItem('activeCrawlingTab') || 'manual';
+  const savedMode = localStorage.getItem('activeCrawlingTab') || 'auto';
   activeDashboardMode = savedMode;
   
-  if (savedMode === 'auto') {
-    const autoTabBtn = document.getElementById('auto-tab');
-    if (autoTabBtn) {
-      const tab = new bootstrap.Tab(autoTabBtn);
+  if (savedMode === 'manual') {
+    const manualTabBtn = document.getElementById('manual-tab');
+    if (manualTabBtn) {
+      const tab = new bootstrap.Tab(manualTabBtn);
       tab.show();
     }
-    loadAutoData();
-  } else {
     loadManualData();
+  } else {
+    loadAutoData();
   }
 
   // 5초 주기로 활성화 탭 데이터 자동 새로고침
@@ -935,7 +943,7 @@ async function fetchManualLogs(isSilent = false) {
             <td>
               <div class="d-flex align-items-center">
                 ${actionBadge}
-                <strong>[#${r.run_id}] ${r.brand || 'ALL'}</strong>
+                <strong>[#${r.display_run_id}] ${r.brand || 'ALL'}</strong>
               </div>
             </td>
             <td>${statusBadge}</td>
@@ -1046,7 +1054,11 @@ async function fetchAutoStats() {
 
 async function fetchAutoLogs() {
   try {
-    const res = await fetch(`/api/admin/crawling/auto/logs?run_page=${currentAutoRunPage}&run_limit=${pageSize}&err_page=${currentAutoErrPage}&err_limit=${pageSize}`);
+    let url = `/api/admin/crawling/auto/logs?run_page=${currentAutoRunPage}&run_limit=${pageSize}&err_page=${currentAutoErrPage}&err_limit=${pageSize}`;
+    if (selectedAutoRunId) {
+      url += `&run_id=${selectedAutoRunId}`;
+    }
+    const res = await fetch(url);
     const data = await res.json();
     if (!data.success) return;
 
@@ -1079,9 +1091,12 @@ async function fetchAutoLogs() {
           statusBadge = `<span class="badge bg-primary spinner-grow-sm">실행 중</span>`;
         }
         
+        const isSelected = selectedAutoRunId === r.run_id;
+        const rowStyle = isSelected ? 'background-color: #f0fdf4; border-left: 4px solid #16a34a;' : 'cursor: pointer;';
+        
         runsHtml += `
-          <tr>
-            <td><strong>[#${r.run_id}] ${r.brand}</strong></td>
+          <tr style="${rowStyle}" onclick="selectAutoRun(${r.run_id})">
+            <td><strong>[#${r.display_run_id}] ${r.brand}</strong></td>
             <td>${statusBadge}</td>
             <td class="text-end">${r.total_items.toLocaleString()}</td>
             <td class="text-end">${(r.embed_count || 0).toLocaleString()}</td>
@@ -1537,6 +1552,73 @@ function renderErrorsEngine() {
     errorsBody.innerHTML = errHtml;
   } else {
     errorsBody.innerHTML = '<tr><td colspan="3" class="text-center py-4 text-muted">최근 에러 내역이 없습니다.</td></tr>';
+  }
+}
+
+// ─── 자동 구동 내역 에러 필터링 핸들러 ───
+function selectAutoRun(runId) {
+  runId = Number(runId);
+  if (selectedAutoRunId === runId) {
+    clearAutoRunFilter();
+    return;
+  }
+  selectedAutoRunId = runId;
+  currentAutoErrPage = 1; // 에러 목록 페이지 초기화
+  
+  const clearBtn = document.getElementById('clearAutoRunFilterBtn');
+  if (clearBtn) {
+    clearBtn.classList.remove('d-none');
+  }
+  
+  fetchAutoLogs();
+}
+
+function clearAutoRunFilter() {
+  selectedAutoRunId = null;
+  currentAutoErrPage = 1;
+  
+  const clearBtn = document.getElementById('clearAutoRunFilterBtn');
+  if (clearBtn) {
+    clearBtn.classList.add('d-none');
+  }
+  
+  fetchAutoLogs();
+}
+
+// ─── 크롤링 히스토리 초기화 ───
+async function clearCrawlingHistory(type) {
+  const typeText = type === 'manual' ? '수동 크롤링' : (type === 'auto' ? '자동 크롤링' : '전체 크롤링');
+  if (!confirm(`${typeText}의 기록된 모든 히스토리(구동 내역 및 에러 로그)를 초기화하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`)) {
+    return;
+  }
+  
+  try {
+    const res = await fetch(`/api/admin/crawling/history?pipeline_type=${type}`, {
+      method: 'DELETE'
+    });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      alert(data.message || '히스토리가 성공적으로 초기화되었습니다.');
+      if (type === 'manual') {
+        currentRunPage = 1;
+        currentErrPage = 1;
+        selectedRunId = null;
+        const clearBtn = document.getElementById('clearRunFilterBtn');
+        if (clearBtn) clearBtn.classList.add('d-none');
+        loadManualData();
+      } else {
+        currentAutoRunPage = 1;
+        currentAutoErrPage = 1;
+        selectedAutoRunId = null;
+        const clearBtn = document.getElementById('clearAutoRunFilterBtn');
+        if (clearBtn) clearBtn.classList.add('d-none');
+        loadAutoData();
+      }
+    } else {
+      alert(`초기화 실패: ${data.detail || '알 수 없는 서버 오류'}`);
+    }
+  } catch (err) {
+    alert(`네트워크 통신 오류: ${err.message}`);
   }
 }
 </script>

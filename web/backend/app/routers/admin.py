@@ -899,12 +899,18 @@ async def get_crawling_logs(
             
             cur.execute(
                 """
+                WITH numbered_runs AS (
+                    SELECT run_id, pipeline_name, brand, status, total_items, new_items, updated_items, embed_count, 
+                           started_at, finished_at, duration_sec,
+                           ROW_NUMBER() OVER (PARTITION BY CASE WHEN pipeline_name = 'auto_crawling_pipeline' THEN 'auto' ELSE 'manual' END ORDER BY started_at ASC) as display_run_id
+                    FROM pipeline_runs
+                )
                 SELECT run_id, pipeline_name, brand, status, total_items, new_items, updated_items, embed_count, 
-                       (SELECT COALESCE(count(*), 0) FROM pipeline_errors pe WHERE pe.run_id = pr.run_id) as error_count, 
-                       started_at, finished_at, duration_sec
-                FROM pipeline_runs pr
-                WHERE pr.pipeline_name IN ('manual_crawling_pipeline', 'crawling_pipeline', 'swap_pipeline')
-                ORDER BY pr.started_at DESC
+                       (SELECT COALESCE(count(*), 0) FROM pipeline_errors pe WHERE pe.run_id = nr.run_id) as error_count, 
+                       started_at, finished_at, duration_sec, display_run_id
+                FROM numbered_runs nr
+                WHERE nr.pipeline_name IN ('manual_crawling_pipeline', 'crawling_pipeline', 'swap_pipeline')
+                ORDER BY nr.started_at DESC
                 LIMIT %s OFFSET %s;
                 """,
                 (run_limit, run_offset)
@@ -912,6 +918,7 @@ async def get_crawling_logs(
             for r in cur.fetchall():
                 runs.append({
                     "run_id": r["run_id"],
+                    "display_run_id": r["display_run_id"],
                     "pipeline_name": r["pipeline_name"],
                     "brand": r["brand"],
                     "status": r["status"],
@@ -983,7 +990,8 @@ async def get_crawling_auto_logs(
     run_page: int = Query(1, ge=1),
     run_limit: int = Query(10, ge=1, le=100),
     err_page: int = Query(1, ge=1),
-    err_limit: int = Query(10, ge=1, le=100)
+    err_limit: int = Query(10, ge=1, le=100),
+    run_id: Optional[int] = Query(None, description="특정 run_id 필터링")
 ):
     """
     자동 크롤링 전용 구동 내역 및 에러 로그 목록 제공 (admin_crawling_auto.html 용)
@@ -1006,10 +1014,16 @@ async def get_crawling_auto_logs(
             
             cur.execute(
                 """
-                SELECT run_id, pipeline_name, brand, status, total_items, new_items, updated_items, embed_count, error_count, started_at, finished_at, duration_sec
-                FROM pipeline_runs
-                WHERE pipeline_name = 'auto_crawling_pipeline'
-                ORDER BY started_at DESC
+                WITH numbered_runs AS (
+                    SELECT run_id, pipeline_name, brand, status, total_items, new_items, updated_items, embed_count, error_count,
+                           started_at, finished_at, duration_sec,
+                           ROW_NUMBER() OVER (PARTITION BY CASE WHEN pipeline_name = 'auto_crawling_pipeline' THEN 'auto' ELSE 'manual' END ORDER BY started_at ASC) as display_run_id
+                    FROM pipeline_runs
+                )
+                SELECT run_id, pipeline_name, brand, status, total_items, new_items, updated_items, embed_count, error_count, started_at, finished_at, duration_sec, display_run_id
+                FROM numbered_runs nr
+                WHERE nr.pipeline_name = 'auto_crawling_pipeline'
+                ORDER BY nr.started_at DESC
                 LIMIT %s OFFSET %s;
                 """,
                 (run_limit, run_offset)
@@ -1017,6 +1031,7 @@ async def get_crawling_auto_logs(
             for r in cur.fetchall():
                 runs.append({
                     "run_id": r["run_id"],
+                    "display_run_id": r["display_run_id"],
                     "pipeline_name": r["pipeline_name"],
                     "brand": r["brand"],
                     "status": r["status"],
@@ -1030,26 +1045,35 @@ async def get_crawling_auto_logs(
                     "duration_sec": r["duration_sec"] or 0
                 })
                 
-            # 2. errors
-            cur.execute("""
+            # 2. errors (run_id 옵션 처리)
+            err_where = "WHERE pr.pipeline_name = 'auto_crawling_pipeline'"
+            err_params = []
+            if run_id:
+                err_where += " AND pe.run_id = %s"
+                err_params.append(run_id)
+                
+            cur.execute(
+                f"""
                 SELECT count(*) as cnt 
                 FROM pipeline_errors pe
                 JOIN pipeline_runs pr ON pe.run_id = pr.run_id
-                WHERE pr.pipeline_name = 'auto_crawling_pipeline';
-            """)
+                {err_where};
+                """,
+                err_params
+            )
             total_errors = cur.fetchone()["cnt"]
             
             cur.execute(
-                """
+                f"""
                 SELECT pe.error_id, pe.run_id, pe.error_type, pe.error_message, pe.product_id, pe.source_url, pe.created_at, pr.brand, pe.stack_trace, sp.prod_name
                 FROM pipeline_errors pe
                 JOIN pipeline_runs pr ON pe.run_id = pr.run_id
                 LEFT JOIN staging_products sp ON pe.product_id = sp.product_id
-                WHERE pr.pipeline_name = 'auto_crawling_pipeline'
+                {err_where}
                 ORDER BY pe.created_at DESC
                 LIMIT %s OFFSET %s;
                 """,
-                (err_limit, err_offset)
+                err_params + [err_limit, err_offset]
             )
             for r in cur.fetchall():
                 errors.append({
@@ -1225,4 +1249,55 @@ async def get_crawling_progress(brand: str = Query(..., description="브랜드�
         }
     except Exception as e:
         logger.error(f"진행률 파일 읽기 에러: {e}")
+        return {"success": False, "detail": str(e)}
+
+
+@router.delete("/crawling/history")
+async def clear_crawling_history(
+    pipeline_type: str = Query("all", description="초기화할 파이프라인 타입 (manual, auto, all)")
+):
+    """
+    크롤링 구동 내역(runs) 및 에러 로그(errors) 히스토리를 초기화합니다.
+    """
+    try:
+        from ..database import get_dw_cursor
+        
+        with get_dw_cursor() as cur:
+            if pipeline_type == "manual":
+                # 수동 파이프라인 대상
+                cur.execute("""
+                    DELETE FROM pipeline_errors 
+                    WHERE run_id IN (
+                        SELECT run_id FROM pipeline_runs 
+                        WHERE pipeline_name IN ('manual_crawling_pipeline', 'crawling_pipeline', 'swap_pipeline')
+                    );
+                """)
+                cur.execute("""
+                    DELETE FROM pipeline_runs 
+                    WHERE pipeline_name IN ('manual_crawling_pipeline', 'crawling_pipeline', 'swap_pipeline');
+                """)
+                msg = "수동 크롤링 및 이관 구동 내역 히스토리가 성공적으로 초기화되었습니다."
+            elif pipeline_type == "auto":
+                # 자동 파이프라인 대상
+                cur.execute("""
+                    DELETE FROM pipeline_errors 
+                    WHERE run_id IN (
+                        SELECT run_id FROM pipeline_runs 
+                        WHERE pipeline_name = 'auto_crawling_pipeline'
+                    );
+                """)
+                cur.execute("""
+                    DELETE FROM pipeline_runs 
+                    WHERE pipeline_name = 'auto_crawling_pipeline';
+                """)
+                msg = "자동 크롤링 배치 구동 내역 히스토리가 성공적으로 초기화되었습니다."
+            else:
+                # 전체 대상
+                cur.execute("DELETE FROM pipeline_errors;")
+                cur.execute("DELETE FROM pipeline_runs;")
+                msg = "모든 크롤링 구동 내역 및 에러 로그 히스토리가 성공적으로 초기화되었습니다."
+                
+        return {"success": True, "message": msg}
+    except Exception as e:
+        logger.error(f"크롤링 히스토리 초기화 에러: {e}")
         return {"success": False, "detail": str(e)}

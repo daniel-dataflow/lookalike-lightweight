@@ -250,3 +250,6 @@ ml-models/search-evaluation/scripts
 # 추가 제외 경로 (경량화 마이그레이션)
 supabase/
 web/frontend/static/uploads/
+
+# 임시 테스트 스크립트 및 덤프 디렉토리
+ai_antigravity/

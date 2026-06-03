@@ -555,7 +555,7 @@ def log_pipeline_end(run_id: int, status: str, total_items: int = 0, new_items: 
         cur.close()
         conn.close()
 
-def log_pipeline_error(run_id: int, error_type: str, message: str, stack_trace: str = None, product_id: str = None, source_url: str = None) -> None:
+def log_pipeline_error(run_id: int, error_type: str, message: str, stack_trace: str = None, product_id: str = None, source_url: str = None, is_warning: bool = False) -> None:
     """pipeline_errors 테이블에 에러 원인 및 상세 stack trace를 상세 수집 기록합니다. (DW DB 저장)"""
     conn = get_dw_db_connection()
     cur = conn.cursor()
@@ -567,8 +567,8 @@ def log_pipeline_error(run_id: int, error_type: str, message: str, stack_trace: 
             VALUES (%s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
         """, (run_id, error_type, message, stack_trace or "", product_id or "", source_url or ""))
         
-        # pipeline_runs 테이블의 error_count 도 1 증가 처리
-        if run_id:
+        # [중요] 경고(is_warning=True)가 아닌 실제 에러일 경우에만 pipeline_runs의 error_count를 1 증가 처리
+        if run_id and not is_warning:
             cur.execute("UPDATE pipeline_runs SET error_count = error_count + 1 WHERE run_id = %s", (run_id,))
             
         conn.commit()
@@ -775,7 +775,7 @@ async def swap_staging_to_production(brand_name: str, force: bool = False) -> bo
                         # 이미지 이동 실패 시 pipeline_errors 테이블에 경고 로그 기록 (run_id 매칭)
                         err_msg = f"Cloudinary 이미지 이동 실패 (Staging -> Products): {old_pub_id} (이미지가 Cloudinary에 존재하지 않거나 덮어쓰기 권한 에러)"
                         logger.warning(f"⚠️ {err_msg}")
-                        log_pipeline_error(run_id, "CLOUDINARY_MOVE_WARN", err_msg, product_id=prod_id, source_url=img_path)
+                        log_pipeline_error(run_id, "CLOUDINARY_MOVE_WARN", err_msg, product_id=prod_id, source_url=img_path, is_warning=True)
                 
                 updated_rows.append((
                     prod_id, model_code, brand_upper, prod_name, base_price, gender, cat_code, prod_img_url, origin_url, create_dt
