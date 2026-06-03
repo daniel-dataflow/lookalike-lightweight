@@ -91,6 +91,18 @@ from base_utils import (
 
 logger = logging.getLogger("crawling_pipeline")
 
+# ──────────────────────────────────────────────────────────
+# [디버깅] Cloudinary 환경변수 검증 로깅
+# ──────────────────────────────────────────────────────────
+for env_name in ["CLOUDINARY_CLOUD_NAME", "CLOUDINARY_API_KEY", "CLOUDINARY_API_SECRET"]:
+    val = os.getenv(env_name)
+    if val:
+        val_stripped = val.strip("'\" \t\r\n")
+        masked = f"{val_stripped[:3]}...{val_stripped[-3:]}" if len(val_stripped) > 6 else "***"
+        logger.info(f"🔍 [DEBUG ENV] {env_name}: len={len(val)}, stripped_len={len(val_stripped)}, value={masked}")
+    else:
+        logger.warning(f"🔍 [DEBUG ENV] {env_name} is MISSING!")
+
 # 브랜드별 스크래퍼 모듈 임포트
 BRAND_CRAWLER_MODELS = {}
 
