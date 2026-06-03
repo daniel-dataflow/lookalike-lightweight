@@ -185,6 +185,13 @@ def configure_cloudinary():
     api_key = os.getenv("CLOUDINARY_API_KEY")
     api_secret = os.getenv("CLOUDINARY_API_SECRET")
 
+    if cloud_name:
+        cloud_name = cloud_name.strip("'\" \t\r\n")
+    if api_key:
+        api_key = api_key.strip("'\" \t\r\n")
+    if api_secret:
+        api_secret = api_secret.strip("'\" \t\r\n")
+
     if not all([cloud_name, api_key, api_secret]):
         raise ValueError("Cloudinary 필수 인증 환경변수가 누락되었습니다.")
 
