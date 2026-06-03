@@ -467,6 +467,16 @@ def log_pipeline_end(run_id: int, status: str, total_items: int = 0, new_items: 
     conn = get_dw_db_connection()
     cur = conn.cursor()
     try:
+        # 실제 등록된 에러 카운트를 쿼리하여 보완
+        actual_error_count = error_count
+        try:
+            cur.execute("SELECT count(*) FROM pipeline_errors WHERE run_id = %s", (run_id,))
+            err_row = cur.fetchone()
+            if err_row:
+                actual_error_count = max(error_count, err_row[0])
+        except Exception as query_err:
+            logger.warning(f"실제 에러 카운트 조회 실패: {query_err}")
+
         meta_str = json.dumps(metadata_dict or {})
         cur.execute("""
             UPDATE pipeline_runs 
@@ -479,9 +489,9 @@ def log_pipeline_end(run_id: int, status: str, total_items: int = 0, new_items: 
                 error_count = %s,
                 metadata = %s::jsonb
             WHERE run_id = %s
-        """, (status, total_items, new_items, updated_items, error_count, meta_str, run_id))
+        """, (status, total_items, new_items, updated_items, actual_error_count, meta_str, run_id))
         conn.commit()
-        logger.info(f"📋 pipeline_runs 상태 업데이트 완료 (run_id: {run_id}, status: {status})")
+        logger.info(f"📋 pipeline_runs 상태 업데이트 완료 (run_id: {run_id}, status: {status}, error_count: {actual_error_count})")
     except Exception as e:
         logger.error(f"❌ pipeline_runs 종료 로그 갱신 오류: {e}")
     finally:

@@ -840,7 +840,8 @@ async def get_crawling_logs(
     run_page: int = Query(1, ge=1),
     run_limit: int = Query(10, ge=1, le=100),
     err_page: int = Query(1, ge=1),
-    err_limit: int = Query(10, ge=1, le=100)
+    err_limit: int = Query(10, ge=1, le=100),
+    run_id: Optional[int] = Query(None, description="특정 run_id 필터링")
 ):
     """
     크롤링 구동 내역 및 에러 로그 목록 제공 (admin_crawling.html 용)
@@ -857,15 +858,18 @@ async def get_crawling_logs(
         total_errors = 0
         
         with get_dw_cursor() as cur:
-            # 1. runs
-            cur.execute("SELECT count(*) as cnt FROM pipeline_runs;")
+            # 1. runs (수동 크롤링/이관 파이프라인만 필터링)
+            cur.execute("SELECT count(*) as cnt FROM pipeline_runs WHERE pipeline_name IN ('manual_crawling_pipeline', 'crawling_pipeline', 'swap_pipeline');")
             total_runs = cur.fetchone()["cnt"]
             
             cur.execute(
                 """
-                SELECT run_id, pipeline_name, brand, status, total_items, new_items, updated_items, error_count, started_at, finished_at, duration_sec
-                FROM pipeline_runs
-                ORDER BY started_at DESC
+                SELECT run_id, pipeline_name, brand, status, total_items, new_items, updated_items, 
+                       (SELECT COALESCE(count(*), 0) FROM pipeline_errors pe WHERE pe.run_id = pr.run_id) as error_count, 
+                       started_at, finished_at, duration_sec
+                FROM pipeline_runs pr
+                WHERE pr.pipeline_name IN ('manual_crawling_pipeline', 'crawling_pipeline', 'swap_pipeline')
+                ORDER BY pr.started_at DESC
                 LIMIT %s OFFSET %s;
                 """,
                 (run_limit, run_offset)
@@ -885,19 +889,34 @@ async def get_crawling_logs(
                     "duration_sec": r["duration_sec"] or 0
                 })
                 
-            # 2. errors
-            cur.execute("SELECT count(*) as cnt FROM pipeline_errors;")
+            # 2. errors (수동 크롤링/이관 파이프라인의 에러만 필터링, run_id 옵션 처리)
+            err_where = "WHERE pr.pipeline_name IN ('manual_crawling_pipeline', 'crawling_pipeline', 'swap_pipeline')"
+            err_params = []
+            if run_id:
+                err_where += " AND pe.run_id = %s"
+                err_params.append(run_id)
+
+            cur.execute(
+                f"""
+                SELECT count(*) as cnt 
+                FROM pipeline_errors pe
+                JOIN pipeline_runs pr ON pe.run_id = pr.run_id
+                {err_where};
+                """,
+                err_params
+            )
             total_errors = cur.fetchone()["cnt"]
             
             cur.execute(
-                """
+                f"""
                 SELECT pe.error_id, pe.run_id, pe.error_type, pe.error_message, pe.product_id, pe.source_url, pe.created_at, pr.brand
                 FROM pipeline_errors pe
-                LEFT JOIN pipeline_runs pr ON pe.run_id = pr.run_id
+                JOIN pipeline_runs pr ON pe.run_id = pr.run_id
+                {err_where}
                 ORDER BY pe.created_at DESC
                 LIMIT %s OFFSET %s;
                 """,
-                (err_limit, err_offset)
+                err_params + [err_limit, err_offset]
             )
             for r in cur.fetchall():
                 errors.append({

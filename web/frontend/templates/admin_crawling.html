@@ -249,9 +249,10 @@
         <div class="card border-0 shadow-sm d-flex flex-column h-100">
           <div class="card-header bg-white fw-bold d-flex justify-content-between align-items-center py-3">
             <span><i class="fas fa-history me-2 text-secondary"></i>최근 파이프라인 구동 내역</span>
+            <button id="clearRunFilterBtn" class="btn btn-xs btn-outline-danger d-none" onclick="clearRunFilter()" style="font-size: 0.68rem; padding: 2px 6px;">필터 해제</button>
           </div>
-          <div class="card-body p-0 flex-grow-1">
-            <div class="table-responsive">
+          <div class="card-body p-0 flex-grow-1 d-flex flex-column">
+            <div class="table-responsive flex-grow-1" style="overflow-y: auto; min-height: 520px; max-height: 560px;">
               <table class="table table-hover mb-0 align-middle">
                 <thead class="table-light text-muted" style="font-size:.8rem;">
                   <tr>
@@ -271,10 +272,12 @@
               </table>
             </div>
           </div>
-          <div class="card-footer bg-white border-0 py-2 d-flex justify-content-between align-items-center">
-            <button class="btn btn-xs btn-outline-secondary py-1 px-2" style="font-size: 0.72rem;" id="btnRunPrev" onclick="changeRunPage(-1)" disabled>이전</button>
-            <span class="text-muted" style="font-size: 0.75rem;" id="txtRunPage">1 / 1 쪽</span>
-            <button class="btn btn-xs btn-outline-secondary py-1 px-2" style="font-size: 0.72rem;" id="btnRunNext" onclick="changeRunPage(1)" disabled>다음</button>
+          <div class="card-footer bg-white border-0 py-2 d-flex justify-content-center align-items-center">
+            <nav aria-label="Runs page navigation">
+              <ul class="pagination pagination-sm mb-0" id="runsPagination">
+                <!-- 동적 페이지네이션 -->
+              </ul>
+            </nav>
           </div>
         </div>
       </div>
@@ -285,8 +288,8 @@
           <div class="card-header bg-white fw-bold py-3 text-danger">
             <i class="fas fa-exclamation-triangle me-2"></i>실시간 파이프라인 에러 내역
           </div>
-          <div class="card-body p-0 flex-grow-1">
-            <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+          <div class="card-body p-0 flex-grow-1 d-flex flex-column">
+            <div class="table-responsive flex-grow-1" style="overflow-y: auto; min-height: 520px; max-height: 560px;">
               <table class="table table-hover mb-0 align-middle">
                 <thead class="table-light text-muted" style="font-size:.8rem;">
                   <tr>
@@ -303,10 +306,12 @@
               </table>
             </div>
           </div>
-          <div class="card-footer bg-white border-0 py-2 d-flex justify-content-between align-items-center">
-            <button class="btn btn-xs btn-outline-secondary py-1 px-2" style="font-size: 0.72rem;" id="btnErrPrev" onclick="changeErrPage(-1)" disabled>이전</button>
-            <span class="text-muted" style="font-size: 0.75rem;" id="txtErrPage">1 / 1 쪽</span>
-            <button class="btn btn-xs btn-outline-secondary py-1 px-2" style="font-size: 0.72rem;" id="btnErrNext" onclick="changeErrPage(1)" disabled>다음</button>
+          <div class="card-footer bg-white border-0 py-2 d-flex justify-content-center align-items-center">
+            <nav aria-label="Errors page navigation">
+              <ul class="pagination pagination-sm mb-0" id="errorsPagination">
+                <!-- 동적 페이지네이션 -->
+              </ul>
+            </nav>
           </div>
         </div>
       </div>
@@ -428,10 +433,12 @@
               </table>
             </div>
           </div>
-          <div class="card-footer bg-white border-0 py-2 d-flex justify-content-between align-items-center">
-            <button class="btn btn-xs btn-outline-secondary py-1 px-2" style="font-size: 0.72rem;" id="btnAutoRunPrev" onclick="changeAutoRunPage(-1)" disabled>이전</button>
-            <span class="text-muted" style="font-size: 0.75rem;" id="txtAutoRunPage">1 / 1 쪽</span>
-            <button class="btn btn-xs btn-outline-secondary py-1 px-2" style="font-size: 0.72rem;" id="btnAutoRunNext" onclick="changeAutoRunPage(1)" disabled>다음</button>
+          <div class="card-footer bg-white border-0 py-2 d-flex justify-content-center align-items-center">
+            <nav aria-label="Auto Runs page navigation">
+              <ul class="pagination pagination-sm mb-0" id="autoRunsPagination">
+                <!-- 동적 페이지네이션 -->
+              </ul>
+            </nav>
           </div>
         </div>
       </div>
@@ -462,10 +469,12 @@
               </table>
             </div>
           </div>
-          <div class="card-footer bg-white border-0 py-2 d-flex justify-content-between align-items-center">
-            <button class="btn btn-xs btn-outline-secondary py-1 px-2" style="font-size: 0.72rem;" id="btnAutoErrPrev" onclick="changeAutoErrPage(-1)" disabled>이전</button>
-            <span class="text-muted" style="font-size: 0.75rem;" id="txtAutoErrPage">1 / 1 쪽</span>
-            <button class="btn btn-xs btn-outline-secondary py-1 px-2" style="font-size: 0.72rem;" id="btnAutoErrNext" onclick="changeAutoErrPage(1)" disabled>다음</button>
+          <div class="card-footer bg-white border-0 py-2 d-flex justify-content-center align-items-center">
+            <nav aria-label="Auto Errors page navigation">
+              <ul class="pagination pagination-sm mb-0" id="autoErrorsPagination">
+                <!-- 동적 페이지네이션 -->
+              </ul>
+            </nav>
           </div>
         </div>
       </div>
@@ -593,16 +602,33 @@ const pageSize = 10;
 
 let activeDashboardMode = 'manual'; // 'manual' or 'auto'
 let autoErrorsCache = {}; // 에러 정보 상세 모달 맵
+let selectedRunId = null; // 특정 파이프라인 구동 건 필터링 ID
+let cachedManualErrors = []; // 프론트엔드 실시간 필터링 캐시 저장소
+let fetchController = null; // 경합 방지용 비동기 요청 취소 컨트롤러
+let isFetchingManual = false; // 현재 수동 로그가 fetch 중인지 추적하는 플래그
 </script>
 
 {% raw %}
 <script>
 document.addEventListener('DOMContentLoaded', () => {
-  loadManualData();
+  const savedMode = localStorage.getItem('activeCrawlingTab') || 'manual';
+  activeDashboardMode = savedMode;
+  
+  if (savedMode === 'auto') {
+    const autoTabBtn = document.getElementById('auto-tab');
+    if (autoTabBtn) {
+      const tab = new bootstrap.Tab(autoTabBtn);
+      tab.show();
+    }
+    loadAutoData();
+  } else {
+    loadManualData();
+  }
+
   // 5초 주기로 활성화 탭 데이터 자동 새로고침
   setInterval(() => {
     if (activeDashboardMode === 'manual') {
-      loadManualData();
+      loadManualData(true);
     } else {
       loadAutoData();
     }
@@ -611,6 +637,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 function switchDashboardMode(mode) {
   activeDashboardMode = mode;
+  localStorage.setItem('activeCrawlingTab', mode);
   if (mode === 'manual') {
     loadManualData();
   } else {
@@ -618,9 +645,9 @@ function switchDashboardMode(mode) {
   }
 }
 
-function loadManualData() {
+function loadManualData(isSilent = false) {
   fetchStagingStatus();
-  fetchManualLogs();
+  fetchManualLogs(isSilent);
 }
 
 // ──────────────────────────────────────
@@ -737,13 +764,34 @@ async function fetchStagingStatus() {
   }
 }
 
-async function fetchManualLogs() {
+async function fetchManualLogs(isSilent = false) {
+  if (isFetchingManual && isSilent) {
+    // 이미 백그라운드 요청이 진행 중이면 추가적인 silent 갱신 요청은 경합 방지를 위해 스킵
+    return;
+  }
+
+  if (!isSilent) {
+    if (fetchController) {
+      fetchController.abort();
+    }
+    fetchController = new AbortController();
+  }
+  
+  const signal = fetchController ? fetchController.signal : null;
+  isFetchingManual = true;
+
   try {
-    const res = await fetch(`/api/admin/crawling/logs?run_page=${currentRunPage}&run_limit=${pageSize}&err_page=${currentErrPage}&err_limit=${pageSize}`);
+    // 최신 수동 에러를 100건 한 번에 가져와서 로컬 메모리 캐시에 탑재
+    let url = `/api/admin/crawling/logs?run_page=${currentRunPage}&run_limit=${pageSize}&err_page=1&err_limit=100`;
+    if (selectedRunId) {
+      url += `&run_id=${selectedRunId}`;
+    }
+    const res = await fetch(url, signal ? { signal } : {});
     const data = await res.json();
+    isFetchingManual = false;
     if (!data.success) return;
 
-    // 구동 내역 테이블 바인딩
+    // 1. 구동 내역 테이블 바인딩
     const runsBody = document.getElementById('runsTableBody');
     if (data.runs && data.runs.length > 0) {
       let runsHtml = '';
@@ -770,8 +818,11 @@ async function fetchManualLogs() {
           actionBadge = `<span class="badge bg-warning text-dark me-1" style="font-size:0.68rem; padding: 2px 4px;">수집</span>`;
         }
         
+        const isSelected = selectedRunId === r.run_id;
+        const rowStyle = isSelected ? 'background-color: #f0fdf4; border-left: 4px solid #16a34a;' : 'cursor: pointer;';
+
         runsHtml += `
-          <tr>
+          <tr style="${rowStyle}" onclick="selectRun(${r.run_id})">
             <td>
               <div class="d-flex align-items-center">
                 ${actionBadge}
@@ -791,47 +842,28 @@ async function fetchManualLogs() {
     }
 
     const totalRunPages = Math.max(1, Math.ceil(data.total_runs / pageSize));
-    document.getElementById('txtRunPage').textContent = `${currentRunPage} / ${totalRunPages} 쪽`;
-    document.getElementById('btnRunPrev').disabled = currentRunPage <= 1;
-    document.getElementById('btnRunNext').disabled = currentRunPage >= totalRunPages;
+    renderPaginationHTML('runsPagination', currentRunPage, totalRunPages, 'goToRunPage');
 
-    // 에러 내역 테이블 바인딩
-    const errorsBody = document.getElementById('errorsTableBody');
-    if (data.errors && data.errors.length > 0) {
-      let errHtml = '';
-      data.errors.forEach(e => {
-        const timeStr = new Date(e.created_at).toLocaleTimeString();
-        const runIdStr = e.run_id ? `[#${e.run_id}]` : '[#-]';
-        const brandPrefix = e.brand ? `<span class="badge bg-secondary me-1">[${e.brand}]</span>` : '';
-        const prodSuffix = e.product_id ? `<span class="badge bg-light text-dark border ms-1" style="font-size:.68rem;">ID: ${e.product_id}</span>` : '';
-        
-        errHtml += `
-          <tr>
-            <td><small class="text-muted">${timeStr} <span class="text-primary fw-bold" style="font-size:.7rem;">${runIdStr}</span></small></td>
-            <td><span class="text-danger fw-semibold" style="font-size:.73rem;">${e.error_type}</span></td>
-            <td>
-              <div class="d-flex align-items-center flex-wrap" style="gap: 2px;">
-                ${brandPrefix}
-                <div class="text-wrap text-break" style="font-size:.75rem; max-width: 480px;" title="${e.error_message}">
-                  ${e.error_message}
-                </div>
-                ${prodSuffix}
-              </div>
-            </td>
-          </tr>`;
-      });
-      errorsBody.innerHTML = errHtml;
-    } else {
-      errorsBody.innerHTML = '<tr><td colspan="3" class="text-center py-4 text-muted">최근 에러 내역이 없습니다.</td></tr>';
+    // 2. 에러 로그 로컬 캐시 업데이트
+    if (data.errors) {
+      cachedManualErrors = data.errors;
     }
-
-    const totalErrPages = Math.max(1, Math.ceil(data.total_errors / pageSize));
-    document.getElementById('txtErrPage').textContent = `${currentErrPage} / ${totalErrPages} 쪽`;
-    document.getElementById('btnErrPrev').disabled = currentErrPage <= 1;
-    document.getElementById('btnErrNext').disabled = currentErrPage >= totalErrPages;
+    
+    // 로컬 메모리 엔진을 기동하여 즉시 필터링/페이징 렌더링 (렉 0%)
+    renderErrorsEngine();
 
   } catch (err) {
+    isFetchingManual = false;
+    if (err.name === 'AbortError') {
+      // AbortError인 경우에도 200ms 후에 로딩 락이 풀리도록 Fallback으로 renderErrorsEngine()을 한 번 더 수행
+      setTimeout(() => {
+        renderErrorsEngine();
+      }, 200);
+      return;
+    }
     console.error("로그 조회 실패:", err);
+    // 에러 발생 시에도 화면 락을 풀고 로컬 캐시 백업 렌더링 유지
+    renderErrorsEngine();
   }
 }
 
@@ -952,9 +984,7 @@ async function fetchAutoLogs() {
     }
 
     const totalRunPages = Math.max(1, Math.ceil(data.total_runs / pageSize));
-    document.getElementById('txtAutoRunPage').textContent = `${currentAutoRunPage} / ${totalRunPages} 쪽`;
-    document.getElementById('btnAutoRunPrev').disabled = currentAutoRunPage <= 1;
-    document.getElementById('btnAutoRunNext').disabled = currentAutoRunPage >= totalRunPages;
+    renderPaginationHTML('autoRunsPagination', currentAutoRunPage, totalRunPages, 'goToAutoRunPage');
 
     // 2) 실시간 자동 에러 내역 바인딩 (피드백 반영: 격리된 컬럼으로 브랜드, 분류, 상품명, 메시지 노출)
     const autoErrorsBody = document.getElementById('autoErrorsTableBody');
@@ -984,9 +1014,7 @@ async function fetchAutoLogs() {
     }
 
     const totalErrPages = Math.max(1, Math.ceil(data.total_errors / pageSize));
-    document.getElementById('txtAutoErrPage').textContent = `${currentAutoErrPage} / ${totalErrPages} 쪽`;
-    document.getElementById('btnAutoErrPrev').disabled = currentAutoErrPage <= 1;
-    document.getElementById('btnAutoErrNext').disabled = currentAutoErrPage >= totalErrPages;
+    renderPaginationHTML('autoErrorsPagination', currentAutoErrPage, totalErrPages, 'goToAutoErrPage');
 
     document.getElementById('lastRefreshTimeAuto').textContent = `마지막 새로고침: ${new Date().toLocaleTimeString()}`;
   } catch (err) {
@@ -1204,24 +1232,200 @@ async function clearStaging(brand) {
 }
 
 // ─── 페이징 이벤트 핸들러 ───
-function changeRunPage(direction) {
-  currentRunPage += direction;
+// ─── 공통 페이지네이션 동적 렌더러 ───
+function renderPaginationHTML(containerId, currentPage, totalPages, clickHandlerName) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+
+  let html = '';
+  
+  // 이전 버튼
+  const prevDisabled = currentPage <= 1 ? 'disabled' : '';
+  const prevClick = currentPage <= 1 ? '' : `onclick="${clickHandlerName}(${currentPage - 1})"`;
+  html += `<li class="page-item ${prevDisabled}">
+    <a class="page-link" href="javascript:void(0)" ${prevClick} aria-label="Previous" style="font-size: 0.72rem; padding: 4px 8px;">
+      <span aria-hidden="true">&laquo; 이전</span>
+    </a>
+  </li>`;
+
+  // 10개 단위 슬라이딩 페이지 표시
+  const pageGroup = Math.ceil(currentPage / 10);
+  const startPage = (pageGroup - 1) * 10 + 1;
+  const endPage = Math.min(totalPages, pageGroup * 10);
+
+  for (let i = startPage; i <= endPage; i++) {
+    const activeClass = i === currentPage ? 'active' : '';
+    html += `<li class="page-item ${activeClass}">
+      <a class="page-link" href="javascript:void(0)" onclick="${clickHandlerName}(${i})" style="font-size: 0.72rem; padding: 4px 8px;">${i}</a>
+    </li>`;
+  }
+
+  // 다음 버튼
+  const nextDisabled = currentPage >= totalPages ? 'disabled' : '';
+  const nextClick = currentPage >= totalPages ? '' : `onclick="${clickHandlerName}(${currentPage + 1})"`;
+  html += `<li class="page-item ${nextDisabled}">
+    <a class="page-link" href="javascript:void(0)" ${nextClick} aria-label="Next" style="font-size: 0.72rem; padding: 4px 8px;">
+      <span>다음 &raquo;</span>
+    </a>
+  </li>`;
+
+  container.innerHTML = html;
+}
+
+function goToRunPage(page) {
+  if (page < 1) return;
+  
+  // 페이지 이동 시 선택 필터가 있으면 해제하여 정합성 보장
+  selectedRunId = null;
+  const clearBtn = document.getElementById('clearRunFilterBtn');
+  if (clearBtn) {
+    clearBtn.classList.add('d-none');
+  }
+  
+  // 구동 내역 목록에서 모든 행 스타일 초기화
+  const rows = document.querySelectorAll('#runsTableBody tr');
+  rows.forEach(row => {
+    row.style.backgroundColor = '';
+    row.style.borderLeft = '';
+  });
+
+  currentRunPage = page;
   fetchManualLogs();
 }
 
-function changeErrPage(direction) {
-  currentErrPage += direction;
-  fetchManualLogs();
+function goToErrPage(page) {
+  if (page < 1) return;
+  currentErrPage = page;
+  renderErrorsEngine();
 }
 
-function changeAutoRunPage(direction) {
-  currentAutoRunPage += direction;
+function goToAutoRunPage(page) {
+  if (page < 1) return;
+  currentAutoRunPage = page;
   fetchAutoLogs();
 }
 
-function changeAutoErrPage(direction) {
-  currentAutoErrPage += direction;
+function goToAutoErrPage(page) {
+  if (page < 1) return;
+  currentAutoErrPage = page;
   fetchAutoLogs();
+}
+
+// ─── 특정 구동건 에러 필터링 핸들러 ───
+function selectRun(runId) {
+  runId = Number(runId);
+
+  if (selectedRunId === runId) {
+    clearRunFilter();
+    return;
+  }
+  selectedRunId = runId;
+  currentErrPage = 1; // 에러 목록 페이지 초기화
+  
+  const clearBtn = document.getElementById('clearRunFilterBtn');
+  if (clearBtn) {
+    clearBtn.classList.remove('d-none');
+  }
+  
+  // 구동 내역 목록에서 클릭된 행 스타일 즉시 업데이트 (딜레이 없음)
+  const rows = document.querySelectorAll('#runsTableBody tr');
+  rows.forEach(row => {
+    if (row.getAttribute('onclick') && row.getAttribute('onclick').includes(`selectRun(${runId})`)) {
+      row.style.backgroundColor = '#f0fdf4';
+      row.style.borderLeft = '4px solid #16a34a';
+    } else {
+      row.style.backgroundColor = '';
+      row.style.borderLeft = '';
+    }
+  });
+
+  // 백엔드 API 딜레이 없이 로컬 캐시에서 즉시 필터 렌더링 (렉 0%)
+  renderErrorsEngine();
+
+  // 최신 에러 로그 갱신을 위해 백그라운드로 조용히 fetch
+  loadManualData(true);
+}
+
+function clearRunFilter() {
+  selectedRunId = null;
+  currentErrPage = 1;
+  
+  const clearBtn = document.getElementById('clearRunFilterBtn');
+  if (clearBtn) {
+    clearBtn.classList.add('d-none');
+  }
+  
+  // 구동 내역 목록에서 모든 행 스타일 즉시 초기화
+  const rows = document.querySelectorAll('#runsTableBody tr');
+  rows.forEach(row => {
+    row.style.backgroundColor = '';
+    row.style.borderLeft = '';
+  });
+
+  // 백엔드 API 딜레이 없이 로컬 캐시에서 즉시 전체 렌더링 (렉 0%)
+  renderErrorsEngine();
+
+  // 최신 에러 로그 갱신을 위해 백그라운드로 조용히 fetch
+  loadManualData(true);
+}
+
+function renderErrorsEngine() {
+  const errorsBody = document.getElementById('errorsTableBody');
+  if (!errorsBody) return;
+  
+  errorsBody.style.opacity = '1';
+  
+  let filtered = cachedManualErrors;
+  if (selectedRunId) {
+    filtered = cachedManualErrors.filter(e => Number(e.run_id) === Number(selectedRunId));
+  }
+  
+  const totalErrCount = filtered.length;
+  const totalErrPages = Math.max(1, Math.ceil(totalErrCount / pageSize));
+  
+  // 현재 에러 페이지가 범위를 벗어나지 않도록 보정
+  if (currentErrPage > totalErrPages) {
+    currentErrPage = totalErrPages;
+  }
+  if (currentErrPage < 1) {
+    currentErrPage = 1;
+  }
+  
+  // 페이징에 따른 슬라이싱
+  const startIdx = (currentErrPage - 1) * pageSize;
+  const endIdx = startIdx + pageSize;
+  const pageItems = filtered.slice(startIdx, endIdx);
+  
+  // 페이징 UI 업데이트
+  renderPaginationHTML('errorsPagination', currentErrPage, totalErrPages, 'goToErrPage');
+  
+  if (pageItems && pageItems.length > 0) {
+    let errHtml = '';
+    pageItems.forEach(e => {
+      const timeStr = new Date(e.created_at).toLocaleTimeString();
+      const runIdStr = e.run_id ? `[#${e.run_id}]` : '[#-]';
+      const brandPrefix = e.brand ? `<span class="badge bg-secondary me-1">[${e.brand}]</span>` : '';
+      const prodSuffix = e.product_id ? `<span class="badge bg-light text-dark border ms-1" style="font-size:.68rem;">ID: ${e.product_id}</span>` : '';
+      
+      errHtml += `
+        <tr>
+          <td><small class="text-muted">${timeStr} <span class="text-primary fw-bold" style="font-size:.7rem;">${runIdStr}</span></small></td>
+          <td><span class="text-danger fw-semibold" style="font-size:.73rem;">${e.error_type}</span></td>
+          <td>
+            <div class="d-flex align-items-center flex-wrap" style="gap: 2px;">
+              ${brandPrefix}
+              <div class="text-wrap text-break" style="font-size:.75rem; max-width: 480px;" title="${e.error_message}">
+                ${e.error_message}
+              </div>
+              ${prodSuffix}
+            </div>
+          </td>
+        </tr>`;
+    });
+    errorsBody.innerHTML = errHtml;
+  } else {
+    errorsBody.innerHTML = '<tr><td colspan="3" class="text-center py-4 text-muted">최근 에러 내역이 없습니다.</td></tr>';
+  }
 }
 </script>
 {% endraw %}
