@@ -128,7 +128,7 @@ jobs:
       - name: 의존성 설치
         run: |
           python -m pip install --upgrade pip
-          pip install playwright psycopg2-binary aiohttp cloudinary python-dotenv requests numpy
+          pip install playwright psycopg2-binary aiohttp cloudinary python-dotenv requests numpy torch transformers
 
       - name: Playwright 브라우저 설치
         run: |
@@ -147,6 +147,8 @@ jobs:
           PROD_CLOUDINARY_API_KEY: ${{ secrets.PROD_CLOUDINARY_API_KEY }}
           DEV_CLOUDINARY_API_SECRET: ${{ secrets.DEV_CLOUDINARY_API_SECRET }}
           PROD_CLOUDINARY_API_SECRET: ${{ secrets.PROD_CLOUDINARY_API_SECRET }}
+          HF_SPACE_URL: ${{ secrets.HF_SPACE_URL }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: |
@@ -169,6 +171,10 @@ jobs:
             export CLOUDINARY_API_KEY="$DEV_CLOUDINARY_API_KEY"
             export CLOUDINARY_API_SECRET="$DEV_CLOUDINARY_API_SECRET"
           fi
+
+          # Hugging Face 설정 추가 export
+          export HF_SPACE_URL="$HF_SPACE_URL"
+          export HF_TOKEN="$HF_TOKEN"
 
           EXTRA_ARGS=""
           if [ -n "${{ matrix.gender }}" ]; then
