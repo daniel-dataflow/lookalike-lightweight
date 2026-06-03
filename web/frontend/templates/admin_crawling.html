@@ -463,7 +463,7 @@
               <table class="table table-hover mb-0 align-middle" style="font-size:.8rem;">
                 <thead class="table-light text-muted">
                   <tr>
-                    <th style="width: 15%;">시간</th>
+                    <th style="width: 15%;">시간/번호</th>
                     <th style="width: 15%;">브랜드</th>
                     <th style="width: 18%;">분류</th>
                     <th style="width: 22%;">상품명</th>
@@ -1125,9 +1125,10 @@ async function fetchAutoLogs() {
         const catMap = getErrorCategoryAndClass(e.error_type);
         const prodNameStr = e.prod_name ? e.prod_name : (e.product_id ? `ID: ${e.product_id}` : '공통오류');
         
+        const runIdStr = e.display_run_id ? `[#${e.display_run_id}]` : (e.run_id ? `[#${e.run_id}]` : '[#-]');
         errHtml += `
           <tr onclick="openAutoErrDetailModal(${e.error_id})">
-            <td><small class="text-muted">${timeStr}</small></td>
+            <td><small class="text-muted">${timeStr} <span class="text-primary fw-bold" style="font-size:.7rem;">${runIdStr}</span></small></td>
             <td><span class="badge bg-secondary">${brandStr}</span></td>
             <td><span class="badge-category ${catMap.badgeClass}">${catMap.label}</span></td>
             <td><div class="text-truncate fw-semibold" style="max-width: 140px;" title="${prodNameStr}">${prodNameStr}</div></td>
@@ -1530,7 +1531,7 @@ function renderErrorsEngine() {
     let errHtml = '';
     pageItems.forEach(e => {
       const timeStr = new Date(e.created_at).toLocaleTimeString();
-      const runIdStr = e.run_id ? `[#${e.run_id}]` : '[#-]';
+      const runIdStr = e.display_run_id ? `[#${e.display_run_id}]` : (e.run_id ? `[#${e.run_id}]` : '[#-]');
       const brandPrefix = e.brand ? `<span class="badge bg-secondary me-1">[${e.brand}]</span>` : '';
       const prodSuffix = e.product_id ? `<span class="badge bg-light text-dark border ms-1" style="font-size:.68rem;">ID: ${e.product_id}</span>` : '';
       

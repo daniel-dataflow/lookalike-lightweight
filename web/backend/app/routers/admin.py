@@ -952,9 +952,15 @@ async def get_crawling_logs(
             
             cur.execute(
                 f"""
-                SELECT pe.error_id, pe.run_id, pe.error_type, pe.error_message, pe.product_id, pe.source_url, pe.created_at, pr.brand
+                WITH numbered_runs AS (
+                    SELECT run_id, 
+                           ROW_NUMBER() OVER (PARTITION BY CASE WHEN pipeline_name = 'auto_crawling_pipeline' THEN 'auto' ELSE 'manual' END ORDER BY started_at ASC) as display_run_id
+                    FROM pipeline_runs
+                )
+                SELECT pe.error_id, pe.run_id, pe.error_type, pe.error_message, pe.product_id, pe.source_url, pe.created_at, pr.brand, nr.display_run_id
                 FROM pipeline_errors pe
                 JOIN pipeline_runs pr ON pe.run_id = pr.run_id
+                JOIN numbered_runs nr ON pr.run_id = nr.run_id
                 {err_where}
                 ORDER BY pe.created_at DESC
                 LIMIT %s OFFSET %s;
@@ -965,6 +971,7 @@ async def get_crawling_logs(
                 errors.append({
                     "error_id": r["error_id"],
                     "run_id": r["run_id"],
+                    "display_run_id": r["display_run_id"],
                     "error_type": r["error_type"],
                     "error_message": r["error_message"],
                     "product_id": r["product_id"],
@@ -1065,9 +1072,15 @@ async def get_crawling_auto_logs(
             
             cur.execute(
                 f"""
-                SELECT pe.error_id, pe.run_id, pe.error_type, pe.error_message, pe.product_id, pe.source_url, pe.created_at, pr.brand, pe.stack_trace, sp.prod_name
+                WITH numbered_runs AS (
+                    SELECT run_id, 
+                           ROW_NUMBER() OVER (PARTITION BY CASE WHEN pipeline_name = 'auto_crawling_pipeline' THEN 'auto' ELSE 'manual' END ORDER BY started_at ASC) as display_run_id
+                    FROM pipeline_runs
+                )
+                SELECT pe.error_id, pe.run_id, pe.error_type, pe.error_message, pe.product_id, pe.source_url, pe.created_at, pr.brand, pe.stack_trace, sp.prod_name, nr.display_run_id
                 FROM pipeline_errors pe
                 JOIN pipeline_runs pr ON pe.run_id = pr.run_id
+                JOIN numbered_runs nr ON pr.run_id = nr.run_id
                 LEFT JOIN staging_products sp ON pe.product_id = sp.product_id
                 {err_where}
                 ORDER BY pe.created_at DESC
@@ -1079,6 +1092,7 @@ async def get_crawling_auto_logs(
                 errors.append({
                     "error_id": r["error_id"],
                     "run_id": r["run_id"],
+                    "display_run_id": r["display_run_id"],
                     "error_type": r["error_type"],
                     "error_message": r["error_message"],
                     "product_id": r["product_id"],

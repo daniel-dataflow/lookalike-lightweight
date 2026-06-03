@@ -120,18 +120,29 @@ async def extract_product_data_from_dom(page):
 
             // --- 4. 상세 이미지 (goodsImages) 복구 ---
             const images = [];
-            document.querySelectorAll('img').forEach(img => {
+            
+            // 메인 고화질 이미지 영역에서 상품 이미지 추출
+            const mainImages = document.querySelectorAll('#godImgWrap .img-item img');
+            mainImages.forEach(img => {
                 let src = img.getAttribute('src') || img.getAttribute('data-src');
                 if (src && src.includes('ssfshop.com') && !src.includes('blank')) {
                     if (src.startsWith('//')) src = 'https:' + src;
                     images.push(src);
-                    
-                    if(src.includes('THNAIL')) {
-                        const highRes = src.replace('https://img.ssfshop.com/', 'https://img.ssfshop.com/cmd/RB_750x/src/https://img.ssfshop.com/');
-                        images.push(highRes);
-                    }
                 }
             });
+            
+            // 만약 메인 이미지가 없을 경우 썸네일 영역에서 대체 추출
+            if (images.length === 0) {
+                const thumbImages = document.querySelectorAll('.thumb-item img');
+                thumbImages.forEach(img => {
+                    let src = img.getAttribute('src') || img.getAttribute('data-src');
+                    if (src && src.includes('ssfshop.com') && !src.includes('blank')) {
+                        if (src.startsWith('//')) src = 'https:' + src;
+                        images.push(src);
+                    }
+                });
+            }
+            
             result.goodsImages = [...new Set(images)];
 
             // --- 5. 상세 스펙 및 정보 (goodsMaterial) 복구 ---

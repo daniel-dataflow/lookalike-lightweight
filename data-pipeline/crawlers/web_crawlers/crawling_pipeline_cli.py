@@ -315,12 +315,29 @@ async def run_pipeline(
 
     async def crawl_brand_categories():
         async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True)
+            # 봇 감지 솔루션(Akamai, Cloudflare) 우회를 위해 로컬 Chrome/Edge 채널을 우선 사용하고 실패 시 Firefox 및 일반 Chromium 순으로 폴백합니다.
+            browser = None
+            try:
+                logger.info("🌐 봇 감지 우회를 위해 로컬 Chrome 채널을 사용하여 브라우저를 시작합니다.")
+                browser = await p.chromium.launch(headless=True, channel="chrome")
+            except Exception as e1:
+                logger.warning(f"⚠️ Chrome 채널 실행 실패 ({e1}). Edge 채널로 시도합니다...")
+                try:
+                    browser = await p.chromium.launch(headless=True, channel="msedge")
+                except Exception as e2:
+                    logger.warning(f"⚠️ Edge 채널 실행 실패 ({e2}). Firefox 브라우저로 시도합니다...")
+                    try:
+                        browser = await p.firefox.launch(headless=True)
+                    except Exception as e3:
+                        logger.error(f"⚠️ Firefox 실행 실패 ({e3}). 일반 Chromium 헤드리스로 최종 폴백합니다.")
+                        browser = await p.chromium.launch(headless=True)
+                
             context = await browser.new_context(
                 user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
             )
             
-            if brand == "zara":
+            # 자라와 무신사 모두 봇 탐지 우회를 위해 stealth 스크립트 주입
+            if brand.lower() in ["zara", "musinsa"]:
                 stealth_js = """
                     Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
                     window.chrome = { runtime: {} };
@@ -355,10 +372,19 @@ async def run_pipeline(
                         
                         page = await context.new_page()
                         try:
+                            # 뷰포트 크기를 데스크톱 규격으로 강제 지정
+                            await page.set_viewport_size({"width": 1280, "height": 800})
                             await page.goto(target_url, timeout=15000, wait_until="domcontentloaded")
+                            
+                            # 비동기 데이터 바인딩 및 렌더링 대기
+                            if brand.lower() in ["zara", "musinsa"]:
+                                await asyncio.sleep(2.5)
+                            else:
+                                await asyncio.sleep(0.5)
+                                
                             for _ in range(2):
                                 await page.evaluate("window.scrollBy(0, 2000)")
-                                await asyncio.sleep(1.0)
+                                await asyncio.sleep(1.2)
                             
                             product_codes = []
                             if brand == "8seconds":
@@ -508,8 +534,8 @@ async def run_pipeline(
                     thumbnail_url = item.get("thumbnailImageUrl", "")
                     images = item.get("goodsImages", [])
                     
-                    # img.goodwearmall.com 도메인 상품 이미지만 필터링
-                    _LOGO_KWDS = ["static.goodwearmall", "topten10_mall", "og_goodwearmall", "noimage", "logo", "icon", "banner"]
+                    # img.goodwearmall.com 도메인 상품 및 8세컨즈 브랜드 배너 이미지 필터링
+                    _LOGO_KWDS = ["static.goodwearmall", "topten10_mall", "og_goodwearmall", "noimage", "logo", "icon", "banner", "display/category", "brandshop"]
                     valid_images = [
                         img for img in images
                         if img and not any(kw in img.lower() for kw in _LOGO_KWDS)
