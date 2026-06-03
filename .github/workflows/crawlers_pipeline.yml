@@ -149,6 +149,8 @@ jobs:
           PROD_CLOUDINARY_API_SECRET: ${{ secrets.PROD_CLOUDINARY_API_SECRET }}
           HF_SPACE_URL: ${{ secrets.HF_SPACE_URL }}
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          NAVER_CLIENT_ID: ${{ secrets.NAVER_CLIENT_ID }}
+          NAVER_CLIENT_SECRET: ${{ secrets.NAVER_CLIENT_SECRET }}
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: |
