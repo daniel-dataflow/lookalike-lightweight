@@ -213,9 +213,7 @@ async def upload_image_to_cloudinary(session: aiohttp.ClientSession, url: str, f
 
                 def _upload():
                     upload_params = {
-                        "folder": folder,
-                        "format": "webp",
-                        "quality": "auto"
+                        "folder": folder
                     }
                     if public_id:
                         upload_params["public_id"] = public_id
@@ -223,7 +221,10 @@ async def upload_image_to_cloudinary(session: aiohttp.ClientSession, url: str, f
                         file_io,
                         **upload_params
                     )
-                    return res.get("secure_url") or res.get("url")
+                    url = res.get("secure_url") or res.get("url")
+                    if url and "image/upload/" in url:
+                        url = url.replace("image/upload/", "image/upload/q_auto,f_webp/")
+                    return url
 
                 uploaded_url = await asyncio.to_thread(_upload)
                 if uploaded_url:

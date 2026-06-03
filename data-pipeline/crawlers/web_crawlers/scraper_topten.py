@@ -63,13 +63,39 @@ async def extract_product_data_from_dom(page):
             result.goodsNm = document.querySelector('meta[property="og:title"]')?.content || document.title;
             result.brandName = "TOPTEN10";
             let thumb = "";
-            const mainImg = document.querySelector('.goods-img img, .img-zoom img, .prd-detail-img img, #goodsImg img');
-            if (mainImg) {
-                thumb = mainImg.getAttribute('src') || mainImg.getAttribute('data-src') || "";
-            }
+            
+            // 1. ld+json에서 상품 이미지 추출 시도 (가장 정확하고 레이지 로딩 영향을 받지 않음)
+            try {
+                const ldJsonScripts = document.querySelectorAll('script[type="application/ld+json"]');
+                for (const script of ldJsonScripts) {
+                    const jsonData = JSON.parse(script.innerText);
+                    if (jsonData['@type'] === 'Product' && jsonData.image) {
+                        const imgUrl = jsonData.image;
+                        // 공통 브랜드 로고 또는 기본 썸네일 제외 필터링
+                        if (imgUrl && !imgUrl.includes('og_goodwearmall') && !imgUrl.includes('og_toptenclub') && !imgUrl.includes('NoImage')) {
+                            thumb = imgUrl;
+                            break;
+                        }
+                    }
+                }
+            } catch (e) {}
+
+            // 2. DOM 엘리먼트에서 lazy loading 속성을 우선하여 획득
             if (!thumb) {
-                thumb = document.querySelector('meta[property="og:image"]')?.content || "";
+                const mainImg = document.querySelector('.goods-img img, .img-zoom img, .prd-detail-img img, #goodsImg img');
+                if (mainImg) {
+                    thumb = mainImg.getAttribute('data-src') || mainImg.getAttribute('src') || "";
+                }
             }
+
+            // 3. 차선책 og:image 검사 (공통 브랜드 로고인 경우 제외)
+            if (!thumb) {
+                const og = document.querySelector('meta[property="og:image"]')?.content || "";
+                if (og && !og.includes('og_toptenclub') && !og.includes('og_goodwearmall')) {
+                    thumb = og;
+                }
+            }
+
             if (thumb.startsWith('//')) thumb = 'https:' + thumb;
             result.thumbnailImageUrl = thumb;
 
