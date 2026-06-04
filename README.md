@@ -152,9 +152,9 @@ Lookalike 프로젝트는 고비용의 분산 빅데이터 클러스터 환경�
 ```mermaid
 graph TD
     A["[1단계] 로컬 컨테이너 PoC<br>(Docker 기반 팀 공동 개발)"] 
-    ──► B["[2단계] AWS 클라우드 확장<br>(ML 탑재 + Kafka/ES 실시간 로그망)"]
-    ──► C["[3단계] GCP 인프라 이전<br>(자원 한계 대응 1차 기능 축소 & 시간 제한)"]
-    ──► D["[4단계] Render 3세대 경량 서버 (현재)<br>(컨테이너 해체 ➔ Serverless DB + HF API 분산 위탁)"]
+    --> B["[2단계] AWS 클라우드 확장<br>(ML 탑재 + Kafka/ES 실시간 로그망)"]
+    --> C["[3단계] GCP 인프라 이전<br>(자원 한계 대응 1차 기능 축소 & 시간 제한)"]
+    --> D["[4단계] Render 3세대 경량 서버 (현재)<br>(컨테이너 해체 ➔ Serverless DB + HF API 분산 위탁)"]
     
     style A fill:#f9f,stroke:#333,stroke-width:2px
     style B fill:#bbf,stroke:#333,stroke-width:2px
