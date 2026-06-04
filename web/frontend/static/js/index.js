@@ -461,12 +461,37 @@ document.addEventListener('DOMContentLoaded', function () {
         formData.append('image', file);
 
         const loading = document.getElementById('detectLoading');
+        const statusMsg = document.getElementById('detectStatusMsg');
+        const elapsedEl = document.getElementById('detectElapsed');
         const bboxContainer = document.getElementById('bboxContainer');
         const instruction = document.getElementById('bboxInstruction');
 
-        loading.classList.remove('d-none');
+        // Bootstrap 클래스 충돌 방지: style.display로 직접 제어
+        loading.style.display = 'flex';
         bboxContainer.innerHTML = '';
         instruction.classList.add('d-none');
+
+        // 경과 시간 리셋
+        elapsedEl.textContent = '경과: 0초';
+        statusMsg.textContent = '🤖 AI 모델 준비 중...';
+
+        // 경과 시간 타이머 + 단계별 메시지
+        const detectStart = Date.now();
+        const detectMessages = [
+            { at: 0,  msg: '🤖 AI 모델 준비 중...' },
+            { at: 5,  msg: '🔍 의류 인식 시작...' },
+            { at: 15, msg: '⏳ AI 서버 워밍업 중... (최초 요청 시 정상입니다)' },
+            { at: 30, msg: '🌀 데이터 처리 중...조금만 기다려 주세요!' },
+        ];
+        const detectTimer = setInterval(() => {
+            const sec = Math.floor((Date.now() - detectStart) / 1000);
+            elapsedEl.textContent = `경과: ${sec}초`;
+            // 현재 시간에 맞는 메시지 선택 (역순환하여 유지)
+            const applicable = detectMessages.filter(m => sec >= m.at);
+            if (applicable.length > 0) {
+                statusMsg.textContent = applicable[applicable.length - 1].msg;
+            }
+        }, 1000);
 
         try {
             const response = await fetch('/api/search/detect', {
@@ -481,14 +506,26 @@ document.addEventListener('DOMContentLoaded', function () {
             if (data.success && data.boxes && data.boxes.length > 0) {
                 hasBboxes = true;
                 instruction.classList.remove('d-none');
+                statusMsg.textContent = `✅ ${data.boxes.length}개 의류 영역 탐지!`;
                 drawBboxes(data.boxes);
+                // 자동으로 탐지된 카테고리 적용 (UI 동기화)
+                if (data.detected_category) {
+                    const mapped = mapYoloLabelToCategory(data.detected_category);
+                    if (mapped && !selectedClothes) {
+                        applyCategorySelection(mapped);
+                    }
+                }
             } else {
                 hasBboxes = false;
+                statusMsg.textContent = '⚠️ 의류 미탐지 (수동으로 지정해주세요)';
             }
         } catch (e) {
             console.error('객체 탐지 오류:', e);
+            statusMsg.textContent = '⚠️ 웰밍업 타임아웃 (수동 모드 사용 가능)';
         } finally {
-            loading.classList.add('d-none');
+            clearInterval(detectTimer);
+            // 1.5초 후 자동으로 로딩 오버레이 숨김
+            setTimeout(() => { loading.style.display = 'none'; }, 1500);
         }
     }
 
@@ -513,8 +550,11 @@ document.addEventListener('DOMContentLoaded', function () {
             const originalX1 = Math.max(0, Math.min(box.x1, originalImageSize.w));
             const originalY1 = Math.max(0, Math.min(box.y1, originalImageSize.h));
 
-            const originalMaxX = Math.min(box.x1 + box.w, originalImageSize.w);
-            const originalMaxY = Math.min(box.y1 + box.h, originalImageSize.h);
+            // x2/y2를 직접 사용 (w/h보다 우선) - HF Space에서 y2를 확장한 경우 반드시 y2 사용
+            const rawX2 = (box.x2 != null) ? box.x2 : (box.x1 + box.w);
+            const rawY2 = (box.y2 != null) ? box.y2 : (box.y1 + box.h);
+            const originalMaxX = Math.min(rawX2, originalImageSize.w);
+            const originalMaxY = Math.min(rawY2, originalImageSize.h);
             const originalW = originalMaxX - originalX1;
             const originalH = originalMaxY - originalY1;
 
@@ -621,6 +661,44 @@ document.addEventListener('DOMContentLoaded', function () {
         searchBtn.disabled = true;
         searchBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span> 검색 중...';
 
+        // 검색 로딩 경과시간 + 단계 메시지 타이머
+        const searchStart = Date.now();
+        const searchMsgEl = document.getElementById('searchStatusMsg');
+        const searchElapsedEl = document.getElementById('searchElapsed');
+        const steps = [
+            document.getElementById('step1'),
+            document.getElementById('step2'),
+            document.getElementById('step3'),
+            document.getElementById('step4'),
+        ];
+        const stepMsgs = [
+            { at: 0,  stepIdx: 0, status: '⏳ AI 서버 연결 중...', main: '🔍 AI 모델을 깨우는 중...' },
+            { at: 10, stepIdx: 1, status: '⏳ 의류 인식 (YOLO) 실행 중...', main: '🤖 YOLO가 의류를 인식하는 중...' },
+            { at: 25, stepIdx: 2, status: '⏳ 패션 임베딩 생성 중...', main: '🎨 패션 특징 추출 중...' },
+            { at: 38, stepIdx: 3, status: '⏳ 유사 상품 검색 중...', main: '📦 유사 상품을 찾는 중...' },
+        ];
+        function _activateStep(idx) {
+            steps.forEach((el, i) => {
+                if (i < idx) { el.classList.remove('text-muted'); el.style.textDecoration = 'line-through'; el.style.color = '#aaa'; }
+                else if (i === idx) { el.classList.remove('text-muted'); el.style.textDecoration = ''; el.style.color = '#0d6efd'; el.style.fontWeight = 'bold'; }
+                else { el.classList.add('text-muted'); el.style.textDecoration = ''; el.style.color = ''; el.style.fontWeight = ''; }
+            });
+        }
+        // 처음 단계 초기화
+        steps.forEach(el => { el.classList.add('text-muted'); el.style.textDecoration = ''; el.style.color = ''; el.style.fontWeight = ''; });
+        _activateStep(0);
+        const searchTimer = setInterval(() => {
+            const sec = Math.floor((Date.now() - searchStart) / 1000);
+            searchElapsedEl.textContent = `경과: ${sec}초`;
+            const applicable = stepMsgs.filter(m => sec >= m.at);
+            if (applicable.length > 0) {
+                const cur = applicable[applicable.length - 1];
+                searchMsgEl.textContent = cur.main;
+                steps[cur.stepIdx].textContent = cur.status;
+                _activateStep(cur.stepIdx);
+            }
+        }, 1000);
+
         try {
             const formData = new FormData();
 
@@ -715,6 +793,7 @@ document.addEventListener('DOMContentLoaded', function () {
             console.error('검색 오류:', err);
             alert(err.message || '검색 중 오류가 발생했습니다.');
         } finally {
+            clearInterval(searchTimer);
             searchLoading.classList.add('d-none');
             searchBtn.disabled = false;
             searchBtn.innerHTML = '<i class="fas fa-search me-2"></i> 검색 시작하기';

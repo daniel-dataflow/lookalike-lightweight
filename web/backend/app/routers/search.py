@@ -149,11 +149,12 @@ async def detect_objects(image: UploadFile = File(...)):
     """YOLO 기반 객체탐지 API (기존 프론트엔드 네모칸 조작 및 클릭 검색 완벽 호환 규격)"""
     try:
         image_bytes = await image.read()
-        # HuggingFace Space의 원본 결과를 수집
+        # HuggingFace Space 호출 - 이미 내부적으로 후처리(카테고리별 최고신뢰도 선택, 면적 필터링) 완료
         result = await search_service.call_hf_space_predict(image_bytes)
         raw_boxes = result.get("boxes", [])
-        
-        # 라벨 한영 매핑
+        detected_category = result.get("category")
+
+        # 라벨 한영 매핑 (HF Space에서 한글 레이블로 오는 경우 대비)
         label_map = {
             "아우터": "Outer",
             "상의": "Top",
@@ -162,7 +163,7 @@ async def detect_objects(image: UploadFile = File(...)):
             "top": "Top",
             "bottom": "Bottom"
         }
-        
+
         # 프론트엔드가 기대하는 x1, y1, x2, y2, w, h, conf, label 구조로 변환
         formatted_boxes = []
         for box in raw_boxes:
@@ -170,11 +171,10 @@ async def detect_objects(image: UploadFile = File(...)):
             y1 = box.get("y1", 0.0)
             x2 = box.get("x2", 0.0)
             y2 = box.get("y2", 0.0)
-            conf = box.get("conf") if box.get("conf") is not None else box.get("confidence", 0.0)
+            # HF Space v2: confidence 키, 구버전 호환: conf 키
+            conf = box.get("confidence") if box.get("confidence") is not None else box.get("conf", 0.0)
             raw_label = box.get("label", "unknown")
             label = label_map.get(raw_label.lower(), raw_label)
-            if raw_label in label_map:
-                label = label_map[raw_label]
 
             formatted_boxes.append({
                 "x1": x1,
@@ -184,12 +184,15 @@ async def detect_objects(image: UploadFile = File(...)):
                 "w": round(x2 - x1, 4),
                 "h": round(y2 - y1, 4),
                 "conf": conf,
-                "label": label
+                "label": label,
             })
-            
+
+        logger.info(f"YOLO 탐지 결과: {len(formatted_boxes)}개 박스, 카테고리={detected_category}")
+
         return {
             "success": True,
-            "boxes": formatted_boxes
+            "boxes": formatted_boxes,
+            "detected_category": detected_category,  # 프론트엔드 자동 카테고리 적용용
         }
     except Exception as e:
         logger.error(f"객체 탐지 실패: {e}", exc_info=True)

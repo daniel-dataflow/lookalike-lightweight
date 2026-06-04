@@ -100,11 +100,18 @@
                                     </div>
                                 </div>
 
-                                <!-- 로딩 오버레이 -->
+                                <!-- 로딩 오버레이 (단계별 진행 상태 표시) -->
                                 <div id="detectLoading"
-                                    class="position-absolute top-50 start-50 translate-middle d-none bg-dark text-white p-2 rounded bg-opacity-75"
-                                    style="z-index: 50;">
-                                    <span class="spinner-border spinner-border-sm me-1"></span> 의류 자동 인식 중...
+                                    class="position-absolute top-0 start-0 w-100 h-100 align-items-center justify-content-center"
+                                    style="z-index: 50; background: rgba(0,0,0,0.65); backdrop-filter: blur(2px); border-radius: 8px; display: none; flex-direction: column;">
+                                    <div class="text-white text-center px-3">
+                                        <div class="spinner-border text-info mb-2" role="status" style="width: 2rem; height: 2rem;">
+                                            <span class="visually-hidden">인식 중...</span>
+                                        </div>
+                                        <p id="detectStatusMsg" class="mb-1 fw-bold" style="font-size: 0.88rem;">🤖 AI 모델 준비 중...</p>
+                                        <p id="detectElapsed" class="mb-0 text-info" style="font-size: 0.78rem;">경과: 0초</p>
+                                        <p class="mb-0 text-warning mt-1" style="font-size: 0.72rem;">서버 절전 후 첨 요청 시 30초~1분 소요 / 이후는 빠름</p>
+                                    </div>
                                 </div>
 
                                 <button type="button" id="removeImageBtn"
@@ -159,14 +166,21 @@
     </div>
 </div>
 
-<!-- Loading Overlay -->
+<!-- Loading Overlay (단계별 메시지 표시) -->
 <div id="searchLoading" class="d-none">
     <div class="card bg-white border-0 shadow-sm mb-4">
-        <div class="card-body text-center py-5">
+        <div class="card-body text-center py-4">
             <div class="spinner-border text-primary mb-3" role="status">
                 <span class="visually-hidden">검색 중...</span>
             </div>
-            <p class="text-muted mb-0">이미지를 분석하고 유사 상품을 검색하고 있습니다...</p>
+            <p id="searchStatusMsg" class="fw-bold mb-1" style="font-size: 0.95rem;">🔍 AI 모델을 깨우는 중...</p>
+            <p id="searchElapsed" class="text-muted small mb-2">경과: 0초</p>
+            <div id="searchStepList" class="text-start d-inline-block" style="font-size: 0.8rem; color: #666;">
+                <div id="step1" class="mb-1">⏳ AI 서버 연결 중...</div>
+                <div id="step2" class="mb-1 text-muted">— 의류 인식 (YOLO)</div>
+                <div id="step3" class="mb-1 text-muted">— 패션 임베딩 생성</div>
+                <div id="step4" class="mb-1 text-muted">— 유사 상품 검색</div>
+            </div>
         </div>
     </div>
 </div>

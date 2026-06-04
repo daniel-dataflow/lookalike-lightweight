@@ -169,11 +169,63 @@ async def lifespan(app: FastAPI):
     collector_task = asyncio.create_task(start_metric_collector())
     logger.info("📊 인프라 메트릭 수집 태스크 시작")
 
+    # HF Space Keep-Alive 백그라운드 태스크 기동
+    # ─────────────────────────────────────────────────
+    # HF Space 무료 플랜: 15분 비활동 시 절전 → 재기동에 30초~1분 소요
+    # 단순 HTTP GET(웹 페이지)으로는 모델이 깨어나지 않음
+    # → 실제 Gradio /predict API를 더미 이미지로 호출해야 웜 상태 유지
+    hf_keepalive_task = asyncio.create_task(_hf_space_keepalive_loop())
+    logger.info("🔥 HF Space Keep-Alive 태스크 시작 (9분 간격)")
+
     yield
 
     logger.info("앱 종료 - 데이터베이스 연결 해제")
     collector_task.cancel()
+    hf_keepalive_task.cancel()
     close_all_databases()
+
+
+async def _hf_space_keepalive_loop():
+    """
+    HF Space를 웜(Warm) 상태로 유지하기 위한 백그라운드 루프.
+
+    HF Space 무료 플랜은 15분 비활동 시 절전에 들어감.
+    단순 HTTP GET은 웹 페이지만 반환할 뿐 모델을 깨우지 않음.
+    → 1x1 더미 PNG 이미지로 실제 Gradio /predict를 호출해야
+      YOLO + Fashion-CLIP 모델이 메모리에 유지됨.
+
+    9분 간격으로 호출하여 15분 제한에 충분한 여유를 확보.
+    """
+    import io
+    from PIL import Image as PILImage
+
+    # 1x1 흰색 더미 PNG 이미지 생성 (바이트 소모 최소화)
+    _dummy_buf = io.BytesIO()
+    PILImage.new("RGB", (1, 1), color=(255, 255, 255)).save(_dummy_buf, format="PNG")
+    _dummy_bytes = _dummy_buf.getvalue()
+
+    # 최초 기동 시 60초 대기 (서버 완전 기동 후 실행)
+    await asyncio.sleep(60)
+
+    while True:
+        try:
+            from .services.search_service import search_service, HF_SPACE_BASE
+            if HF_SPACE_BASE:
+                logger.info("🔥 [Keep-Alive] HF Space 더미 predict 호출 시작")
+                result = await search_service.call_hf_space_predict(_dummy_bytes)
+                status = result.get("status", "unknown")
+                logger.info(f"✅ [Keep-Alive] HF Space 응답: status={status}")
+            else:
+                logger.debug("[Keep-Alive] HF_SPACE_URL 미설정 → skip")
+        except asyncio.CancelledError:
+            logger.info("🛑 [Keep-Alive] 태스크 종료")
+            break
+        except Exception as e:
+            logger.warning(f"⚠️ [Keep-Alive] HF Space ping 실패 (무시): {e}")
+
+        # 9분 대기 (15분 제한의 60%)
+        await asyncio.sleep(9 * 60)
+
 
 
 # ──────────────────────────────────────
