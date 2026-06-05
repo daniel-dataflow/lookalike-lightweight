@@ -58,6 +58,10 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: str = ""
     GEMINI_EMBED_MODEL: str = "text-embedding-004"
 
+    # === 로컬 ML 설정 ===
+    USE_LOCAL_ML: bool = True
+    LOCAL_YOLO_PATH: str = "ml-models/backup/best.pt"
+
     # === Neon DB API 설정 ===
     NEON_KEY_ACCOUNT_1: str = ""
     NEON_KEY_ACCOUNT_2: str = ""

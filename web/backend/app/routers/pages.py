@@ -32,11 +32,11 @@ def _get_admin_session(request: Request) -> dict | None:
 
 @router.get("/", response_class=HTMLResponse)
 async def index(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+    return templates.TemplateResponse(request=request, name="index.html", context={"request": request})
 
 @router.get("/search", response_class=HTMLResponse)
 async def search_page(request: Request, q: str = ""):
-    return templates.TemplateResponse("search_results.html", {"request": request, "query": q})
+    return templates.TemplateResponse(request=request, name="search_results.html", context={"request": request, "query": q})
 
 @router.get("/product/{product_id}", response_class=HTMLResponse)
 async def product_detail_page(request: Request, product_id: str):
@@ -56,15 +56,15 @@ async def product_detail_page(request: Request, product_id: str):
             p["discount"] = discount
             p["discount_rate"] = int((discount / base_price) * 100) if base_price > 0 else 0
             
-        return templates.TemplateResponse("product_detail.html", {
+        return templates.TemplateResponse(request=request, name="product_detail.html", context={
             "request": request, 
             "product": product_dict,
             "prices": prices_list
         })
     except HTTPException as e:
-        return templates.TemplateResponse("error.html", {"request": request, "error": e.detail}, status_code=e.status_code)
+        return templates.TemplateResponse(request=request, name="error.html", context={"request": request, "error": e.detail}, status_code=e.status_code)
     except Exception as e:
-        return templates.TemplateResponse("error.html", {"request": request, "error": "서버 오류가 발생했습니다"}, status_code=500)
+        return templates.TemplateResponse(request=request, name="error.html", context={"request": request, "error": "서버 오류가 발생했습니다"}, status_code=500)
 
 @router.get("/mypage", response_class=HTMLResponse)
 async def mypage(request: Request):
@@ -72,14 +72,14 @@ async def mypage(request: Request):
     if not session:
         return RedirectResponse(url="/?error=login_required", status_code=302)
     request.state.user = session
-    return templates.TemplateResponse("mypage.html", {"request": request})
+    return templates.TemplateResponse(request=request, name="mypage.html", context={"request": request})
 
 @router.get("/admin/login", response_class=HTMLResponse)
 async def admin_login_page(request: Request):
     session = _get_admin_session(request)
     if session and session.get("is_admin"):
         return RedirectResponse(url="/admin/infra", status_code=302)
-    return templates.TemplateResponse("admin_login.html", {"request": request})
+    return templates.TemplateResponse(request=request, name="admin_login.html", context={"request": request})
 
 @router.get("/admin", response_class=HTMLResponse)
 async def admin_root(request: Request):
@@ -93,66 +93,66 @@ async def admin_infra(request: Request):
     session = _get_admin_session(request)
     if not session or not session.get("is_admin"):
         return RedirectResponse(url="/admin/login", status_code=302)
-    return templates.TemplateResponse("admin_infra.html", {"request": request})
+    return templates.TemplateResponse(request=request, name="admin_infra.html", context={"request": request})
 
 @router.get("/admin/stats", response_class=HTMLResponse)
 async def admin_stats(request: Request):
     session = _get_admin_session(request)
     if not session or not session.get("is_admin"):
         return RedirectResponse(url="/admin/login", status_code=302)
-    return templates.TemplateResponse("admin_dashboard.html", {"request": request})
+    return templates.TemplateResponse(request=request, name="admin_dashboard.html", context={"request": request})
 
 @router.get("/inquiry", response_class=HTMLResponse)
 async def inquiry_page(request: Request):
-    return templates.TemplateResponse("inquiry.html", {"request": request})
+    return templates.TemplateResponse(request=request, name="inquiry.html", context={"request": request})
 
 @router.get("/recent", response_class=HTMLResponse)
 async def recent_viewed(request: Request):
     session = _get_session(request)
     if not session:
         return RedirectResponse(url="/?error=login_required", status_code=302)
-    return templates.TemplateResponse("recent.html", {"request": request})
+    return templates.TemplateResponse(request=request, name="recent.html", context={"request": request})
 
 @router.get("/likes", response_class=HTMLResponse)
 async def likes(request: Request):
     session = _get_session(request)
     if not session:
         return RedirectResponse(url="/?error=login_required", status_code=302)
-    return templates.TemplateResponse("likes.html", {"request": request})
+    return templates.TemplateResponse(request=request, name="likes.html", context={"request": request})
 
 @router.get("/search-history", response_class=HTMLResponse)
 async def search_history(request: Request):
-    return templates.TemplateResponse("search_history.html", {"request": request})
+    return templates.TemplateResponse(request=request, name="search_history.html", context={"request": request})
 
 @router.get("/terms", response_class=HTMLResponse)
 async def terms_page(request: Request):
-    return templates.TemplateResponse("terms.html", {"request": request})
+    return templates.TemplateResponse(request=request, name="terms.html", context={"request": request})
 
 @router.get("/privacy", response_class=HTMLResponse)
 async def privacy_page(request: Request):
-    return templates.TemplateResponse("privacy.html", {"request": request})
+    return templates.TemplateResponse(request=request, name="privacy.html", context={"request": request})
 
 @router.get("/team", response_class=HTMLResponse)
 async def team_page(request: Request):
-    return templates.TemplateResponse("team.html", {"request": request})
+    return templates.TemplateResponse(request=request, name="team.html", context={"request": request})
 
 @router.get("/teams", response_class=HTMLResponse)
 async def teams_page(request: Request):
-    return templates.TemplateResponse("teams.html", {"request": request})
+    return templates.TemplateResponse(request=request, name="teams.html", context={"request": request})
 
 @router.get("/admin/batch", response_class=HTMLResponse)
 async def admin_batch(request: Request):
     session = _get_admin_session(request)
     if not session or not session.get("is_admin"):
         return RedirectResponse(url="/admin/login", status_code=302)
-    return templates.TemplateResponse("admin_batch.html", {"request": request})
+    return templates.TemplateResponse(request=request, name="admin_batch.html", context={"request": request})
 
 @router.get("/admin/inquiry", response_class=HTMLResponse)
 async def admin_inquiry(request: Request):
     session = _get_admin_session(request)
     if not session or not session.get("is_admin"):
         return RedirectResponse(url="/admin/login", status_code=302)
-    return templates.TemplateResponse("admin_inquiry.html", {"request": request})
+    return templates.TemplateResponse(request=request, name="admin_inquiry.html", context={"request": request})
 
 @router.get("/admin/crawling", response_class=HTMLResponse)
 async def admin_crawling(request: Request):
@@ -160,12 +160,12 @@ async def admin_crawling(request: Request):
     session = _get_admin_session(request)
     if not session or not session.get("is_admin"):
         return RedirectResponse(url="/admin/login", status_code=302)
-    return templates.TemplateResponse("admin_crawling.html", {"request": request})
+    return templates.TemplateResponse(request=request, name="admin_crawling.html", context={"request": request})
 
 @router.get("/admin/logs", response_class=HTMLResponse)
 async def admin_logs(request: Request):
     session = _get_admin_session(request)
     if not session or not session.get("is_admin"):
         return RedirectResponse(url="/admin/login", status_code=302)
-    return templates.TemplateResponse("admin_logs.html", {"request": request})
+    return templates.TemplateResponse(request=request, name="admin_logs.html", context={"request": request})
 

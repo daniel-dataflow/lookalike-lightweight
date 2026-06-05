@@ -161,6 +161,7 @@ def write_progress(
     run_id: int = None,
     error: str = "",
     started_at: str = "",
+    target_counts: dict = None,
 ):
     """파이프라인 진행 상황을 JSON 파일에 기록합니다. 관리 화면이 폴링으로 읽어 표시합니다."""
     import time as _time
@@ -181,6 +182,7 @@ def write_progress(
         "error": error,
         "started_at": started_at,
         "updated_at": _time.strftime("%Y-%m-%dT%H:%M:%S"),
+        "target_counts": target_counts or {"Outer": 0, "Top": 0, "Bottom": 0},
     }
     try:
         with open(path, "w", encoding="utf-8") as f:
@@ -193,7 +195,7 @@ async def run_pipeline(
     brand: str, limit: int = 50, dry_run: bool = False, 
     action: str = "crawl", force: bool = False,
     gender: str = None, category: str = None, run_id: int = None,
-    force_download: bool = False
+    force_download: bool = False, product_id: str = None
 ):
     """
     특정 브랜드의 Playwright 크롤링 실행 및 
@@ -203,7 +205,7 @@ async def run_pipeline(
     _started_at = _time.strftime("%Y-%m-%dT%H:%M:%S")
     _all_phases = ["카테고리 스캔", "상품 크롤링", "이미지 업로드", "임베딩 생성", "DB 저장"]
 
-    logger.info(f"🚀 [{brand}] 크롤링 파이프라인 기동 (action={action}, limit={limit}, dry_run={dry_run}, force={force}, gender={gender}, category={category}, force_download={force_download})")
+    logger.info(f"🚀 [{brand}] 크롤링 파이프라인 기동 (action={action}, limit={limit}, dry_run={dry_run}, force={force}, gender={gender}, category={category}, force_download={force_download}, product_id={product_id})")
     
     # 윈도우 OS의 파일 ctime 보존 현상 방지를 위해 기존 진행률 파일 물리적 선 삭제
     try:
@@ -213,9 +215,13 @@ async def run_pipeline(
     except Exception as e:
         logger.warning(f"기존 진행 파일 삭제 실패: {e}")
 
+    # 홈페이지 실제 총 상품 수 카운팅 딕셔너리
+    target_counts = {"Outer": 0, "Top": 0, "Bottom": 0}
+
     write_progress(brand, step="파이프라인 시작", current=0, total=limit,
                    phases_done=[], phases_remaining=_all_phases,
-                   status="running", run_id=run_id, started_at=_started_at)
+                   status="running", run_id=run_id, started_at=_started_at,
+                   target_counts=target_counts)
     
     # [Phase 2] 24시간 검증 후 프로덕션 스위칭만 진행 (크롤링 스킵)
     if action == "swap":
@@ -241,7 +247,8 @@ async def run_pipeline(
     
     write_progress(brand, step="카테고리 스캔 중", current=0, total=limit,
                    phases_done=[], phases_remaining=_all_phases,
-                   status="running", run_id=run_id, started_at=_started_at)
+                   status="running", run_id=run_id, started_at=_started_at,
+                   target_counts=target_counts)
 
     # Playwright 크롤러 구동
     from playwright.async_api import async_playwright
@@ -317,20 +324,21 @@ async def run_pipeline(
         async with async_playwright() as p:
             # 봇 감지 솔루션(Akamai, Cloudflare) 우회를 위해 로컬 Chrome/Edge 채널을 우선 사용하고 실패 시 Firefox 및 일반 Chromium 순으로 폴백합니다.
             browser = None
+            launch_args = ["--disable-blink-features=AutomationControlled"]
             try:
                 logger.info("🌐 봇 감지 우회를 위해 로컬 Chrome 채널을 사용하여 브라우저를 시작합니다.")
-                browser = await p.chromium.launch(headless=True, channel="chrome")
+                browser = await p.chromium.launch(headless=True, channel="chrome", args=launch_args)
             except Exception as e1:
                 logger.warning(f"⚠️ Chrome 채널 실행 실패 ({e1}). Edge 채널로 시도합니다...")
                 try:
-                    browser = await p.chromium.launch(headless=True, channel="msedge")
+                    browser = await p.chromium.launch(headless=True, channel="msedge", args=launch_args)
                 except Exception as e2:
                     logger.warning(f"⚠️ Edge 채널 실행 실패 ({e2}). Firefox 브라우저로 시도합니다...")
                     try:
                         browser = await p.firefox.launch(headless=True)
                     except Exception as e3:
                         logger.error(f"⚠️ Firefox 실행 실패 ({e3}). 일반 Chromium 헤드리스로 최종 폴백합니다.")
-                        browser = await p.chromium.launch(headless=True)
+                        browser = await p.chromium.launch(headless=True, args=launch_args)
                 
             context = await browser.new_context(
                 user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -419,6 +427,42 @@ async def run_pipeline(
 
                             product_codes = list(set(product_codes))
                             logger.info(f"   🔗 카테고리 목록에서 상품 {len(product_codes)}개 식별 완료")
+
+                            # 홈페이지상의 실제 전체 상품 수 파싱
+                            cat_target_count = 0
+                            try:
+                                cat_target_count = await page.evaluate("""() => {
+                                    const selectors = [
+                                        '.gods-total span', '.gods-total strong', '.num',
+                                        'span.count', '.total-goods', '.goods-list-total', '.goods-list .total',
+                                        '.total-count', '.prod-count', '.prodCount',
+                                        '.product-count', '.num-items',
+                                        '.product-grid-header__product-count', 'span.product-count', '.result-count'
+                                    ];
+                                    for (const selector of selectors) {
+                                        const el = document.querySelector(selector);
+                                        if (el) {
+                                            const text = el.innerText.trim();
+                                            const num = text.replace(/[^0-9]/g, '');
+                                            if (num) {
+                                                const parsed = parseInt(num, 10);
+                                                if (parsed > 0) return parsed;
+                                            }
+                                        }
+                                    }
+                                    return 0;
+                                }""")
+                            except Exception as parse_err:
+                                logger.warning(f"⚠️ [{brand.upper()}] 전체 상품 수 엘리먼트 파싱 에러: {parse_err}")
+
+                            if cat_target_count > 0:
+                                target_counts[category_key] += cat_target_count
+                                logger.info(f"   📊 [{brand.upper()}] {gender_key} - {category_key} 홈페이지 총 수량: {cat_target_count}개 감지")
+                            else:
+                                fallback_cnt = len(product_codes)
+                                target_counts[category_key] += fallback_cnt
+                                logger.info(f"   📊 [{brand.upper()}] {gender_key} - {category_key} 홈페이지 수량 감지 실패. 식별된 갯수({fallback_cnt}개)로 폴백 누적")
+
                             await page.close()
 
                             pending_codes = product_codes
@@ -435,7 +479,54 @@ async def run_pipeline(
             
             await browser.close()
 
-    await crawl_brand_categories()
+    if product_id:
+        logger.info(f"🎯 [단일 상품 수집 모드] brand={brand}, product_id={product_id}")
+        # 기존 성별/카테고리 복원 시도
+        try:
+            prod_conn = get_prod_db_connection()
+            prod_cur = prod_conn.cursor()
+            prod_cur.execute("SELECT gender, category_code FROM products WHERE product_id = %s", (product_id,))
+            row = prod_cur.fetchone()
+            if row:
+                if not gender: gender = row[0]
+                if not category: category = row[1]
+            prod_cur.close()
+            prod_conn.close()
+        except Exception as e:
+            logger.warning(f"기존 상품 정보 복원 실패: {e}")
+            
+        gender = gender or "Men"
+        category = category or "Top"
+        
+        # 단일 상품 Playwright 수집 기동
+        async with async_playwright() as p:
+            launch_args = ["--disable-blink-features=AutomationControlled"]
+            browser = None
+            try:
+                browser = await p.chromium.launch(headless=True, channel="chrome", args=launch_args)
+            except Exception:
+                try:
+                    browser = await p.chromium.launch(headless=True, channel="msedge", args=launch_args)
+                except Exception:
+                    browser = await p.chromium.launch(headless=True, args=launch_args)
+                    
+            context = await browser.new_context(
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            )
+            # 자라/무신사 stealth 주입
+            if brand.lower() in ["zara", "musinsa"]:
+                stealth_js = """
+                    Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+                    window.chrome = { runtime: {} };
+                    Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3] });
+                    Object.defineProperty(navigator, 'languages', { get: () => ['ko-KR', 'ko', 'en-US', 'en'] });
+                """
+                await context.add_init_script(stealth_js)
+                
+            await process_product_link(product_id, gender, category, context)
+            await browser.close()
+    else:
+        await crawl_brand_categories()
     
     total_collected = len(collected_products)
     logger.info(f"📦 [{brand}] Playwright 크롤링 완료. 수집 데이터 개수: {total_collected} 건")
@@ -822,7 +913,8 @@ async def run_pipeline(
                                            phases_done=["카테고리 스캔", "상품 크롤링", "이미지 업로드"],
                                            phases_remaining=[f"임베딩 생성 ({total_collected}개)", "DB 저장"],
                                            current_item=current_item_str,
-                                           status="running", run_id=run_id, started_at=_started_at)
+                                           status="running", run_id=run_id, started_at=_started_at,
+                                           target_counts=target_counts)
                 
                 logger.info(f"✨ staging_product_embeddings 테이블에 실시간으로 {valid_embed_count}건 임베딩 벡터 적재 완료.")
             
@@ -835,7 +927,8 @@ async def run_pipeline(
                            phases_done=["카테고리 스캔", "상품 크롤링", "이미지 업로드", "임베딩 생성", "DB 저장"],
                            phases_remaining=[],
                            current_item=f"전체 {success_db_count}건 완료",
-                           status="done", run_id=run_id, started_at=_started_at)
+                           status="done", run_id=run_id, started_at=_started_at,
+                           target_counts=target_counts)
             
             # 수집된 pending_errors 일괄 DB 적재 처리 (Neon DB 동시 커넥션 수 초과 방지)
             if pending_errors and not dry_run:
@@ -848,13 +941,14 @@ async def run_pipeline(
                     except Exception as log_err:
                         logger.error(f"❌ 펜딩 에러 일괄 적재 중 예외: {log_err}")
 
-            return {"total_items": success_db_count, "new_items": new_items_count, "updated_items": updated_items_count, "embed_count": valid_embed_count}
+            return {"total_items": success_db_count, "new_items": new_items_count, "updated_items": updated_items_count, "embed_count": valid_embed_count, "target_counts": target_counts}
             
         except Exception as db_err:
             write_progress(brand, step="오류 발생", current=0, total=0,
                            phases_done=[], phases_remaining=[],
                            status="error", error=str(db_err)[:200],
-                           run_id=run_id, started_at=_started_at)
+                           run_id=run_id, started_at=_started_at,
+                           target_counts=target_counts)
             dw_conn.rollback()
             raise RuntimeError(f"스테이징 적재 중 DB 에러: {db_err}")
         finally:
@@ -874,6 +968,7 @@ def main():
     parser.add_argument("--gender", choices=["Men", "Women"], help="수집할 타겟 성별 (분할 크롤링용)")
     parser.add_argument("--category", choices=["Outer", "Top", "Bottom"], help="수집할 카테고리 (분할 크롤링용)")
     parser.add_argument("--force-download", action="store_true", help="캐시를 강제 스킵하고 이미지를 새로 다운로드하며 네이버 최저가 API 구동")
+    parser.add_argument("--product-id", help="단일 재수집을 실행할 상품 ID")
     
     args = parser.parse_args()
     
@@ -893,7 +988,8 @@ def main():
             gender=args.gender,
             category=args.category,
             run_id=run_id,
-            force_download=args.force_download
+            force_download=args.force_download,
+            product_id=args.product_id
         ))
         logger.info(f"🎉 [{args.brand}] 배치 파이프라인이 성공적으로 완수되었습니다.")
         if run_id:
@@ -901,7 +997,12 @@ def main():
             new_val = metrics.get("new_items", 0) if metrics else 0
             upd_val = metrics.get("updated_items", 0) if metrics else 0
             embed_val = metrics.get("embed_count", 0) if metrics else 0
-            log_pipeline_end(run_id, "SUCCESS", total_items=total, new_items=new_val, updated_items=upd_val, embed_count=embed_val)
+            t_counts = metrics.get("target_counts", {}) if metrics else {}
+            metadata = {
+                "target_counts": t_counts,
+                "target_total": sum(t_counts.values()) if t_counts else 0
+            }
+            log_pipeline_end(run_id, "SUCCESS", total_items=total, new_items=new_val, updated_items=upd_val, embed_count=embed_val, metadata_dict=metadata)
     except Exception as e:
         err_msg = f"❌ [{args.brand}] 크롤러 전체 프로세스 기동 실패!\n에러 원인: {e}"
         logger.critical(err_msg, exc_info=True)

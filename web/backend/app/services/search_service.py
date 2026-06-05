@@ -13,10 +13,14 @@ from typing import Optional
 
 from ..database import get_pg_cursor
 from ..config import get_settings
+from .local_ml_service import local_ml_service
 
 logger = logging.getLogger(__name__)
 
 settings = get_settings()
+
+# 프로젝트 루트 경로 (ml-models/backup/best.pt 절대경로 탐색용)
+BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", ".."))
 
 # HuggingFace Space URL (config의 settings 사용)
 # 예: https://daniel0708-lookalike-yolo.hf.space
@@ -119,13 +123,9 @@ class SearchService:
     # ──────────────────────────────────────
     async def call_hf_space_predict(self, image_bytes: bytes) -> dict:
         """
-        HF Space Gradio API 호출 (gradio_client 사용)
-
-        HF Space가 gr.Interface(fn=predict, inputs=gr.Image(), outputs=gr.JSON())
-        로 구성되어 있어 gradio_client로 호출합니다.
-
-        gradio_client v1.x에서는 handle_file()로 이미지를 전달해야 합니다.
-        (tmp 파일 경로를 직접 전달하는 방식은 동작하지 않음)
+        YOLO 탐지 + Fashion-CLIP 임베딩을 수신합니다.
+        1. settings.USE_LOCAL_ML이 활성화된 경우 로컬 ML 모델(YOLOv8 + Fashion-CLIP)로 직접 추론을 시도합니다.
+        2. 로컬 ML 로딩 실패 혹은 예외가 발생할 경우 기존 HuggingFace Space 외부 API 호출로 자동 Fallback합니다.
 
         반환 구조:
             {
@@ -136,6 +136,25 @@ class SearchService:
                 "status":    "success" | "error",
             }
         """
+        # ── 1. 로컬 ML 추론 시도 ────────────────────────────────────
+        if settings.USE_LOCAL_ML:
+            try:
+                yolo_path = os.path.join(BASE_DIR, settings.LOCAL_YOLO_PATH)
+                
+                # 싱글톤 모델 로딩 및 준비 상태 검증
+                if not local_ml_service.is_ready:
+                    local_ml_service.load_models(yolo_path)
+
+                if local_ml_service.is_ready:
+                    logger.info("⚡ 로컬 ML 추론 실행 (YOLOv8 + Fashion-CLIP)")
+                    local_res = await local_ml_service.predict_local(image_bytes)
+                    return local_res
+                else:
+                    logger.warning("⚠️ 로컬 ML 서비스 로드 실패 → 외부 HuggingFace Space 호출 진행")
+            except Exception as e:
+                logger.error(f"❌ 로컬 ML 추론 중 예외 발생, 외부 HF Space로 Fallback: {e}", exc_info=True)
+
+        # ── 2. 원격 HF Space 호출 (Fallback) ───────────────────────────
         if not HF_SPACE_BASE:
             logger.warning("HF_SPACE_URL 미설정 → 이미지 임베딩 불가")
             return {"embedding": None, "boxes": [], "label": "unknown", "category": None}

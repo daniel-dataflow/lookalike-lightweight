@@ -16,6 +16,7 @@ import sentry_sdk
 
 from .config import get_settings
 from .database import init_all_databases, close_all_databases, cleanup_expired_sessions
+from .services.local_ml_service import local_ml_service
 from . import database as _db_module
 from .routers import auth_router, product_router, search_router, inquiry_router, admin_router
 from .routers.pages import router as pages_router
@@ -169,6 +170,21 @@ async def lifespan(app: FastAPI):
     collector_task = asyncio.create_task(start_metric_collector())
     logger.info("📊 인프라 메트릭 수집 태스크 시작")
 
+    # 로컬 ML 모델 웜업 (Warm-up) 백그라운드 태스크 기동
+    warmup_task = None
+    if False: # settings.USE_LOCAL_ML:
+        async def _warmup_local_ml():
+            try:
+                base_dir = os.path.abspath(os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "..")))
+                yolo_path = os.path.join(base_dir, settings.LOCAL_YOLO_PATH)
+                logger.info(f"⚡ [Warm-up] 로컬 ML 모델 백그라운드 웜업 시작 (경로: {yolo_path})")
+                loop = asyncio.get_event_loop()
+                await loop.run_in_executor(None, local_ml_service.load_models, yolo_path)
+            except Exception as we:
+                logger.error(f"❌ [Warm-up] 로컬 ML 모델 백그라운드 웜업 중 에러: {we}")
+
+        warmup_task = asyncio.create_task(_warmup_local_ml())
+
     # HF Space Keep-Alive 백그라운드 태스크 기동
     # ─────────────────────────────────────────────────
     # HF Space 무료 플랜: 15분 비활동 시 절전 → 재기동에 30초~1분 소요
@@ -181,6 +197,8 @@ async def lifespan(app: FastAPI):
 
     logger.info("앱 종료 - 데이터베이스 연결 해제")
     collector_task.cancel()
+    if warmup_task:
+        warmup_task.cancel()
     hf_keepalive_task.cancel()
     close_all_databases()
 
@@ -209,6 +227,12 @@ async def _hf_space_keepalive_loop():
 
     while True:
         try:
+            # 로컬 ML 모델이 메모리에 로드되어 준비된 경우 외부 HF Space Keep-Alive 스킵
+            if settings.USE_LOCAL_ML and local_ml_service.is_ready:
+                logger.debug("⚡ [Keep-Alive] 로컬 ML 추론 사용 중 → 외부 HF Space Keep-Alive 스킵")
+                await asyncio.sleep(9 * 60)
+                continue
+
             from .services.search_service import search_service, HF_SPACE_BASE
             if HF_SPACE_BASE:
                 logger.info("🔥 [Keep-Alive] HF Space 더미 predict 호출 시작")
@@ -344,7 +368,7 @@ async def api_status():
         "status": "running",
         "environment": settings.ENV_MODE,
         "databases": {
-            "postgresql": "connected" if _db_module.engine is not None else "disconnected",
+            "postgresql": "connected" if _db_module.get_engine() is not None else "disconnected",
         },
     }
 
