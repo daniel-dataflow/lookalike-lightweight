@@ -816,7 +816,7 @@ async function fetchStagingStatus() {
         : '';
 
       // 수집 진행도(%) 계산
-      const targetCount = b.target_count || 300;
+      const targetCount = b.target_count || b.staging_count || 1;
       const progressPercent = Math.min(100, Math.round((b.staging_count / targetCount) * 100));
 
       // 카테고리별 테이블 HTML 조립
@@ -1288,7 +1288,7 @@ async function fetchAutoBrandStatus() {
     let html = '';
     data.brands.forEach(b => {
       const statusBadge = getStatusBadge(b.integrity_status);
-      const targetCount = b.target_count || 300;
+      const targetCount = b.target_count || b.staging_count || 1;
       const progressPercent = Math.min(100, Math.round((b.staging_count / targetCount) * 100));
 
       // 카테고리별 세부 테이블 행 조립

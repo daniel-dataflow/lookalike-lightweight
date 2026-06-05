@@ -635,12 +635,102 @@ async def get_crawling_staging():
                         );
                         """,
                         (brand,)
-                    )
+                     )
                     r = cur.fetchone()
                     if r:
                         pipeline_error_count = r["cnt"] or 0
+                        
+                    # 해당 브랜드의 가장 최근 파이프라인 구동 정보에서 metadata(목표량 등) 조회
+                    target_count = 0
+                    target_counts_map = {}
+                    cur.execute(
+                        """
+                        SELECT metadata FROM pipeline_runs
+                        WHERE brand = %s
+                        ORDER BY run_id DESC LIMIT 1;
+                        """,
+                        (brand,)
+                    )
+                    run_row = cur.fetchone()
+                    if run_row and run_row["metadata"]:
+                        import json as _json
+                        try:
+                            meta = run_row["metadata"]
+                            if isinstance(meta, str):
+                                meta = _json.loads(meta)
+                            target_count = meta.get("target_total", 0)
+                            target_counts_map = meta.get("target_counts", {})
+                        except Exception as meta_err:
+                            logger.warning(f"metadata 파싱 실패: {meta_err}")
+                            
+                    # 카테고리별 실시간 수집 현황 집계
+                    cur.execute(
+                        """
+                        SELECT category, count(*) as cnt 
+                        FROM staging_products 
+                        WHERE brand_name = %s 
+                        GROUP BY category;
+                        """,
+                        (brand,)
+                    )
+                    cat_staging = {row["category"]: row["cnt"] for row in cur.fetchall()}
+                    
+                    cur.execute(
+                        """
+                        SELECT sp.category, count(*) as cnt 
+                        FROM staging_product_embeddings spe
+                        JOIN staging_products sp ON spe.product_id = sp.product_id
+                        WHERE sp.brand_name = %s
+                        GROUP BY sp.category;
+                        """,
+                        (brand,)
+                    )
+                    cat_embed = {row["category"]: row["cnt"] for row in cur.fetchall()}
+
+                    cur.execute(
+                        """
+                        SELECT sp.category, count(*) as cnt 
+                        FROM staging_naver_prices snp
+                        JOIN staging_products sp ON snp.product_id = sp.product_id
+                        WHERE sp.brand_name = %s
+                        GROUP BY sp.category;
+                        """,
+                        (brand,)
+                    )
+                    cat_naver = {row["category"]: row["cnt"] for row in cur.fetchall()}
+
+                    cur.execute(
+                        """
+                        SELECT category, count(*) as cnt 
+                        FROM staging_products 
+                        WHERE brand_name = %s AND img_url LIKE '%%cloudinary.com%%'
+                        GROUP BY category;
+                        """,
+                        (brand,)
+                    )
+                    cat_img = {row["category"]: row["cnt"] for row in cur.fetchall()}
+
+                    categories = []
+                    # 모든 감지되거나 대상 카테고리 루프 (Outer, Top, Bottom 등)
+                    all_categories = sorted(list(set(list(cat_staging.keys()) + list(target_counts_map.keys()) + ["Outer", "Top", "Bottom"])))
+                    for cat in all_categories:
+                        cat_tgt = target_counts_map.get(cat, 0)
+                        cat_stg = cat_staging.get(cat, 0)
+                        if cat_tgt == 0 and cat_stg == 0:
+                            continue # 데이터가 전혀 없는 카테고리는 생략
+                        categories.append({
+                            "category": cat,
+                            "staging_count": cat_stg,
+                            "target_count": cat_tgt,
+                            "embed_count": cat_embed.get(cat, 0),
+                            "img_count": cat_img.get(cat, 0),
+                            "naver_count": cat_naver.get(cat, 0)
+                        })
+
             except Exception as dw_err:
                 logger.error(f"DW Staging {brand} 조회 실패: {dw_err}")
+                categories = []
+                target_count = 0
                 
             # (2) Active Core DB에서 운영 데이터 집계
             try:
@@ -674,6 +764,7 @@ async def get_crawling_staging():
             brand_stats.append({
                 "brand": brand,
                 "staging_count": staging_count,
+                "target_count": target_count,
                 "prod_count": prod_count,
                 "embed_count": embed_count,
                 "naver_count": naver_count,
@@ -681,7 +772,8 @@ async def get_crawling_staging():
                 "integrity_status": integrity_status,
                 "latest_dt": latest_dt.isoformat() if latest_dt else None,
                 "hours_elapsed": hours_elapsed,
-                "pipeline_error_count": pipeline_error_count
+                "pipeline_error_count": pipeline_error_count,
+                "categories": categories
             })
             
         return {
