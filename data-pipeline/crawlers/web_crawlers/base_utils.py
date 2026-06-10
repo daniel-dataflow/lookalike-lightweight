@@ -722,11 +722,13 @@ async def swap_staging_to_production(brand_name: str, force: bool = False) -> bo
         
         logger.info(f"📊 [{brand_name}] 대기 중인 스테이징 데이터: {staging_count} 건 (force={force})")
         if staging_count == 0:
-            logger.info("ℹ️ 현재 스위칭 대상 조건(24시간 경과)을 충족하는 데이터가 존재하지 않습니다.")
-            log_pipeline_end(run_id, "SUCCESS", total_items=0)
+            err_msg = f"❌ [{brand_name}] 스위칭 대상 스테이징 상품 개수가 0개입니다. 원본 데이터 보호를 위해 이관(Swap)을 차단합니다."
+            logger.error(err_msg)
+            log_pipeline_error(run_id, "SWAP_GUARD_ZERO_DATA", err_msg)
+            log_pipeline_end(run_id, "FAILED", total_items=0, error_count=1)
             stage_cur.close()
             stage_conn.close()
-            return True
+            return False
 
         # [검증 제약조건 1] 데이터 건수가 지나치게 작으면 에러로 판단 (임계치: 10건)
         MIN_THRESHOLD = 10

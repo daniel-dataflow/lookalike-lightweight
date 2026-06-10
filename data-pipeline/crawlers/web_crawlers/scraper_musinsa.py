@@ -271,8 +271,38 @@ async def run():
     os.makedirs(LOCAL_OUTPUT_PATH, exist_ok=True)
     
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
-        context = await browser.new_context(viewport={"width": 1920, "height": 1080})
+        # 봇 탐지 우회를 위해 AutomationControlled 블링크 기능 비활성화 인자 적용
+        launch_args = ["--disable-blink-features=AutomationControlled"]
+        # 로컬 크롬 채널 우선 시도
+        try:
+            browser = await p.chromium.launch(headless=True, channel="chrome", args=launch_args)
+        except Exception:
+            try:
+                browser = await p.chromium.launch(headless=True, channel="msedge", args=launch_args)
+            except Exception:
+                browser = await p.chromium.launch(headless=True, args=launch_args)
+                
+        # User-Agent 강제 순환 및 navigator masking
+        user_agents = [
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/119.0"
+        ]
+        import random
+        selected_ua = random.choice(user_agents)
+        
+        context = await browser.new_context(
+            user_agent=selected_ua,
+            viewport={"width": 1280, "height": 800}
+        )
+        
+        stealth_js = """
+            Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+            window.chrome = { runtime: {} };
+            Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3] });
+            Object.defineProperty(navigator, 'languages', { get: () => ['ko-KR', 'ko', 'en-US', 'en'] });
+        """
+        await context.add_init_script(stealth_js)
         
         for gender, categories in TARGET_MAP.items():
             for category, urls in categories.items():

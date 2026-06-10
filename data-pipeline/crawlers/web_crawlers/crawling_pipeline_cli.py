@@ -355,16 +355,15 @@ async def run_pipeline(
                 await context.add_init_script(stealth_js)
 
             target_map = scraper.TARGET_MAP
-            break_outer = False
+            all_target_products = [] # (product_code, gender_key, category_key) 튜플 리스트
+            
+            # 1단계: 전체 지정 카테고리 목록 스캔 및 통계 산출
+            logger.info("🔍 [Step 1] 전체 카테고리 목록 스캔 및 홈페이지 수량 분석 개시...")
             for gender_key, categories in target_map.items():
-                if break_outer:
-                    break
                 # 성별 분할 필터링
                 if gender and gender_key.lower() != gender.lower():
                     continue
                 for category_key, urls in categories.items():
-                    if break_outer:
-                        break
                     # 카테고리 분할 필터링
                     if category and category_key.lower() != category.lower():
                         continue
@@ -372,10 +371,6 @@ async def run_pipeline(
                     if isinstance(urls, str):
                         urls = [urls]
                     for target_url in urls:
-                        if len(collected_products) >= limit:
-                            break_outer = True
-                            break
-                        
                         logger.info(f"🔍 목록 스캔 중: {gender_key} - {category_key} - {target_url}")
                         
                         page = await context.new_page()
@@ -433,9 +428,9 @@ async def run_pipeline(
                             try:
                                 cat_target_count = await page.evaluate("""() => {
                                     const selectors = [
+                                        '.total-count', '.goods-list-total', '.goods-list .total',
                                         '.gods-total span', '.gods-total strong', '.num',
-                                        'span.count', '.total-goods', '.goods-list-total', '.goods-list .total',
-                                        '.total-count', '.prod-count', '.prodCount',
+                                        'span.count', '.total-goods', '.prod-count', '.prodCount',
                                         '.product-count', '.num-items',
                                         '.product-grid-header__product-count', 'span.product-count', '.result-count'
                                     ];
@@ -463,19 +458,40 @@ async def run_pipeline(
                                 target_counts[category_key] += fallback_cnt
                                 logger.info(f"   📊 [{brand.upper()}] {gender_key} - {category_key} 홈페이지 수량 감지 실패. 식별된 갯수({fallback_cnt}개)로 폴백 누적")
 
+                            for code in product_codes:
+                                all_target_products.append((code, gender_key, category_key))
+
                             await page.close()
-
-                            pending_codes = product_codes
-                            while pending_codes and len(collected_products) < limit:
-                                code = pending_codes.pop(0)
-                                res = await process_product_link(code, gender_key, category_key, context)
-                                if res:
-                                    pending_codes = [c for c in res if c not in visited_products] + pending_codes
-
                         except Exception as e:
-                            logger.error(f"❌ 카테고리 수집 실패: {e}")
+                            logger.error(f"❌ 카테고리 목록 스캔 실패: {e}")
                             if not page.is_closed():
                                 await page.close()
+            
+            # 1단계 완료 후, 수집 제한량(limit) 및 진행률 total 동적 보완
+            total_scanned_count = sum(target_counts.values())
+            logger.info(f"📊 [스캔 완료] 홈페이지 기준 전체 타겟 수: {total_scanned_count}개, 수집된 식별 코드 수: {len(all_target_products)}개")
+            
+            if total_scanned_count > 0:
+                # 사용자가 limit을 작게 명시했어도 실제 식별된 코드 전체를 긁어오도록 limit 확장
+                limit = max(limit, len(all_target_products))
+                logger.info(f"⚙️ 수집 제한량(limit)을 실제 식별된 상품 총 개수({limit}개)로 자동 상향 갱신합니다.")
+            
+            # 스캔 결과를 반영하여 진행률 명시
+            write_progress(brand, step="상품 상세 수집 시작", current=0, total=limit,
+                           phases_done=["카테고리 스캔"], phases_remaining=["상품 크롤링", "이미지 업로드", "임베딩 생성", "DB 저장"],
+                           status="running", run_id=run_id, started_at=_started_at,
+                           target_counts=target_counts)
+            
+            # 2단계: 상품 수집 및 상세 크롤링 실행
+            logger.info("📦 [Step 2] 상품 상세 페이지 수집 및 크롤링 개시...")
+            while all_target_products and len(collected_products) < limit:
+                code, gender_key, category_key = all_target_products.pop(0)
+                res = await process_product_link(code, gender_key, category_key, context)
+                if res:
+                    # 연관 컬러 등이 추가 검출되면 큐 앞단에 삽입
+                    for new_code in res:
+                        if new_code not in visited_products:
+                            all_target_products.insert(0, (new_code, gender_key, category_key))
             
             await browser.close()
 

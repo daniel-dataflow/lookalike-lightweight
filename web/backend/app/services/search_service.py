@@ -19,6 +19,10 @@ logger = logging.getLogger(__name__)
 
 settings = get_settings()
 
+# Fashion-CLIP 모델 메모리 누수 방지용 전역 싱글톤 캐시
+_fashion_clip_model = None
+_fashion_clip_processor = None
+
 # 프로젝트 루트 경로 (ml-models/backup/best.pt 절대경로 탐색용)
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", ".."))
 
@@ -41,7 +45,14 @@ class SearchService:
         """
         로컬 Fashion CLIP 모델로 이미지 임베딩 생성 (512d)
         패션 특화 CLIP 모델 사용 → 정확도 향상
+        (메모리 누수 방지 및 512MB RAM OOM 방어 처리가 적용됨)
         """
+        # USE_LOCAL_ML이 비활성화 상태면 대형 로컬 모델 로딩 자체를 원천 차단 (Render OOM 방어)
+        if not settings.USE_LOCAL_ML:
+            logger.info("ℹ️ 로컬 ML 비활성화 모드 -> 로컬 Fashion-CLIP 모델 로드 스킵 (원격 HF Space 우선)")
+            return None
+
+        global _fashion_clip_model, _fashion_clip_processor
         try:
             from PIL import Image
             import torch
@@ -50,22 +61,26 @@ class SearchService:
             # 이미지 로드
             pil_img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
             
-            # Fashion-CLIP 모델 로드 (로컬 캐시 사용)
-            logger.info("🔄 Fashion-CLIP 모델 로드...")
-            model = CLIPModel.from_pretrained("patrickjohncyh/fashion-clip")
-            processor = CLIPProcessor.from_pretrained("patrickjohncyh/fashion-clip")
-            model.eval()
+            # 싱글톤 캐시 로드
+            if _fashion_clip_model is None or _fashion_clip_processor is None:
+                logger.info("🔄 [Singleton] Fashion-CLIP 모델 최초 로딩 중...")
+                _fashion_clip_model = CLIPModel.from_pretrained("patrickjohncyh/fashion-clip")
+                _fashion_clip_processor = CLIPProcessor.from_pretrained("patrickjohncyh/fashion-clip")
+                _fashion_clip_model.eval()
+                
+                # GPU 사용 가능 시 자동 전환
+                device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+                _fashion_clip_model = _fashion_clip_model.to(device)
+                logger.info(f"✅ [Singleton] Fashion-CLIP 모델 메모리 적재 완료 (디바이스: {device})")
             
-            # GPU 사용 가능하면 사용
-            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-            model = model.to(device)
+            device = _fashion_clip_model.device
             
             # 이미지 전처리 및 임베딩 생성
-            inputs = processor(images=pil_img, return_tensors="pt").to(device)
+            inputs = _fashion_clip_processor(images=pil_img, return_tensors="pt").to(device)
             with torch.no_grad():
-                features = model.get_image_features(**inputs)
+                features = _fashion_clip_model.get_image_features(**inputs)
             
-            # L2 정규화 (코사인 유사도 최적화)
+            # L2 정규화 (코사인 유사도 매칭 최적화)
             embedding = torch.nn.functional.normalize(features, p=2, dim=1)
             embedding_list = embedding[0].cpu().tolist()
             
@@ -73,7 +88,7 @@ class SearchService:
             return embedding_list
             
         except ImportError:
-            logger.warning("❌ torch/transformers 미설치")
+            logger.warning("❌ torch/transformers 미설치 (로컬 ML 추론 스킵)")
             return None
         except Exception as e:
             logger.error(f"❌ Fashion-CLIP 임베딩 생성 실패: {e}")

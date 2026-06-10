@@ -666,49 +666,49 @@ async def get_crawling_staging():
                     # 카테고리별 실시간 수집 현황 집계
                     cur.execute(
                         """
-                        SELECT category, count(*) as cnt 
+                        SELECT category_code, count(*) as cnt 
                         FROM staging_products 
                         WHERE brand_name = %s 
-                        GROUP BY category;
+                        GROUP BY category_code;
                         """,
                         (brand,)
                     )
-                    cat_staging = {row["category"]: row["cnt"] for row in cur.fetchall()}
+                    cat_staging = {row["category_code"]: row["cnt"] for row in cur.fetchall()}
                     
                     cur.execute(
                         """
-                        SELECT sp.category, count(*) as cnt 
+                        SELECT sp.category_code, count(*) as cnt 
                         FROM staging_product_embeddings spe
                         JOIN staging_products sp ON spe.product_id = sp.product_id
                         WHERE sp.brand_name = %s
-                        GROUP BY sp.category;
+                        GROUP BY sp.category_code;
                         """,
                         (brand,)
                     )
-                    cat_embed = {row["category"]: row["cnt"] for row in cur.fetchall()}
+                    cat_embed = {row["category_code"]: row["cnt"] for row in cur.fetchall()}
 
                     cur.execute(
                         """
-                        SELECT sp.category, count(*) as cnt 
+                        SELECT sp.category_code, count(*) as cnt 
                         FROM staging_naver_prices snp
                         JOIN staging_products sp ON snp.product_id = sp.product_id
                         WHERE sp.brand_name = %s
-                        GROUP BY sp.category;
+                        GROUP BY sp.category_code;
                         """,
                         (brand,)
                     )
-                    cat_naver = {row["category"]: row["cnt"] for row in cur.fetchall()}
+                    cat_naver = {row["category_code"]: row["cnt"] for row in cur.fetchall()}
 
                     cur.execute(
                         """
-                        SELECT category, count(*) as cnt 
+                        SELECT category_code, count(*) as cnt 
                         FROM staging_products 
                         WHERE brand_name = %s AND img_url LIKE '%%cloudinary.com%%'
-                        GROUP BY category;
+                        GROUP BY category_code;
                         """,
                         (brand,)
                     )
-                    cat_img = {row["category"]: row["cnt"] for row in cur.fetchall()}
+                    cat_img = {row["category_code"]: row["cnt"] for row in cur.fetchall()}
 
                     categories = []
                     # 모든 감지되거나 대상 카테고리 루프 (Outer, Top, Bottom 등)
