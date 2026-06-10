@@ -374,99 +374,173 @@ async def run_pipeline(
                     for target_url in urls:
                         logger.info(f"🔍 목록 스캔 중: {gender_key} - {category_key} - {target_url}")
                         
-                        page = await context.new_page()
-                        try:
-                            # 뷰포트 크기를 데스크톱 규격으로 강제 지정
-                            await page.set_viewport_size({"width": 1280, "height": 800})
-                            await page.goto(target_url, timeout=15000, wait_until="domcontentloaded")
+                        product_codes = []
+                        page_num = 1
+                        max_pages = 50  # 수집 안전 상한값
+                        if brand.lower() in ["uniqlo", "zara"]:
+                            max_pages = 1  # 무한 스크롤 사이트는 단일 페이지 내에서 스크롤을 길게 뺌
                             
-                            # 비동기 데이터 바인딩 및 렌더링 대기
-                            if brand.lower() in ["zara", "musinsa"]:
-                                await asyncio.sleep(2.5)
-                            else:
-                                await asyncio.sleep(0.5)
+                        has_detected_count = False
+                        
+                        while page_num <= max_pages:
+                            # 페이지별 URL 파라미터 분기
+                            current_url = target_url
+                            if brand.lower() == "musinsa":
+                                sep = "&" if "?" in target_url else "?"
+                                current_url = f"{target_url}{sep}page={page_num}"
+                            elif brand.lower() == "8seconds":
+                                sep = "&" if "?" in target_url else "?"
+                                current_url = f"{target_url}{sep}pageNo={page_num}"
+                            elif brand.lower() == "topten":
+                                sep = "&" if "?" in target_url else "?"
+                                current_url = f"{target_url}{sep}pageIdx={page_num}"
                                 
-                            for _ in range(2):
-                                await page.evaluate("window.scrollBy(0, 2000)")
-                                await asyncio.sleep(1.2)
-                            
-                            product_codes = []
-                            if brand == "8seconds":
-                                product_codes = await page.evaluate("""() => 
-                                    Array.from(document.querySelectorAll('li.god-item')).map(item => item.getAttribute('view-godno')).filter(c => c !== null)
-                                """)
-                            elif brand == "musinsa":
-                                import re
-                                hrefs = await page.evaluate("() => Array.from(document.querySelectorAll('a')).map(a => a.href)")
-                                product_codes = []
-                                for h in hrefs:
-                                    m = re.search(r'(?:goods|products)\/(\d+)', h)
-                                    if m: product_codes.append(m.group(1))
-                            elif brand == "topten":
-                                import re
-                                content = await page.content()
-                                matches = re.findall(r"[A-Z]{3}\d[A-Z]{2}\d{4}[A-Z0-9]+", content)
-                                product_codes = [pid for pid in matches if 10 <= len(pid) <= 15]
-                            elif brand == "uniqlo":
-                                import re
-                                content = await page.content()
-                                matches = re.findall(r"/products/([A-Z0-9-]+)", content)
-                                product_codes = [pid for pid in matches if len(pid) >= 5 and "review" not in pid]
-                            elif brand == "zara":
-                                import re
-                                links = await page.evaluate("() => Array.from(document.querySelectorAll('a[href*=\"-p\"][href*=\".html\"]')).map(a => a.href)")
-                                product_codes = []
-                                for link in links:
-                                    match = re.search(r'-p([0-9]+)\.html', link)
-                                    if match:
-                                        product_codes.append(link.split('?')[0])
-
-                            product_codes = list(set(product_codes))
-                            logger.info(f"   🔗 카테고리 목록에서 상품 {len(product_codes)}개 식별 완료")
-
-                            # 홈페이지상의 실제 전체 상품 수 파싱
-                            cat_target_count = 0
+                            logger.info(f"   📄 목록 페이지 {page_num} 스캔 시도: {current_url}")
+                            page = await context.new_page()
                             try:
-                                cat_target_count = await page.evaluate("""() => {
-                                    const selectors = [
-                                        '.total-count', '.goods-list-total', '.goods-list .total',
-                                        '.gods-total span', '.gods-total strong', '.num',
-                                        'span.count', '.total-goods', '.prod-count', '.prodCount',
-                                        '.product-count', '.num-items',
-                                        '.product-grid-header__product-count', 'span.product-count', '.result-count'
-                                    ];
-                                    for (const selector of selectors) {
-                                        const el = document.querySelector(selector);
-                                        if (el) {
-                                            const text = el.innerText.trim();
-                                            const num = text.replace(/[^0-9]/g, '');
-                                            if (num) {
-                                                const parsed = parseInt(num, 10);
-                                                if (parsed > 0) return parsed;
+                                await page.set_viewport_size({"width": 1280, "height": 800})
+                                await page.goto(current_url, timeout=25000, wait_until="domcontentloaded")
+                                
+                                # 봇 탐지 우회 대기
+                                if brand.lower() in ["zara", "musinsa"]:
+                                    await asyncio.sleep(2.5)
+                                else:
+                                    await asyncio.sleep(1.0)
+                                    
+                                # 지연 렌더링 대응 스크롤
+                                scroll_limit = 3
+                                if brand.lower() in ["uniqlo", "zara"]:
+                                    scroll_limit = 25  # 무한 스크롤
+                                    
+                                last_height = await page.evaluate("document.body.scrollHeight")
+                                for _ in range(scroll_limit):
+                                    await page.evaluate("window.scrollBy(0, 2500)")
+                                    await asyncio.sleep(0.8)
+                                    if brand.lower() in ["uniqlo", "zara"]:
+                                        new_height = await page.evaluate("document.body.scrollHeight")
+                                        if new_height == last_height:
+                                            break
+                                        last_height = new_height
+                                        
+                                p_codes = []
+                                if brand == "8seconds":
+                                    p_codes = await page.evaluate("""() => 
+                                        Array.from(document.querySelectorAll('li.god-item')).map(item => item.getAttribute('view-godno')).filter(c => c !== null)
+                                    """)
+                                elif brand == "musinsa":
+                                    import re
+                                    hrefs = await page.evaluate("() => Array.from(document.querySelectorAll('a')).map(a => a.href)")
+                                    for h in hrefs:
+                                        m = re.search(r'(?:goods|products)\/(\d+)', h)
+                                        if m: p_codes.append(m.group(1))
+                                elif brand == "topten":
+                                    p_codes = await page.evaluate("""() => {
+                                        const ids = new Set();
+                                        document.querySelectorAll('a[href*="/product/"]').forEach(a => {
+                                            const m = a.href.match(/\/product\/([A-Z0-9]{8,20})\/detail/);
+                                            if (m) ids.add(m[1]);
+                                        });
+                                        document.querySelectorAll('[data-goods-no], [data-goodsno]').forEach(el => {
+                                            const id = el.getAttribute('data-goods-no') || el.getAttribute('data-goodsno');
+                                            if (id) ids.add(id.toUpperCase());
+                                        });
+                                        return Array.from(ids);
+                                    }""")
+                                    if not p_codes:
+                                        import re
+                                        content = await page.content()
+                                        matches = re.findall(r"[A-Z]{3}\d[A-Z]{2}\d{4}[A-Z0-9]+", content)
+                                        p_codes = [pid for pid in matches if 10 <= len(pid) <= 15]
+                                elif brand == "uniqlo":
+                                    import re
+                                    content = await page.content()
+                                    matches = re.findall(r"/products/([A-Z0-9-]+)", content)
+                                    p_codes = [pid for pid in matches if len(pid) >= 5 and "review" not in pid]
+                                elif brand == "zara":
+                                    import re
+                                    links = await page.evaluate("() => Array.from(document.querySelectorAll('a[href*=\"-p\"][href*=\".html\"]')).map(a => a.href)")
+                                    for link in links:
+                                        match = re.search(r'-p([0-9]+)\.html', link)
+                                        if match:
+                                            p_codes.append(link.split('?')[0])
+                                            
+                                p_codes = list(set(p_codes))
+                                if not p_codes:
+                                    logger.info("   ⏹ 더 이상 추출된 상품 코드가 없습니다. 페이지 순회를 종료합니다.")
+                                    await page.close()
+                                    break
+                                    
+                                prev_len = len(product_codes)
+                                product_codes.extend(p_codes)
+                                product_codes = list(set(product_codes))
+                                new_added = len(product_codes) - prev_len
+                                logger.info(f"   🔗 {page_num}페이지 스캔 결과: 신규 식별 {new_added}개 (누적 {len(product_codes)}개)")
+                                
+                                if new_added == 0 and page_num > 1:
+                                    logger.info("   ⏹ 신규 상품 식별 수 0개 도달. 페이지 순회를 종료합니다.")
+                                    await page.close()
+                                    break
+                                    
+                                # 홈페이지 전체 상품 수량 파싱 (최초 1페이지에서만 실행)
+                                if not has_detected_count:
+                                    cat_target_count = 0
+                                    try:
+                                        cat_target_count = await page.evaluate("""(brnd) => {
+                                            let selectors = [];
+                                            if (brnd === '8seconds') {
+                                                selectors = ['#godTotalCount', '.gods-total span', '.sub-category-title span'];
+                                            } else if (brnd === 'musinsa') {
+                                                selectors = ['[class*="Header__Count"]', '.Header__Count-sc-'];
+                                            } else if (brnd === 'topten') {
+                                                selectors = ['.st-goods-total', '.st-total', 'div.total-count', '.utility-bar .total', '[class*="total"]'];
+                                            } else if (brnd === 'uniqlo') {
+                                                selectors = ['.fr-ec-product-count', '.product-count'];
+                                            } else {
+                                                selectors = [
+                                                    '.total-count', '.goods-list-total', '.goods-list .total',
+                                                    '.gods-total span', '.gods-total strong', '.num',
+                                                    'span.count', '.total-goods', '.prod-count', '.prodCount',
+                                                    '.product-count', '.num-items',
+                                                    '.product-grid-header__product-count', 'span.product-count', '.result-count'
+                                                ];
                                             }
-                                        }
-                                    }
-                                    return 0;
-                                }""")
-                            except Exception as parse_err:
-                                logger.warning(f"⚠️ [{brand.upper()}] 전체 상품 수 엘리먼트 파싱 에러: {parse_err}")
-
-                            if cat_target_count > 0:
-                                target_counts[category_key] += cat_target_count
-                                logger.info(f"   📊 [{brand.upper()}] {gender_key} - {category_key} 홈페이지 총 수량: {cat_target_count}개 감지")
-                            else:
-                                fallback_cnt = len(product_codes)
-                                target_counts[category_key] += fallback_cnt
-                                logger.info(f"   📊 [{brand.upper()}] {gender_key} - {category_key} 홈페이지 수량 감지 실패. 식별된 갯수({fallback_cnt}개)로 폴백 누적")
-
-                            for code in product_codes:
-                                all_target_products.append((code, gender_key, category_key))
-
-                            await page.close()
-                        except Exception as e:
-                            logger.error(f"❌ 카테고리 목록 스캔 실패: {e}")
-                            if not page.is_closed():
+                                            for (const selector of selectors) {
+                                                const el = document.querySelector(selector);
+                                                if (el) {
+                                                    const text = el.innerText.trim();
+                                                    const num = text.replace(/[^0-9]/g, '');
+                                                    if (num) {
+                                                        const parsed = parseInt(num, 10);
+                                                        if (parsed > 0) return parsed;
+                                                    }
+                                                }
+                                            }
+                                            return 0;
+                                        }""", brand.lower())
+                                    except Exception as parse_err:
+                                        logger.warning(f"⚠️ [{brand.upper()}] 전체 상품 수 엘리먼트 파싱 에러: {parse_err}")
+                                        
+                                    if cat_target_count > 0:
+                                        target_counts[category_key] += cat_target_count
+                                        logger.info(f"   📊 [{brand.upper()}] {gender_key} - {category_key} 홈페이지 총 수량: {cat_target_count}개 감지")
+                                    has_detected_count = True
+                                    
                                 await page.close()
+                                page_num += 1
+                            except Exception as scan_err:
+                                logger.error(f"❌ 카테고리 목록 스캔 실패 (페이지 {page_num}): {scan_err}")
+                                if not page.is_closed():
+                                    await page.close()
+                                break
+                                
+                        # 최종 폴백 카운트 누적
+                        if target_counts[category_key] == 0:
+                            fallback_cnt = len(product_codes)
+                            target_counts[category_key] += fallback_cnt
+                            logger.info(f"   📊 [{brand.upper()}] {gender_key} - {category_key} 홈페이지 최종 식별된 갯수({fallback_cnt}개)로 총 수량 누적 적용")
+                            
+                        for code in product_codes:
+                            all_target_products.append((code, gender_key, category_key))
             
             # 1단계 완료 후, 수집 제한량(limit) 및 진행률 total 동적 보완
             total_scanned_count = sum(target_counts.values())
@@ -563,6 +637,7 @@ async def run_pipeline(
         success_db_count = 0
         new_items_count = 0
         updated_items_count = 0
+        valid_embed_count = 0
         
         # PROD DB 연결 (캐시 조회용)
         prod_conn = get_prod_db_connection()
@@ -573,10 +648,33 @@ async def run_pipeline(
         dw_conn.autocommit = False
         dw_cur = dw_conn.cursor()
 
+        def ensure_connections():
+            nonlocal prod_conn, prod_cur, dw_conn, dw_cur
+            try:
+                prod_cur.execute("SELECT 1")
+                dw_cur.execute("SELECT 1")
+            except Exception:
+                logger.info("🔄 Neon DB 연결 끊김 감지: 재연결을 수립합니다.")
+                try:
+                    prod_cur.close()
+                    prod_conn.close()
+                except: pass
+                try:
+                    dw_cur.close()
+                    dw_conn.close()
+                except: pass
+                
+                prod_conn = get_prod_db_connection()
+                prod_cur = prod_conn.cursor()
+                dw_conn = get_dw_db_connection()
+                dw_conn.autocommit = False
+                dw_cur = dw_conn.cursor()
+
         pending_errors = []  # 비동기 Neon DB 커넥션 폭주를 막기 위해 에러 로그를 일시 수집
 
         try:
             for item in collected_products:
+                ensure_connections()
                 # 1. model_code 공식 품번 포맷 수립
                 orig_no = item.get("product_id")
                 model_code = orig_no
