@@ -321,6 +321,7 @@ async def run_pipeline(
         return []
 
     async def crawl_brand_categories():
+        nonlocal limit
         async with async_playwright() as p:
             # 봇 감지 솔루션(Akamai, Cloudflare) 우회를 위해 로컬 Chrome/Edge 채널을 우선 사용하고 실패 시 Firefox 및 일반 Chromium 순으로 폴백합니다.
             browser = None
