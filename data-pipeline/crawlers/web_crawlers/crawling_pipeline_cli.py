@@ -342,7 +342,7 @@ async def run_pipeline(
                         browser = await p.chromium.launch(headless=True, args=launch_args)
                 
             context = await browser.new_context(
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
             )
             
             # 자라와 무신사 모두 봇 탐지 우회를 위해 stealth 스크립트 주입
@@ -399,13 +399,13 @@ async def run_pipeline(
                             page = await context.new_page()
                             try:
                                 await page.set_viewport_size({"width": 1280, "height": 800})
-                                await page.goto(current_url, timeout=25000, wait_until="domcontentloaded")
+                                await page.goto(current_url, timeout=60000, wait_until="domcontentloaded")
                                 
-                                # 봇 탐지 우회 대기
-                                if brand.lower() in ["zara", "musinsa"]:
-                                    await asyncio.sleep(2.5)
+                                # 봇 탐지 우회 및 JS 렌더링 완료 대기 (무신사, 탑텐, 유니클로는 지연 렌더링 대응)
+                                if brand.lower() in ["zara", "musinsa", "uniqlo", "topten"]:
+                                    await asyncio.sleep(8.0)
                                 else:
-                                    await asyncio.sleep(1.0)
+                                    await asyncio.sleep(2.0)
                                     
                                 # 지연 렌더링 대응 스크롤
                                 scroll_limit = 3
@@ -429,15 +429,15 @@ async def run_pipeline(
                                     """)
                                 elif brand == "musinsa":
                                     import re
-                                    hrefs = await page.evaluate("() => Array.from(document.querySelectorAll('a')).map(a => a.href)")
+                                    hrefs = await page.evaluate("""() => Array.from(document.querySelectorAll('a')).map(a => a.href)""")
                                     for h in hrefs:
-                                        m = re.search(r'(?:goods|products)\/(\d+)', h)
+                                        m = re.search(r'(?:goods|products)\\/(\\d+)', h)
                                         if m: p_codes.append(m.group(1))
                                 elif brand == "topten":
                                     p_codes = await page.evaluate("""() => {
                                         const ids = new Set();
                                         document.querySelectorAll('a[href*="/product/"]').forEach(a => {
-                                            const m = a.href.match(/\/product\/([A-Z0-9]{8,20})\/detail/);
+                                            const m = a.href.match(/\\/product\\/([A-Z0-9]{8,20})\\/detail/);
                                             if (m) ids.add(m[1]);
                                         });
                                         document.querySelectorAll('[data-goods-no], [data-goodsno]').forEach(el => {
@@ -449,7 +449,7 @@ async def run_pipeline(
                                     if not p_codes:
                                         import re
                                         content = await page.content()
-                                        matches = re.findall(r"[A-Z]{3}\d[A-Z]{2}\d{4}[A-Z0-9]+", content)
+                                        matches = re.findall(r"[A-Z]{3}\\d[A-Z]{2}\\d{4}[A-Z0-9]+", content)
                                         p_codes = [pid for pid in matches if 10 <= len(pid) <= 15]
                                 elif brand == "uniqlo":
                                     import re
@@ -458,9 +458,9 @@ async def run_pipeline(
                                     p_codes = [pid for pid in matches if len(pid) >= 5 and "review" not in pid]
                                 elif brand == "zara":
                                     import re
-                                    links = await page.evaluate("() => Array.from(document.querySelectorAll('a[href*=\"-p\"][href*=\".html\"]')).map(a => a.href)")
+                                    links = await page.evaluate("""() => Array.from(document.querySelectorAll('a[href*="-p"][href*=\".html\"]')).map(a => a.href)""")
                                     for link in links:
-                                        match = re.search(r'-p([0-9]+)\.html', link)
+                                        match = re.search(r'-p([0-9]+)\\.html', link)
                                         if match:
                                             p_codes.append(link.split('?')[0])
                                             
@@ -485,44 +485,59 @@ async def run_pipeline(
                                 if not has_detected_count:
                                     cat_target_count = 0
                                     try:
-                                        cat_target_count = await page.evaluate("""(brnd) => {
-                                            let selectors = [];
-                                            if (brnd === '8seconds') {
-                                                selectors = ['#godTotalCount', '.gods-total span', '.sub-category-title span'];
-                                            } else if (brnd === 'musinsa') {
-                                                selectors = ['[class*="Header__Count"]', '.Header__Count-sc-'];
-                                            } else if (brnd === 'topten') {
-                                                selectors = ['.st-goods-total', '.st-total', 'div.total-count', '.utility-bar .total', '[class*="total"]'];
-                                            } else if (brnd === 'uniqlo') {
-                                                selectors = ['.fr-ec-product-count', '.product-count'];
-                                            } else {
-                                                selectors = [
-                                                    '.total-count', '.goods-list-total', '.goods-list .total',
-                                                    '.gods-total span', '.gods-total strong', '.num',
-                                                    'span.count', '.total-goods', '.prod-count', '.prodCount',
-                                                    '.product-count', '.num-items',
-                                                    '.product-grid-header__product-count', 'span.product-count', '.result-count'
-                                                ];
-                                            }
-                                            for (const selector of selectors) {
-                                                const el = document.querySelector(selector);
-                                                if (el) {
-                                                    const text = el.innerText.trim();
-                                                    const num = text.replace(/[^0-9]/g, '');
-                                                    if (num) {
-                                                        const parsed = parseInt(num, 10);
-                                                        if (parsed > 0) return parsed;
+                                        # WAF 차단 체크
+                                        page_content = await page.content()
+                                        if "Access Denied" in page_content or "don't have permission to access" in page_content:
+                                            logger.warning(f"⚠️ [{brand.upper()}] WAF 차단 감지 (Access Denied)")
+                                            cat_target_count = -1
+                                        else:
+                                            cat_target_count = await page.evaluate("""(brnd) => {
+                                                let selectors = [];
+                                                if (brnd === '8seconds') {
+                                                    selectors = ['#godTotalCount', '.gods-total span', '.sub-category-title span'];
+                                                } else if (brnd === 'musinsa') {
+                                                    selectors = ['[class*="Header__Count"]', '.Header__Count-sc-', '.Header__Count'];
+                                                } else if (brnd === 'topten') {
+                                                    selectors = ['.utility-number', '.st-goods-total', '.st-total', 'div.total-count', '.utility-bar .total', '[class*="total"]'];
+                                                } else if (brnd === 'uniqlo') {
+                                                    selectors = ['.fr-ec-header-overlay__item-count', '.fr-ec-product-count', '.product-count', '.fr-ec-search-result-number'];
+                                                } else {
+                                                    selectors = [
+                                                        '.total-count', '.goods-list-total', '.goods-list .total',
+                                                        '.gods-total span', '.gods-total strong', '.num',
+                                                        'span.count', '.total-goods', '.prod-count', '.prodCount',
+                                                        '.product-count', '.num-items',
+                                                        '.product-grid-header__product-count', 'span.product-count', '.result-count'
+                                                    ];
+                                                }
+                                                for (const selector of selectors) {
+                                                    const el = document.querySelector(selector);
+                                                    if (el) {
+                                                        const text = el.innerText.trim();
+                                                        const num = text.replace(/[^0-9]/g, '');
+                                                        if (num) {
+                                                            const parsed = parseInt(num, 10);
+                                                            if (parsed > 0) return parsed;
+                                                        }
                                                     }
                                                 }
-                                            }
-                                            return 0;
-                                        }""", brand.lower())
+                                                // ZARA는 수량이 텍스트로 존재하지 않으므로, 상품 링크 개수를 센다.
+                                                if (brnd === 'zara') {
+                                                    const links = Array.from(document.querySelectorAll('a[href*="-p"][href*=".html"]')).map(a => a.href.split('?')[0]);
+                                                    const uniqueLinks = Array.from(new Set(links));
+                                                    if (uniqueLinks.length > 0) return uniqueLinks.length;
+                                                }
+                                                return 0;
+                                            }""", brand.lower())
                                     except Exception as parse_err:
                                         logger.warning(f"⚠️ [{brand.upper()}] 전체 상품 수 엘리먼트 파싱 에러: {parse_err}")
                                         
                                     if cat_target_count > 0:
                                         target_counts[category_key] += cat_target_count
                                         logger.info(f"   📊 [{brand.upper()}] {gender_key} - {category_key} 홈페이지 총 수량: {cat_target_count}개 감지")
+                                    elif cat_target_count == -1:
+                                        # WAF 차단 시 기본값 설정 스킵
+                                        pass
                                     has_detected_count = True
                                     
                                 await page.close()
@@ -534,9 +549,9 @@ async def run_pipeline(
                                 break
                                 
                         # 최종 폴백 카운트 누적
-                        if target_counts[category_key] == 0:
+                        if target_counts[category_key] <= 0:
                             fallback_cnt = len(product_codes)
-                            target_counts[category_key] += fallback_cnt
+                            target_counts[category_key] = fallback_cnt
                             logger.info(f"   📊 [{brand.upper()}] {gender_key} - {category_key} 홈페이지 최종 식별된 갯수({fallback_cnt}개)로 총 수량 누적 적용")
                             
                         for code in product_codes:
@@ -556,7 +571,7 @@ async def run_pipeline(
                            phases_done=["카테고리 스캔"], phases_remaining=["상품 크롤링", "이미지 업로드", "임베딩 생성", "DB 저장"],
                            status="running", run_id=run_id, started_at=_started_at,
                            target_counts=target_counts)
-            
+
             # 2단계: 상품 수집 및 상세 크롤링 실행
             logger.info("📦 [Step 2] 상품 상세 페이지 수집 및 크롤링 개시...")
             while all_target_products and len(collected_products) < limit:
@@ -654,21 +669,32 @@ async def run_pipeline(
                 prod_cur.execute("SELECT 1")
                 dw_cur.execute("SELECT 1")
             except Exception:
-                logger.info("🔄 Neon DB 연결 끊김 감지: 재연결을 수립합니다.")
-                try:
-                    prod_cur.close()
-                    prod_conn.close()
-                except: pass
-                try:
-                    dw_cur.close()
-                    dw_conn.close()
-                except: pass
-                
-                prod_conn = get_prod_db_connection()
-                prod_cur = prod_conn.cursor()
-                dw_conn = get_dw_db_connection()
-                dw_conn.autocommit = False
-                dw_cur = dw_conn.cursor()
+                logger.info("🔄 Neon DB 연결 끊김 감지: 재연결을 시도합니다.")
+                for attempt in range(3):
+                    try:
+                        try:
+                            prod_cur.close()
+                            prod_conn.close()
+                        except: pass
+                        try:
+                            dw_cur.close()
+                            dw_conn.close()
+                        except: pass
+                        
+                        prod_conn = get_prod_db_connection()
+                        prod_cur = prod_conn.cursor()
+                        dw_conn = get_dw_db_connection()
+                        dw_conn.autocommit = False
+                        dw_cur = dw_conn.cursor()
+                        
+                        logger.info("✅ Neon DB 재연결 성공!")
+                        return
+                    except Exception as conn_err:
+                        logger.warning(f"⚠️ Neon DB 재연결 시도 {attempt+1}/3 실패: {conn_err}")
+                        if attempt < 2:
+                            import time
+                            time.sleep(3)
+                raise RuntimeError("Neon DB 재연결에 최종 실패하였습니다.")
 
         pending_errors = []  # 비동기 Neon DB 커넥션 폭주를 막기 위해 에러 로그를 일시 수집
 
