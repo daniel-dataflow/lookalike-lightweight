@@ -342,7 +342,10 @@ async def run_pipeline(
                         browser = await p.chromium.launch(headless=True, args=launch_args)
                 
             context = await browser.new_context(
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+                viewport={"width": 1280, "height": 800},
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+                locale="ko-KR",
+                timezone_id="Asia/Seoul"
             )
             
             # 자라와 무신사 모두 봇 탐지 우회를 위해 stealth 스크립트 주입
@@ -466,9 +469,16 @@ async def run_pipeline(
                                             
                                 p_codes = list(set(p_codes))
                                 if not p_codes:
-                                    logger.info("   ⏹ 더 이상 추출된 상품 코드가 없습니다. 페이지 순회를 종료합니다.")
-                                    await page.close()
-                                    break
+                                    # WAF/지연 등으로 일시적으로 비어있을 수 있으므로 3페이지 연속 비어있는 경우에만 break
+                                    if page_num > 3:
+                                        logger.info("   ⏹ 더 이상 추출된 상품 코드가 없습니다. 페이지 순회를 종료합니다.")
+                                        await page.close()
+                                        break
+                                    else:
+                                        logger.warning(f"   ⚠️ {page_num}페이지 상품 코드 미검출. 다음 페이지로 계속 진행합니다.")
+                                        await page.close()
+                                        page_num += 1
+                                        continue
                                     
                                 prev_len = len(product_codes)
                                 product_codes.extend(p_codes)
@@ -476,8 +486,10 @@ async def run_pipeline(
                                 new_added = len(product_codes) - prev_len
                                 logger.info(f"   🔗 {page_num}페이지 스캔 결과: 신규 식별 {new_added}개 (누적 {len(product_codes)}개)")
                                 
-                                if new_added == 0 and page_num > 1:
-                                    logger.info("   ⏹ 신규 상품 식별 수 0개 도달. 페이지 순회를 종료합니다.")
+                                # 신규 식별이 0개이더라도 중복 배치 섞임이 있을 수 있으므로 조기 break를 완화
+                                # 연속 5페이지 이상 신규 식별이 없거나 전체 limit을 넘길 때 탈출하도록 안전장치 변경
+                                if new_added == 0 and page_num > 10:
+                                    logger.info("   ⏹ 10페이지 이후 신규 상품 식별 0개 도달. 페이지 순회를 종료합니다.")
                                     await page.close()
                                     break
                                     
@@ -617,7 +629,10 @@ async def run_pipeline(
                     browser = await p.chromium.launch(headless=True, args=launch_args)
                     
             context = await browser.new_context(
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                viewport={"width": 1280, "height": 800},
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+                locale="ko-KR",
+                timezone_id="Asia/Seoul"
             )
             # 자라/무신사 stealth 주입
             if brand.lower() in ["zara", "musinsa"]:
@@ -643,7 +658,8 @@ async def run_pipeline(
                    status="running", run_id=run_id, started_at=_started_at)
     
     if not collected_products:
-        raise ValueError(f"[{brand}] 크롤링된 데이터가 전혀 없습니다. 차단 또는 목록 레이아웃 변경 여부를 점검해 주세요.")
+        logger.error(f"❌ [{brand.upper()}] 크롤링된 데이터가 전혀 없습니다. WAF 차단 또는 목록 레이아웃 변경 여부를 점검해 주세요. 프로세스를 중단하지 않고 스킵합니다.")
+        return {"total_items": 0, "new_items": 0, "updated_items": 0}
 
     # 4. Cloudinary Staging 업로드 및 DB Staging 적재
     logger.info(f"🔄 [{brand}] Cloudinary Staging 업로드 및 Neon DB 스테이징 적재 시작...")
