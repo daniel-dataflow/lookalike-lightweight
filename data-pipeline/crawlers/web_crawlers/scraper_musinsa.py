@@ -169,7 +169,7 @@ async def process_product(product_id, gender, category, context):
     local_file_path = os.path.join(LOCAL_OUTPUT_PATH, filename)
     
     if os.path.exists(local_file_path):
-        print(f"   ⏩ {product_id} 이미 저장됨 (스킵)")
+        print(f"   >> {product_id} 이미 저장됨 (스킵)")
         return
 
     async with sem:
@@ -184,7 +184,7 @@ async def process_product(product_id, gender, category, context):
             
             try:
                 if attempt == 0:
-                    print(f"   🔎 {product_id} 분석 중...")
+                    print(f"   Search: {product_id} 분석 중...")
                 
                 await p_page.goto(url, timeout=60000, wait_until="domcontentloaded")
                 raw_data = await extract_attribute_focus_data(p_page)
@@ -194,20 +194,20 @@ async def process_product(product_id, gender, category, context):
                         json.dump(raw_data, f, ensure_ascii=False, indent=4)
                     
                     attr_str = ", ".join([f"{k}:{v}" for k, v in raw_data.get('goodsMaterial', {}).items()])
-                    print(f"   ✅ [저장완료] {filename} | 속성: [{attr_str}]")
+                    print(f"   Success: [저장완료] {filename} | 속성: [{attr_str}]")
                     break
                     
                 else:
-                    print(f"   ⚠️ {product_id} 데이터 추출 실패 (품절 등)")
+                    print(f"   Warning: {product_id} 데이터 추출 실패 (품절 등)")
                     break
                     
             except Exception as e:
                 error_msg = str(e)
                 if "ERR_NAME_NOT_RESOLVED" in error_msg or "Timeout" in error_msg:
-                    print(f"   ⏳ {product_id} 네트워크 지연 ({attempt+1}/{max_retries}). 5초 대기 후 재시도...")
+                    print(f"   Delay: {product_id} 네트워크 지연 ({attempt+1}/{max_retries}). 5초 대기 후 재시도...")
                     await asyncio.sleep(5.0)
                 else:
-                    print(f"   ❌ {product_id} 치명적 에러: {error_msg[:50]}")
+                    print(f"   Error: {product_id} 치명적 에러: {error_msg[:50]}")
                     break
                     
             finally:
@@ -217,7 +217,7 @@ async def process_product(product_id, gender, category, context):
         await asyncio.sleep(1.0)
 
 async def crawl_category(gender, category, base_url, context):
-    print(f"\n>>> 🎯 [{gender} - {category.upper()}] 목록 검색 시작: {base_url}")
+    print(f"\n>>> [{gender} - {category.upper()}] 목록 검색 시작: {base_url}")
     product_ids = set()
     page = await context.new_page()
     
@@ -231,7 +231,7 @@ async def crawl_category(gender, category, base_url, context):
         while True:
             hrefs = await page.evaluate("() => Array.from(document.querySelectorAll('a')).map(a => a.href)")
             for h in hrefs:
-                m = re.search(r'(?:goods|products)\/(\d+)', h)
+                m = re.search(r'(?:goods|products)/(\d+)', h)
                 if m: product_ids.add(m.group(1))
             
             await page.evaluate("window.scrollBy(0, 600)")
@@ -246,7 +246,7 @@ async def crawl_category(gender, category, base_url, context):
                 if new_height == last_height:
                     no_change_count += 1
                     if no_change_count >= 3:
-                        print(f"   ⬇️ 더 이상 로딩되는 상품이 없습니다. 스크롤 종료.")
+                        print(f"   Down: 더 이상 로딩되는 상품이 없습니다. 스크롤 종료.")
                         break
                 else:
                     no_change_count = 0 
@@ -254,14 +254,14 @@ async def crawl_category(gender, category, base_url, context):
             else:
                 no_change_count = 0
 
-        print(f"   💡 최종 수집 대기열: {len(product_ids)}개 확인 완료. 상세 정보 추출 시작...")
+        print(f"   Info: 최종 수집 대기열: {len(product_ids)}개 확인 완료. 상세 정보 추출 시작...")
         await page.close()
         
         if product_ids:
             await asyncio.gather(*[process_product(pid, gender, category, context) for pid in list(product_ids)])
             
     except Exception as e:
-        print(f"   ❌ 목록 페이지 실패: {e}")
+        print(f"   Error: 목록 페이지 실패: {e}")
         if not page.is_closed(): await page.close()
 
 async def run():
@@ -316,9 +316,9 @@ async def run():
         if local_files:
             print(f"\n📦 로컬 수집 완료 ({len(local_files)}건). 저장 경로: {LOCAL_OUTPUT_PATH}")
         else:
-            print("\n❌ 로컬에 수집된 파일이 없어 HDFS 업로드를 생략합니다.")
+            print("\nError: 로컬에 수집된 파일이 없어 HDFS 업로드를 생략합니다.")
     else:
-        print("\n❌ 저장 디렉토리를 찾을 수 없습니다.")
+        print("\nError: 저장 디렉토리를 찾을 수 없습니다.")
 
 if __name__ == "__main__":
     asyncio.run(run())

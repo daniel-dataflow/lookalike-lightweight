@@ -400,6 +400,31 @@ async def run_pipeline(
                                 
                             logger.info(f"   📄 목록 페이지 {page_num} 스캔 시도: {current_url}")
                             page = await context.new_page()
+                            # ★ 자라 전용 Playwright API 인터셉터 등록
+                            if brand.lower() == "zara":
+                                page._zara_intercepted_products = []
+                                async def _zara_response_handler(response):
+                                    if "itxrest" in response.url and response.status == 200:
+                                        try:
+                                            body = await response.json()
+                                            products_found = []
+                                            if isinstance(body, dict):
+                                                if "products" in body and isinstance(body["products"], list):
+                                                    products_found = body["products"]
+                                                elif "productGroups" in body:
+                                                    for group in body.get("productGroups", []):
+                                                        for elem in group.get("elements", []):
+                                                            if "commercialComponents" in elem:
+                                                                for comp in elem["commercialComponents"]:
+                                                                    if comp.get("type") == "Product":
+                                                                        products_found.append(comp)
+                                            for prod in products_found:
+                                                parsed = scraper.parse_product_from_api(prod)
+                                                if parsed:
+                                                    page._zara_intercepted_products.append(parsed)
+                                        except Exception:
+                                            pass
+                                page.on("response", _zara_response_handler)
                             try:
                                 await page.set_viewport_size({"width": 1280, "height": 800})
                                 await page.goto(current_url, timeout=60000, wait_until="domcontentloaded")
@@ -434,7 +459,7 @@ async def run_pipeline(
                                     import re
                                     hrefs = await page.evaluate("""() => Array.from(document.querySelectorAll('a')).map(a => a.href)""")
                                     for h in hrefs:
-                                        m = re.search(r'(?:goods|products)\\/(\\d+)', h)
+                                        m = re.search(r'(?:goods|products)/(\\d+)', h)
                                         if m: p_codes.append(m.group(1))
                                 elif brand == "topten":
                                     p_codes = await page.evaluate("""() => {
@@ -461,12 +486,25 @@ async def run_pipeline(
                                     p_codes = [pid for pid in matches if len(pid) >= 5 and "review" not in pid]
                                 elif brand == "zara":
                                     import re
-                                    links = await page.evaluate("""() => Array.from(document.querySelectorAll('a[href*="-p"][href*=\".html\"]')).map(a => a.href)""")
+                                    # Playwright API Response 인터셉터로 캡처된 데이터를 collected_products에 즉시 추가
+                                    _zara_intercepted = getattr(page, "_zara_intercepted_products", [])
+                                    logger.info(f"    Zara API Interceptor: {len(_zara_intercepted)} items captured.")
+                                    for item in _zara_intercepted:
+                                        if item and item.get("goodsNo"):
+                                            # 이미 수집된 목록에 중복 방지하며 추가
+                                            pid = item["goodsNo"]
+                                            item["gender"] = gender_key
+                                            item["category"] = category_key
+                                            if not any(x.get("goodsNo") == pid for x in collected_products) and len(collected_products) < limit:
+                                                collected_products.append(item)
+                                                logger.info(f"   ➕ [ZARA API] 수집 성공 ({len(collected_products)}/{limit}): {item['goodsNm']}")
+
+                                    # 기존 링크 파싱도 폴백으로 실행하여 crawling_pipeline_cli의 flow를 해치지 않음
+                                    links = await page.evaluate("""() => Array.from(document.querySelectorAll('a[href*="-p"][href*=".html"]')).map(a => a.href)""")
                                     for link in links:
-                                        match = re.search(r'-p([0-9]+)\\.html', link)
+                                        match = re.search(r'-p([0-9]+)\.html', link)
                                         if match:
                                             p_codes.append(link.split('?')[0])
-                                            
                                 p_codes = list(set(p_codes))
                                 if not p_codes:
                                     # WAF/지연 등으로 일시적으로 비어있을 수 있으므로 3페이지 연속 비어있는 경우에만 break
