@@ -18,7 +18,7 @@ from .config import get_settings
 from .database import init_all_databases, close_all_databases, cleanup_expired_sessions
 from .services.local_ml_service import local_ml_service
 from . import database as _db_module
-from .routers import auth_router, product_router, search_router, inquiry_router, admin_router
+from .routers import auth_router, product_router, search_router, inquiry_router, admin_router, wakeup_router
 from .routers.pages import router as pages_router
 from .routers.metric import router as metric_router, start_metric_collector
 from .routers.metric_realtime import router as metric_realtime_router
@@ -325,6 +325,7 @@ app.include_router(admin_router)
 app.include_router(metric_router)
 app.include_router(metric_realtime_router)
 app.include_router(log_router)
+app.include_router(wakeup_router)
 
 
 
