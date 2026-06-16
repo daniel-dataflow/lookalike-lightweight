@@ -2,11 +2,14 @@ name: Lookalike Fashion Crawling Pipeline
 
 on:
   schedule:
-    # 매일 새벽 3시(KST) 정기 Phase 1 수집 배치 실행 (테스트용 매일 구동)
+    # Phase 1: 매일 새벽 3시(KST / UTC 18:00) 정기 수집 배치 실행
     # 정식 상용화 시 7일 주기용 설정: 0 18 * * 0 (매주 일요일 KST 새벽 3시)
     - cron: '0 18 * * *'
-    # 매일 새벽 5시(KST) 정기 Phase 2 스위칭 배치 실행 (수집 2시간 뒤 — staging 생성 후 24h 대기 중인 전날 데이터 정합성 검사 및 교체)
-    - cron: '0 20 * * *'
+    # Phase 2: 매일 새벽 4시(KST / UTC 19:00) 정기 스위칭 배치 실행
+    # Phase 1 크롤링 완료(보통 03:00~04:00 KST 사이 완료) 후 다음날 04:00 KST에 실행.
+    # base_utils.py의 pipeline_runs.finished_at 기준 24시간 검증이 실질 안전망이므로
+    # 이 스케줄 시간은 대략 24시간 경과 여부를 맞추기 위한 용도임.
+    - cron: '0 19 * * *'
   workflow_dispatch:
     inputs:
       brand:
@@ -86,12 +89,18 @@ jobs:
         run: |
           # 스케줄 실행이거나 수동 실행에서 brand가 'all'인 경우 -> 병렬 전체 브랜드 구성
           if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ github.event.inputs.brand }}" = "all" ]; then
-            LIMIT="${{ github.event.inputs.limit }}"
-            if [ -z "$LIMIT" ]; then
-              LIMIT="200"
+            # 자동 스케줄 배치: limit=0으로 설정하여 전체 사이트 스캔 후 감지된 수량을 자동 결정
+            # (참고: crawling_pipeline_cli.py에서 limit==0이면 자동 모드로 실행하여 전체 타겟 수량을 limit으로 사용)
+            LIMIT="0"
+            if [ "${{ github.event_name }}" != "schedule" ]; then
+              # 수동 'all' 실행 시는 입력한 limit 값 사용
+              INPUT_LIMIT="${{ github.event.inputs.limit }}"
+              if [ -n "$INPUT_LIMIT" ] && [ "$INPUT_LIMIT" != "0" ]; then
+                LIMIT="$INPUT_LIMIT"
+              fi
             fi
             # 전체 브랜드에 대해 개별 Matrix 분기 생성 (무신사는 Men, Women 분할)
-            echo 'matrix={"include":[{"brand":"8seconds","limit":"'$LIMIT'","gender":"","category":""},{"brand":"topten","limit":"'$LIMIT'","gender":"","category":""},{"brand":"uniqlo","limit":"'$LIMIT'","gender":"","category":""},{"brand":"zara","limit":"'$LIMIT'","gender":"","category":""},{"brand":"musinsa","limit":"150","gender":"Men","category":""},{"brand":"musinsa","limit":"150","gender":"Women","category":""}]}' >> $GITHUB_OUTPUT
+            echo 'matrix={"include":[{"brand":"8seconds","limit":"'$LIMIT'","gender":"","category":""},{"brand":"topten","limit":"'$LIMIT'","gender":"","category":""},{"brand":"uniqlo","limit":"'$LIMIT'","gender":"","category":""},{"brand":"zara","limit":"'$LIMIT'","gender":"","category":""},{"brand":"musinsa","limit":"'$LIMIT'","gender":"Men","category":""},{"brand":"musinsa","limit":"'$LIMIT'","gender":"Women","category":""}]}' >> $GITHUB_OUTPUT
           else
             # 단일 브랜드 수동 실행
             LIMIT="${{ github.event.inputs.limit }}"
@@ -220,10 +229,10 @@ jobs:
     strategy:
       matrix: ${{ fromJson(needs.setup-swap-matrix.outputs.matrix) }}
       fail-fast: false
-    # 수동 swap 모드이거나, 20:00 UTC 스케줄 구동 시 실행
+    # 수동 swap 모드이거나, 19:00 UTC 스케줄 구동 시 실행
     if: |
       (github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'swap') ||
-      (github.event_name == 'schedule' && github.event.schedule == '0 20 * * *')
+      (github.event_name == 'schedule' && github.event.schedule == '0 19 * * *')
 
     steps:
       - name: 저장소 체크아웃

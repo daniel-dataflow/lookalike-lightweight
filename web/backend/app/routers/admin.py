@@ -551,6 +551,7 @@ async def report_pipeline_run(data: dict):
 
     except Exception as e:
         logger.error(f"파이프라인 결과 기록 실패: {e}")
+        # uvicorn reload trigger (Jinja2 templates cache clear)
         raise HTTPException(status_code=500, detail="기록 실패")
 
 
@@ -558,14 +559,14 @@ async def report_pipeline_run(data: dict):
 # 7. 크롤링 파이프라인 모니터링 API (admin_crawling.html 연동)
 # ──────────────────────────────────────
 @router.get("/crawling/staging")
-async def get_crawling_staging():
+def get_crawling_staging():
     """
     브랜드별 수집 데이터(Staging) 현황, 운영(Prod) 데이터 현황 및 정합성 검사 상태 조회
     """
     try:
         settings = get_settings()
         
-        # 1. 지원 브랜드 목록 정의
+        # 1. 지원 브랜드 목록 정의 (DB에 저장되는 규격에 맞게 대문자로 통일)
         brands = ["8SECONDS", "UNIQLO", "MUSINSA", "TOPTEN", "ZARA"]
         brand_stats = []
         total_staging = 0
@@ -608,7 +609,7 @@ async def get_crawling_staging():
                         embed_count = r["cnt"] or 0
                         
                     cur.execute(
-                        "SELECT count(*) as cnt FROM staging_naver_prices WHERE UPPER(brand) = %s;",
+                        "SELECT count(*) as cnt FROM staging_naver_prices WHERE brand = %s;",
                         (brand,)
                     )
                     r = cur.fetchone()
@@ -640,28 +641,37 @@ async def get_crawling_staging():
                     if r:
                         pipeline_error_count = r["cnt"] or 0
                         
-                    # 해당 브랜드의 가장 최근 파이프라인 구동 정보에서 metadata(목표량 등) 조회
+                    # 해당 브랜드의 가장 최근 파이프라인 구동 정보에서 metadata(목표량 등) 및 소요 시간 조회
                     target_count = 0
                     target_counts_map = {}
+                    last_duration_sec = None
                     cur.execute(
                         """
-                        SELECT metadata FROM pipeline_runs
+                        SELECT metadata, duration_sec FROM pipeline_runs
                         WHERE brand = %s
                         ORDER BY run_id DESC LIMIT 1;
                         """,
                         (brand,)
                     )
                     run_row = cur.fetchone()
-                    if run_row and run_row["metadata"]:
-                        import json as _json
-                        try:
-                            meta = run_row["metadata"]
-                            if isinstance(meta, str):
-                                meta = _json.loads(meta)
-                            target_count = meta.get("target_total", 0)
-                            target_counts_map = meta.get("target_counts", {})
-                        except Exception as meta_err:
-                            logger.warning(f"metadata 파싱 실패: {meta_err}")
+                    if run_row:
+                        last_duration_sec = run_row["duration_sec"]
+                        if run_row["metadata"]:
+                            import json as _json
+                            try:
+                                meta = run_row["metadata"]
+                                if isinstance(meta, str):
+                                    meta = _json.loads(meta)
+                                
+                                user_limit = meta.get("user_limit", 0)
+                                if user_limit > 0:
+                                    target_count = user_limit
+                                else:
+                                    target_count = meta.get("target_total", 0)
+                                    
+                                target_counts_map = meta.get("target_counts", {})
+                            except Exception as meta_err:
+                                logger.warning(f"metadata 파싱 실패: {meta_err}")
                             
                     # 카테고리별 실시간 수집 현황 집계
                     cur.execute(
@@ -714,8 +724,11 @@ async def get_crawling_staging():
                     # 모든 감지되거나 대상 카테고리 루프 (Outer, Top, Bottom 등)
                     all_categories = sorted(list(set(list(cat_staging.keys()) + list(target_counts_map.keys()) + ["Outer", "Top", "Bottom"])))
                     for cat in all_categories:
-                        cat_tgt = target_counts_map.get(cat, 0)
                         cat_stg = cat_staging.get(cat, 0)
+                        # 수동 모드 분배 수치 매핑 (staging에 수집된 수량이 있을 때만 metadata 목표량 투영)
+                        cat_tgt = target_counts_map.get(cat, 0)
+                        if cat_stg == 0:
+                            cat_tgt = 0
                         if cat_tgt == 0 and cat_stg == 0:
                             continue # 데이터가 전혀 없는 카테고리는 생략
                         categories.append({
@@ -762,7 +775,7 @@ async def get_crawling_staging():
             total_staging += staging_count
             
             brand_stats.append({
-                "brand": brand,
+                "brand": brand.upper(),
                 "staging_count": staging_count,
                 "target_count": target_count,
                 "prod_count": prod_count,
@@ -773,7 +786,8 @@ async def get_crawling_staging():
                 "latest_dt": latest_dt.isoformat() if latest_dt else None,
                 "hours_elapsed": hours_elapsed,
                 "pipeline_error_count": pipeline_error_count,
-                "categories": categories
+                "categories": categories,
+                "last_duration_sec": last_duration_sec
             })
             
         return {
@@ -810,7 +824,7 @@ async def toggle_database_mode(data: dict):
 
 
 @router.post("/crawling/run")
-async def run_manual_crawling(data: dict):
+def run_manual_crawling(data: dict):
     """
     수동 크롤링 실행 트리거 (GitHub Actions 호출 연계 혹은 백그라운드 태스크)
     실제 백그라운드 수동 구동 처리를 하거나, 로컬 커맨드를 비동기로 실행
@@ -818,6 +832,7 @@ async def run_manual_crawling(data: dict):
     try:
         brand = data.get("brand", "").lower()
         limit = data.get("limit", 10)
+        category = data.get("category", "all")
         
         if not brand:
             raise HTTPException(status_code=400, detail="브랜드명이 필요합니다.")
@@ -854,6 +869,9 @@ async def run_manual_crawling(data: dict):
         log_file_path = os.path.join(log_dir, f"crawl_{brand}.log")
         
         cmd = [python_exe, cli_path, "--brand", brand, "--limit", str(limit), "--action", "crawl"]
+        if category and category != "all":
+            cmd += ["--category", category]
+            
         logger.info(f"수동 크롤링 백그라운드 구동 명령: {' '.join(cmd)} (Python: {python_exe})")
         
         # 비동기로 subprocess 실행 (로그 파일로 출력 저장)
@@ -862,14 +880,38 @@ async def run_manual_crawling(data: dict):
         env = _os.environ.copy()
         env["PYTHONIOENCODING"] = "utf-8"
         
-        with open(log_file_path, "a", encoding="utf-8") as log_f:
-            subprocess.Popen(
-                cmd,
-                stdout=log_f,
-                stderr=log_f,
-                env=env,
-                close_fds=True if os.name != 'nt' else False
+        log_f = open(log_file_path, "a", encoding="utf-8")
+        subprocess.Popen(
+            cmd,
+            stdout=log_f,
+            stderr=log_f,
+            env=env,
+            close_fds=True if os.name != 'nt' else False
+        )
+        
+        # [즉각 반응성 개선] 크롤러 기동 즉시 progress 파일에 running 상태 기록
+        try:
+            import json as _json
+            from datetime import datetime as _datetime
+            progress_path = os.path.normpath(
+                os.path.join(log_dir, f"progress_{brand}.json")
             )
+            initial_progress = {
+                "brand": brand.upper(),
+                "status": "running",
+                "step": "크롤러 기동 중...",
+                "percent": 1,
+                "current": 0,
+                "total": limit,
+                "current_item": "크롤링 파이프라인 리소스 준비 중",
+                "phases_done": [],
+                "phases_remaining": ["카테고리 스캔", "상품 크롤링", "이미지 업로드", "임베딩 생성", "DB 저장"],
+                "started_at": _datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+            }
+            with open(progress_path, "w", encoding="utf-8") as pf:
+                _json.dump(initial_progress, pf, ensure_ascii=False, indent=2)
+        except Exception as file_err:
+            logger.warning(f"초기 진행 상황 파일 작성 실패: {file_err}")
         
         return {"success": True, "message": f"{brand.upper()} 브랜드 수집(크롤링) 백그라운드 작업이 성공적으로 실행되었습니다. 로그: logs/crawl_{brand}.log"}
     except Exception as e:
@@ -906,16 +948,16 @@ async def execute_manual_swap(data: dict):
         success = await base_utils.swap_staging_to_production(brand, force=force)
         
         if success:
-            # 스위칭 성공 시 실시간 진행률 JSON 파일이 존재하면 삭제하여 대기 중(Idle)으로 즉시 리셋 유도
+            # 이관 완료 시 진행률 정보 파일 초기화(삭제)
             try:
-                base_dir = os.path.dirname(os.path.abspath(__file__))
-                progress_path = os.path.normpath(
-                    os.path.join(base_dir, "..", "..", "..", "..", "logs", f"progress_{brand.lower()}.json")
+                log_dir = os.path.normpath(
+                    os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "..", "logs")
                 )
+                progress_path = os.path.join(log_dir, f"progress_{brand.lower()}.json")
                 if os.path.exists(progress_path):
                     os.remove(progress_path)
             except Exception as file_err:
-                logger.warning(f"스위칭 후 진행률 파일 삭제 실패: {file_err}")
+                logger.warning(f"이관 완료 후 progress 파일 삭제 실패: {file_err}")
                 
             return {"success": True, "message": f"{brand.upper()} 브랜드 스테이징 데이터가 활성 운영 DB로 성공적으로 스위칭 이관되었습니다."}
         else:
@@ -926,7 +968,7 @@ async def execute_manual_swap(data: dict):
 
 
 @router.delete("/crawling/staging/{brand}")
-async def clear_staging_data_api(brand: str):
+def clear_staging_data_api(brand: str):
     """
     특정 브랜드의 스테이징 데이터를 비움
     """
@@ -945,16 +987,34 @@ async def clear_staging_data_api(brand: str):
         # 동기 호출 수행
         base_utils.clear_staging_data(brand)
         
-        # 스테이징 비우기 성공 시 실시간 진행률 JSON 파일 삭제하여 Idle 초기화
+        # [목표 수집률 초기화] 스테이징이 비워졌으므로 해당 브랜드의 최근 파이프라인 metadata에 있는 목표 수치를 0으로 초기화
         try:
-            base_dir = os.path.dirname(os.path.abspath(__file__))
-            progress_path = os.path.normpath(
-                os.path.join(base_dir, "..", "..", "..", "..", "logs", f"progress_{brand.lower()}.json")
+            with get_dw_cursor() as cur:
+                cur.execute(
+                    """
+                    UPDATE pipeline_runs 
+                    SET metadata = '{"target_total": 0, "target_counts": {}, "user_limit": 0}'::jsonb
+                    WHERE run_id = (
+                        SELECT run_id FROM pipeline_runs 
+                        WHERE brand = %s 
+                        ORDER BY run_id DESC LIMIT 1
+                    );
+                    """,
+                    (brand.upper(),)
+                )
+        except Exception as db_err:
+            logger.warning(f"스테이징 비우기 중 pipeline_runs metadata 초기화 실패: {db_err}")
+        
+        # 스테이징 비우기 완료 시 진행률 정보 파일 초기화(삭제)
+        try:
+            log_dir = os.path.normpath(
+                os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "..", "logs")
             )
+            progress_path = os.path.join(log_dir, f"progress_{brand.lower()}.json")
             if os.path.exists(progress_path):
                 os.remove(progress_path)
         except Exception as file_err:
-            logger.warning(f"스테이징 비우기 후 진행률 파일 삭제 실패: {file_err}")
+            logger.warning(f"비우기 완료 후 progress 파일 삭제 실패: {file_err}")
             
         return {"success": True, "message": f"{brand.upper()} 브랜드의 모든 스테이징 데이터 및 Cloudinary 임시 업로드가 초기화되었습니다."}
     except Exception as e:
@@ -963,7 +1023,7 @@ async def clear_staging_data_api(brand: str):
 
 
 @router.get("/crawling/logs")
-async def get_crawling_logs(
+def get_crawling_logs(
     run_page: int = Query(1, ge=1),
     run_limit: int = Query(10, ge=1, le=100),
     err_page: int = Query(1, ge=1),
@@ -985,8 +1045,8 @@ async def get_crawling_logs(
         total_errors = 0
         
         with get_dw_cursor() as cur:
-            # 1. runs (수동 크롤링/이관 파이프라인만 필터링)
-            cur.execute("SELECT count(*) as cnt FROM pipeline_runs WHERE pipeline_name IN ('manual_crawling_pipeline', 'crawling_pipeline', 'swap_pipeline');")
+            # 1. runs (수동 크롤링/수동 이관 파이프라인만 필터링)
+            cur.execute("SELECT count(*) as cnt FROM pipeline_runs WHERE pipeline_name IN ('manual_crawling_pipeline', 'manual_swap_pipeline');")
             total_runs = cur.fetchone()["cnt"]
             
             cur.execute(
@@ -1001,7 +1061,7 @@ async def get_crawling_logs(
                        (SELECT COALESCE(count(*), 0) FROM pipeline_errors pe WHERE pe.run_id = nr.run_id) as error_count, 
                        started_at, finished_at, duration_sec, display_run_id
                 FROM numbered_runs nr
-                WHERE nr.pipeline_name IN ('manual_crawling_pipeline', 'crawling_pipeline', 'swap_pipeline')
+                WHERE nr.pipeline_name IN ('manual_crawling_pipeline', 'manual_swap_pipeline')
                 ORDER BY nr.started_at DESC
                 LIMIT %s OFFSET %s;
                 """,
@@ -1024,8 +1084,8 @@ async def get_crawling_logs(
                     "duration_sec": r["duration_sec"] or 0
                 })
                 
-            # 2. errors (수동 크롤링/이관 파이프라인의 에러만 필터링, run_id 옵션 처리)
-            err_where = "WHERE pr.pipeline_name IN ('manual_crawling_pipeline', 'crawling_pipeline', 'swap_pipeline')"
+            # 2. errors (수동 크롤링/수동 이관 파이프라인의 에러만 필터링, run_id 옵션 처리)
+            err_where = "WHERE pr.pipeline_name IN ('manual_crawling_pipeline', 'manual_swap_pipeline')"
             err_params = []
             if run_id:
                 err_where += " AND pe.run_id = %s"
@@ -1085,7 +1145,7 @@ async def get_crawling_logs(
 
 
 @router.get("/crawling/auto/logs")
-async def get_crawling_auto_logs(
+def get_crawling_auto_logs(
     run_page: int = Query(1, ge=1),
     run_limit: int = Query(10, ge=1, le=100),
     err_page: int = Query(1, ge=1),
@@ -1107,8 +1167,8 @@ async def get_crawling_auto_logs(
         total_errors = 0
         
         with get_dw_cursor() as cur:
-            # 1. runs
-            cur.execute("SELECT count(*) as cnt FROM pipeline_runs WHERE pipeline_name = 'auto_crawling_pipeline';")
+            # 1. runs (자동 크롤링 및 자동 이관 파이프라인 필터링)
+            cur.execute("SELECT count(*) as cnt FROM pipeline_runs WHERE pipeline_name IN ('auto_crawling_pipeline', 'auto_swap_pipeline');")
             total_runs = cur.fetchone()["cnt"]
             
             cur.execute(
@@ -1145,7 +1205,7 @@ async def get_crawling_auto_logs(
                 })
                 
             # 2. errors (run_id 옵션 처리)
-            err_where = "WHERE pr.pipeline_name = 'auto_crawling_pipeline'"
+            err_where = "WHERE pr.pipeline_name IN ('auto_crawling_pipeline', 'auto_swap_pipeline')"
             err_params = []
             if run_id:
                 err_where += " AND pe.run_id = %s"
@@ -1208,7 +1268,7 @@ async def get_crawling_auto_logs(
 
 
 @router.get("/crawling/auto/stats")
-async def get_crawling_auto_stats():
+def get_crawling_auto_stats():
     """
     자동 크롤링 에러 분석 통계 (에러 유형 및 다빈도 브랜드 분포)
     """
@@ -1224,7 +1284,7 @@ async def get_crawling_auto_stats():
                 SELECT pe.error_type, count(*) as cnt
                 FROM pipeline_errors pe
                 JOIN pipeline_runs pr ON pe.run_id = pr.run_id
-                WHERE pr.pipeline_name = 'auto_crawling_pipeline'
+                WHERE pr.pipeline_name IN ('auto_crawling_pipeline', 'auto_swap_pipeline')
                 GROUP BY pe.error_type
                 ORDER BY cnt DESC
                 LIMIT 5;
@@ -1240,7 +1300,7 @@ async def get_crawling_auto_stats():
                 SELECT pr.brand, count(*) as cnt
                 FROM pipeline_errors pe
                 JOIN pipeline_runs pr ON pe.run_id = pr.run_id
-                WHERE pr.pipeline_name = 'auto_crawling_pipeline'
+                WHERE pr.pipeline_name IN ('auto_crawling_pipeline', 'auto_swap_pipeline')
                 GROUP BY pr.brand
                 ORDER BY cnt DESC;
             """)
@@ -1264,7 +1324,7 @@ async def get_crawling_auto_stats():
 # [실시간 진행률 API] 크롤링 파이프라인 현재 진행 상황 조회
 # ─────────────────────────────────────────────────────
 @router.get("/crawling/progress")
-async def get_crawling_progress(brand: str = Query(..., description="브랜드명 (topten, 8seconds 등)")):
+def get_crawling_progress(brand: str = Query(..., description="브랜드명 (topten, 8seconds 등)")):
     """
     크롤링 파이프라인의 실시간 진행 상황을 반환합니다.
     CLI가 logs/progress_{brand}.json에 기록한 내용을 읽어 반환합니다.
@@ -1308,30 +1368,34 @@ async def get_crawling_progress(brand: str = Query(..., description="브랜드�
         with open(progress_path, "r", encoding="utf-8") as f:
             data = _json.load(f)
 
-        # JSON에 저장된 started_at 시각(로컬 타임)과 현재 백엔드 로컬 타임의 차이로 정확한 경과 시간 계산
+        # JSON에 저장된 started_at/updated_at 시각 차이와 파일 수정 시간(mtime)을 조합해 타임존 및 윈도우 ctime 터널링 버그 없는 절대 경과 시간 계산
         elapsed_sec = 0
-        file_elapsed = max(0, int(_time.time() - file_ctime))
         started_at_str = data.get("started_at")
-        if started_at_str:
+        updated_at_str = data.get("updated_at")
+        if started_at_str and updated_at_str:
             try:
                 started_dt = datetime.strptime(started_at_str, "%Y-%m-%dT%H:%M:%S")
-                diff_sec = int((datetime.now() - started_dt).total_seconds())
-                # KST/UTC 타임존 미스매치 시 실제 파일 생성 시간(file_ctime) 경과로 안전하게 대체
-                if abs(diff_sec - file_elapsed) > 1800:
-                    elapsed_sec = file_elapsed
+                updated_dt = datetime.strptime(updated_at_str, "%Y-%m-%dT%H:%M:%S")
+                base_elapsed = int((updated_dt - started_dt).total_seconds())
+                base_elapsed = max(0, base_elapsed)
+                
+                # running 상태인 경우 마지막 업데이트 이후 추가로 흐른 물리 시간 더해줌
+                if data.get("status") == "running":
+                    additional_elapsed = max(0, int(_time.time() - file_mtime))
+                    elapsed_sec = base_elapsed + additional_elapsed
                 else:
-                    elapsed_sec = max(0, diff_sec)
+                    elapsed_sec = base_elapsed
             except Exception as parse_err:
-                logger.warning(f"started_at 파싱 실패: {parse_err}")
-                elapsed_sec = file_elapsed
+                logger.warning(f"진행 시각 파싱 실패: {parse_err}")
+                elapsed_sec = max(0, int(_time.time() - file_mtime))
         else:
-            elapsed_sec = file_elapsed
+            elapsed_sec = max(0, int(_time.time() - file_mtime))
 
-        # 마지막 업데이트로부터 300초 이상 지났으면 비정상 종료(stale)로 판단
+        # 마지막 업데이트로부터 1800초(30분) 이상 지났으면 비정상 종료(stale)로 판단
         stale = False
         now_ts = _time.time()
         if data.get("status") == "running":
-            if (now_ts - file_mtime) > 300:
+            if (now_ts - file_mtime) > 1800:
                 stale = True
 
         return {

@@ -339,11 +339,9 @@ async def get_clip_text_embedding(session: aiohttp.ClientSession, text: str, tok
         logger.info(f"로컬 CLIP 텍스트 임베딩 성공 (dim={len(local_vec)})")
         return local_vec
 
-    # 로컬 모델도 실패 시 → mock 벡터 (마지막 수단)
-    logger.error("텍스트 임베딩 모든 방법 실패. mock 벡터 반환.")
-    fallback_vec = [0.0] * 512
-    fallback_vec[0] = 1.0
-    return fallback_vec
+    # 로컬 모델도 실패 시 → None 반환 (mock 벡터 삽입 방지)
+    logger.error("텍스트 임베딩 모든 방법 실패. None 반환.")
+    return None
 
 _GRADIO_CLIENT_LOCK = asyncio.Lock()
 
@@ -366,14 +364,10 @@ async def get_yolo_clip_image_embedding(session: aiohttp.ClientSession, image_ur
             if response.status == 200:
                 image_bytes = await response.read()
             else:
-                fallback_vec = [0.0] * 512
-                fallback_vec[0] = 1.0
-                return fallback_vec
+                return None
     except Exception as e:
         logger.warning(f"임베딩용 이미지 다운로드 실패: {e}")
-        fallback_vec = [0.0] * 512
-        fallback_vec[0] = 1.0
-        return fallback_vec
+        return None
 
     # 임시 파일 작성
     import tempfile
@@ -411,13 +405,12 @@ async def get_yolo_clip_image_embedding(session: aiohttp.ClientSession, image_ur
     except Exception as e:
         logger.warning(f"HF Space YOLO-CLIP API 호출 오류: {e}")
         
-    # 오프라인/패키지 미지원을 대비한 L2 정규화된 512차원 이미지 더미 벡터 반환 (첫 번째 차원만 1.0)
-    fallback_vec = [0.0] * 512
-    fallback_vec[0] = 1.0
-    return fallback_vec
+    return None
 
 def clean_db_url(db_url: str) -> str:
-    """DB URL 양 끝의 공백 및 따옴표를 지우고, 잘못된 형식(텍스트 포함 등)에서 postgresql:// 주소를 추출하여 DSN 오류를 방지합니다."""
+    """DB URL 양 끝의 공백 및 따옴표를 지우고, 잘못된 형식(텍스트 포함 등)에서 postgresql:// 주소를 추출하여 DSN 오류를 방지합니다.
+    안정적인 Neon 서버리스 DB 연동을 위해 sslmode=require가 없는 경우 자동으로 추가합니다.
+    """
     if not db_url:
         return db_url
     db_url = db_url.strip()
@@ -425,9 +418,35 @@ def clean_db_url(db_url: str) -> str:
     import re
     match = re.search(r'(postgres(?:ql)?://\S+)', db_url)
     if match:
-        cleaned = match.group(1)
-        return cleaned.strip("'\"")
+        cleaned = match.group(1).strip("'\"")
+        if "?" not in cleaned:
+            cleaned += "?sslmode=require"
+        elif "sslmode" not in cleaned:
+            cleaned += "&sslmode=require"
+        return cleaned
     return db_url.strip("'\"")
+
+def connect_db_with_retry(db_url: str, max_retries: int = 3, initial_delay: float = 1.0):
+    """지수 백오프(Exponential Backoff)를 적용하여 데이터베이스 연결을 재시도합니다.
+    불필요한 소켓 대기 지연을 줄이기 위해 connect_timeout=4를 명시적으로 적용합니다.
+    """
+    import time
+    last_err = None
+    conn_url = db_url
+    if "connect_timeout" not in conn_url:
+        sep = "&" if "?" in conn_url else "?"
+        conn_url = f"{conn_url}{sep}connect_timeout=4"
+        
+    for attempt in range(max_retries):
+        try:
+            conn = psycopg2.connect(conn_url)
+            return conn
+        except (psycopg2.OperationalError, psycopg2.InterfaceError) as e:
+            last_err = e
+            delay = initial_delay * (1.5 ** attempt)
+            logger.warning(f"⚠️ 데이터베이스 연결 실패 ({attempt+1}/{max_retries}). {delay:.1f}초 후 재시도... 에러: {e}")
+            time.sleep(delay)
+    raise last_err
 
 def get_prod_db_connection():
     """PROD_DATABASE_URL 환경 변수로부터 PostgreSQL 커넥션을 가져옵니다. (PROD DB)"""
@@ -435,7 +454,7 @@ def get_prod_db_connection():
     if not raw_url:
         raise ValueError("PROD_DATABASE_URL 또는 DATABASE_URL 환경 변수가 필요합니다.")
     db_url = clean_db_url(raw_url)
-    conn = psycopg2.connect(db_url)
+    conn = connect_db_with_retry(db_url)
     # 세션 타임존을 서울(KST)로 설정
     with conn.cursor() as cur:
         cur.execute("SET TIME ZONE 'Asia/Seoul';")
@@ -448,7 +467,7 @@ def get_dw_db_connection():
     if not raw_url:
         raise ValueError("DW_DATABASE_URL 또는 DATABASE_URL 환경 변수가 필요합니다.")
     db_url = clean_db_url(raw_url)
-    conn = psycopg2.connect(db_url)
+    conn = connect_db_with_retry(db_url)
     # 세션 타임존을 서울(KST)로 설정
     with conn.cursor() as cur:
         cur.execute("SET TIME ZONE 'Asia/Seoul';")
@@ -681,10 +700,16 @@ async def validate_image_url_async(session: aiohttp.ClientSession, url: str) -> 
 # --- 7. 최종 2단계 스위칭 및 승인 연동 ---
 async def swap_staging_to_production(brand_name: str, force: bool = False) -> bool:
     """
-    스테이징 DB에 임시 적재된 지 24시간이 경과한(혹은 force=True인) 데이터를 최종 검증하고,
-    Cloudinary 이미지를 staging/ 폴더에서 test/ 폴더로 이동시킨 후,
-    이미 DW DB(staging_product_embeddings)에 기추출되어 보관 중인 벡터 데이터를 가져와
-    Core DB의 products, naver_prices, product_embeddings 테이블로 원자적(Transaction)으로 일괄 복사 및 스위칭 반영합니다.
+    스테이징 DB에 임시 적재된 데이터를 최종 검증하고 프로덕션으로 이관합니다.
+    
+    [자동 스위칭 조건]
+    force=False(자동) 시에는 아래 모든 조건을 만족해야 스위칭이 허용됩니다:
+    1. 해당 브랜드의 가장 최근 크롤링 파이프라인(pipeline_runs)이 SUCCESS 상태여야 합니다.
+    2. 해당 파이프라인의 에러 건수(error_count)가 0이어야 합니다.
+    3. 해당 파이프라인이 완료(finished_at)된 시점으로부터 24시간이 경과해야 합니다.
+    
+    이 조건은 크롤링 시 누락/오류 데이터가 있을 경우 원본 프로덕션 데이터를 덮어쓰는 것을 방지합니다.
+    force=True(수동 강제) 시에는 위 조건을 무시하고 즉시 현재 스테이징 데이터 전체를 이관합니다.
     """
     # 1. 자동 스위칭 차단(Lock) 여부 검사
     if is_pipeline_blocked(brand_name) and not force:
@@ -693,8 +718,9 @@ async def swap_staging_to_production(brand_name: str, force: bool = False) -> bo
         send_alert(err_msg, level="CRITICAL")
         return False
 
-    # 스위칭 파이프라인 구동 내역을 위한 run_id 미리 생성
-    run_id = log_pipeline_start(brand_name, pipeline_name="swap_pipeline")
+    # 스위칭 파이프라인 구동 내역을 위한 run_id 미리 생성 (수동/자동 분리 명명)
+    pipeline_name = "manual_swap_pipeline" if force else "auto_swap_pipeline"
+    run_id = log_pipeline_start(brand_name, pipeline_name=pipeline_name)
 
     stage_conn = get_dw_db_connection()
     stage_conn.autocommit = False
@@ -703,7 +729,62 @@ async def swap_staging_to_production(brand_name: str, force: bool = False) -> bo
     try:
         brand_upper = brand_name.upper()
         
-        # 2. 대상 데이터 조회 (24시간 경과 또는 force)
+        # 2. force=False(자동) 시, 크롤링 파이프라인 완료 시점 기반 24시간 조건 검증
+        if not force:
+            # 가장 최근의 성공한 크롤링 파이프라인 조회
+            stage_cur.execute("""
+                SELECT run_id, finished_at, error_count, total_items
+                FROM pipeline_runs
+                WHERE brand = %s
+                  AND pipeline_name IN ('auto_crawling_pipeline', 'manual_crawling_pipeline')
+                  AND status = 'SUCCESS'
+                ORDER BY finished_at DESC
+                LIMIT 1
+            """, (brand_upper,))
+            last_crawl = stage_cur.fetchone()
+            
+            if not last_crawl:
+                err_msg = f"❌ [{brand_name}] 성공한 크롤링 파이프라인 이력이 없습니다. 자동 스위칭을 차단합니다."
+                logger.error(err_msg)
+                log_pipeline_error(run_id, "SWAP_NO_CRAWL_HISTORY", err_msg)
+                log_pipeline_end(run_id, "FAILED", total_items=0, error_count=1)
+                stage_cur.close()
+                stage_conn.close()
+                return False
+            
+            last_crawl_run_id, last_crawl_finished_at, last_crawl_error_count, last_crawl_total = last_crawl
+            
+            # 에러 건수 검증 (에러가 있으면 스위칭 차단)
+            if last_crawl_error_count and last_crawl_error_count > 0:
+                err_msg = f"❌ [{brand_name}] 가장 최근 크롤링(run_id={last_crawl_run_id})에서 에러 {last_crawl_error_count}건이 발생했습니다. 완벽한 수집 상태가 아니므로 자동 스위칭을 차단합니다."
+                logger.error(err_msg)
+                send_alert(err_msg, level="WARNING")
+                log_pipeline_error(run_id, "SWAP_CRAWL_HAS_ERRORS", err_msg)
+                log_pipeline_end(run_id, "FAILED", total_items=0, error_count=1)
+                stage_cur.close()
+                stage_conn.close()
+                return False
+            
+            # 24시간 경과 여부 검증
+            stage_cur.execute("""
+                SELECT EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - %s))::integer
+            """, (last_crawl_finished_at,))
+            elapsed_seconds = stage_cur.fetchone()[0] or 0
+            elapsed_hours = elapsed_seconds / 3600
+            
+            if elapsed_hours < 24:
+                err_msg = (f"⏳ [{brand_name}] 마지막 크롤링 완료(run_id={last_crawl_run_id}) 후 "
+                           f"{elapsed_hours:.1f}시간 경과. "
+                           f"24시간 이후에 스위칭이 가능합니다. 자동 스위칭을 차단합니다.")
+                logger.warning(err_msg)
+                log_pipeline_end(run_id, "FAILED", total_items=0, error_count=0)
+                stage_cur.close()
+                stage_conn.close()
+                return False
+            
+            logger.info(f"✅ [{brand_name}] 24시간 경과 검증 통과 (run_id={last_crawl_run_id}, 경과={elapsed_hours:.1f}h, 에러={last_crawl_error_count}건)")
+        
+        # 3. 대상 데이터 조회
         if force:
             stage_cur.execute("""
                 SELECT product_id, model_code, prod_name, base_price, gender, category_code, img_url, origin_url, create_dt
@@ -711,10 +792,12 @@ async def swap_staging_to_production(brand_name: str, force: bool = False) -> bo
                 WHERE brand_name = %s
             """, (brand_upper,))
         else:
+            # 자동 모드: create_dt 기준이 아닌 현재 staging 전체 데이터를 이관 대상으로 조회
+            # (이미 위에서 pipeline_runs 기준 24시간 검증을 완료했으므로)
             stage_cur.execute("""
                 SELECT product_id, model_code, prod_name, base_price, gender, category_code, img_url, origin_url, create_dt
                 FROM staging_products 
-                WHERE brand_name = %s AND create_dt <= CURRENT_TIMESTAMP - INTERVAL '24 hours'
+                WHERE brand_name = %s
             """, (brand_upper,))
             
         staging_rows = stage_cur.fetchall()
@@ -745,6 +828,7 @@ async def swap_staging_to_production(brand_name: str, force: bool = False) -> bo
             raise ValueError(f"카테고리 유실 건수({null_categories}건)가 허용 한도({max_allowed_nulls}건)를 초과했습니다.")
 
         logger.info("✅ 데이터 필드 검증 통과 (Validation Success)! 이미지 유효성 심층 테스트 및 Cloudinary 이관 진행...")
+
 
         # [검증 제약조건 3] 이미지 링크 작동성 비동기 검사 및 Cloudinary 폴더 이관
         configure_cloudinary()

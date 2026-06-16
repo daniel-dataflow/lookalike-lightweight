@@ -90,7 +90,7 @@ async def fetch_product_detail(session: aiohttp.ClientSession, product_id: str) 
     return {}
 
 
-async def intercept_with_playwright(target_url: str, category_id: int) -> list:
+async def intercept_with_playwright(target_url, category_id: int) -> list:
     """
     Playwright를 사용해 자라 카테고리 페이지 로드 시 발생하는
     내부 API 요청을 실시간으로 인터셉트하여 상품 목록을 수집
@@ -100,6 +100,9 @@ async def intercept_with_playwright(target_url: str, category_id: int) -> list:
     2. 내부적으로 발생하는 itxrest API 응답을 실시간 캡처
     3. 브라우저 없이는 얻을 수 없는 세션 쿠키/토큰 없이도 동작
     """
+    if isinstance(target_url, dict):
+        target_url = target_url.get("url", "")
+        
     from playwright.async_api import async_playwright
     
     captured_products = []

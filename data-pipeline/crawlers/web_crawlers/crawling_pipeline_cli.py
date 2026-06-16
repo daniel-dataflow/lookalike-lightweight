@@ -207,9 +207,21 @@ async def run_pipeline(
 
     logger.info(f"🚀 [{brand}] 크롤링 파이프라인 기동 (action={action}, limit={limit}, dry_run={dry_run}, force={force}, gender={gender}, category={category}, force_download={force_download}, product_id={product_id})")
     
+    # [시작 시각 보존] 어드민 백엔드가 버튼 클릭 즉시 기록한 started_at이 있다면,
+    # 파이썬 기동 대기 시간(프로세스 로딩 시간 등)을 전체 경과 시간에 누락 없이 반영하기 위해 덮어쓰지 않고 계승합니다.
+    progress_path = os.path.join(_PROGRESS_LOG_DIR, f"progress_{brand.lower()}.json")
+    if os.path.exists(progress_path):
+        try:
+            with open(progress_path, "r", encoding="utf-8") as pf:
+                existing_data = _json.load(pf)
+                if existing_data.get("started_at"):
+                    _started_at = existing_data.get("started_at")
+                    logger.info(f"💾 어드민 백엔드가 기록한 최초 시작 시각을 계승합니다: {_started_at}")
+        except Exception as read_err:
+            logger.warning(f"기존 시작 시간 조회 실패: {read_err}")
+
     # 윈도우 OS의 파일 ctime 보존 현상 방지를 위해 기존 진행률 파일 물리적 선 삭제
     try:
-        progress_path = os.path.join(_PROGRESS_LOG_DIR, f"progress_{brand.lower()}.json")
         if os.path.exists(progress_path):
             os.remove(progress_path)
     except Exception as e:
@@ -324,22 +336,23 @@ async def run_pipeline(
         nonlocal limit
         async with async_playwright() as p:
             # 봇 감지 솔루션(Akamai, Cloudflare) 우회를 위해 로컬 Chrome/Edge 채널을 우선 사용하고 실패 시 Firefox 및 일반 Chromium 순으로 폴백합니다.
+            # 불필요한 대기를 방지하기 위해 각 launch 시도에 5초(5000ms)의 타임아웃을 명시합니다.
             browser = None
             launch_args = ["--disable-blink-features=AutomationControlled"]
             try:
                 logger.info("🌐 봇 감지 우회를 위해 로컬 Chrome 채널을 사용하여 브라우저를 시작합니다.")
-                browser = await p.chromium.launch(headless=True, channel="chrome", args=launch_args)
+                browser = await p.chromium.launch(headless=True, channel="chrome", args=launch_args, timeout=5000)
             except Exception as e1:
                 logger.warning(f"⚠️ Chrome 채널 실행 실패 ({e1}). Edge 채널로 시도합니다...")
                 try:
-                    browser = await p.chromium.launch(headless=True, channel="msedge", args=launch_args)
+                    browser = await p.chromium.launch(headless=True, channel="msedge", args=launch_args, timeout=5000)
                 except Exception as e2:
                     logger.warning(f"⚠️ Edge 채널 실행 실패 ({e2}). Firefox 브라우저로 시도합니다...")
                     try:
-                        browser = await p.firefox.launch(headless=True)
+                        browser = await p.firefox.launch(headless=True, timeout=5000)
                     except Exception as e3:
                         logger.error(f"⚠️ Firefox 실행 실패 ({e3}). 일반 Chromium 헤드리스로 최종 폴백합니다.")
-                        browser = await p.chromium.launch(headless=True, args=launch_args)
+                        browser = await p.chromium.launch(headless=True, args=launch_args, timeout=5000)
                 
             context = await browser.new_context(
                 viewport={"width": 1280, "height": 800},
@@ -360,14 +373,25 @@ async def run_pipeline(
 
             target_map = scraper.TARGET_MAP
             all_target_products = [] # (product_code, gender_key, category_key) 튜플 리스트
-            
+
+            # 수동 vs 자동 모드 판단 선언
+            # limit > 0 이고 GITHUB_ACTIONS가 아니면 수동/어드민 입력 모드로 간주
+            is_manual_mode = (limit > 0) and (os.getenv("GITHUB_ACTIONS") != "true")
+            _mode_desc = f"수동 (limit={limit}개 조기종료 적용)" if is_manual_mode else "자동 (전체 사이트 스캔)"
+            logger.info(f"🔄 [수동/자동 모드] {_mode_desc}")
+
             # 1단계: 전체 지정 카테고리 목록 스캔 및 통계 산출
             logger.info("🔍 [Step 1] 전체 카테고리 목록 스캔 및 홈페이지 수량 분석 개시...")
+            scan_finished = False
             for gender_key, categories in target_map.items():
+                if scan_finished:
+                    break
                 # 성별 분할 필터링
                 if gender and gender_key.lower() != gender.lower():
                     continue
                 for category_key, urls in categories.items():
+                    if scan_finished:
+                        break
                     # 카테고리 분할 필터링
                     if category and category_key.lower() != category.lower():
                         continue
@@ -375,6 +399,8 @@ async def run_pipeline(
                     if isinstance(urls, str):
                         urls = [urls]
                     for target_url in urls:
+                        if scan_finished:
+                            break
                         logger.info(f"🔍 목록 스캔 중: {gender_key} - {category_key} - {target_url}")
                         
                         product_codes = []
@@ -429,8 +455,10 @@ async def run_pipeline(
                                 await page.set_viewport_size({"width": 1280, "height": 800})
                                 await page.goto(current_url, timeout=60000, wait_until="domcontentloaded")
                                 
-                                # 봇 탐지 우회 및 JS 렌더링 완료 대기 (무신사, 탑텐, 유니클로는 지연 렌더링 대응)
-                                if brand.lower() in ["zara", "musinsa", "uniqlo", "topten"]:
+                                # 봇 탐지 우회 및 JS 렌더링 완료 대기 (수동 모드일 때는 대기 시간을 2초로 대폭 단축하여 극적인 속도 향상)
+                                if is_manual_mode:
+                                    await asyncio.sleep(2.0)
+                                elif brand.lower() in ["zara", "musinsa", "uniqlo", "topten"]:
                                     await asyncio.sleep(8.0)
                                 else:
                                     await asyncio.sleep(2.0)
@@ -438,7 +466,8 @@ async def run_pipeline(
                                 # 지연 렌더링 대응 스크롤
                                 scroll_limit = 3
                                 if brand.lower() in ["uniqlo", "zara"]:
-                                    scroll_limit = 25  # 무한 스크롤
+                                    # 수동 모드일 때는 스크롤 다운 횟수를 최대 2회로 제한하여 빠른 결과를 도출
+                                    scroll_limit = 2 if is_manual_mode else 25  # 무한 스크롤
                                     
                                 last_height = await page.evaluate("document.body.scrollHeight")
                                 for _ in range(scroll_limit):
@@ -518,15 +547,28 @@ async def run_pipeline(
                                         page_num += 1
                                         continue
                                     
-                                prev_len = len(product_codes)
+                                # 수집된 신규 코드들을 all_target_products에 실시간으로 중복 없이 추가
+                                added_count = 0
+                                for code in p_codes:
+                                    if not any(x[0] == code for x in all_target_products):
+                                        all_target_products.append((code, gender_key, category_key))
+                                        added_count += 1
+
                                 product_codes.extend(p_codes)
                                 product_codes = list(set(product_codes))
-                                new_added = len(product_codes) - prev_len
-                                logger.info(f"   🔗 {page_num}페이지 스캔 결과: 신규 식별 {new_added}개 (누적 {len(product_codes)}개)")
                                 
+                                logger.info(f"   🔗 {page_num}페이지 스캔 결과: 신규 식별 {added_count}개 (전체 누적 {len(all_target_products)}개)")
+                                
+                                # [즉각 조기종료 반영] 수동 모드에서 전체 목표 상품수(limit)를 충분히 확보했다면 즉시 스캔 종료
+                                if is_manual_mode and len(all_target_products) >= limit:
+                                    logger.info(f"   ⏸️ [수동 전체 조기종료] 전체 목표 수량({limit}개)을 확보하여 전체 목록 스캔을 즉시 중단합니다. (누적: {len(all_target_products)}개)")
+                                    scan_finished = True
+                                    await page.close()
+                                    break
+
                                 # 신규 식별이 0개이더라도 중복 배치 섞임이 있을 수 있으므로 조기 break를 완화
                                 # 연속 5페이지 이상 신규 식별이 없거나 전체 limit을 넘길 때 탈출하도록 안전장치 변경
-                                if new_added == 0 and page_num > 10:
+                                if added_count == 0 and page_num > 10:
                                     logger.info("   ⏹ 10페이지 이후 신규 상품 식별 0개 도달. 페이지 순회를 종료합니다.")
                                     await page.close()
                                     break
@@ -603,18 +645,55 @@ async def run_pipeline(
                             fallback_cnt = len(product_codes)
                             target_counts[category_key] = fallback_cnt
                             logger.info(f"   📊 [{brand.upper()}] {gender_key} - {category_key} 홈페이지 최종 식별된 갯수({fallback_cnt}개)로 총 수량 누적 적용")
-                            
-                        for code in product_codes:
-                            all_target_products.append((code, gender_key, category_key))
             
+            # [수동 모드 "전체" 수집 시] 카테고리 편중 방지를 위해 라운드 로빈(교대) 재배열 알고리즘 적용
+            if is_manual_mode and not category: # category 인자가 없을 때가 "전체" 수집인 경우
+                cat_buckets = {} # category_key -> list
+                for code, gender_key, category_key in all_target_products:
+                    cat_buckets.setdefault(category_key, []).append((code, gender_key, category_key))
+                
+                # 라운드 로빈 재배열 실행
+                shuffled_targets = []
+                has_items = True
+                while has_items:
+                    has_items = False
+                    for c_key in sorted(cat_buckets.keys()):
+                        if cat_buckets[c_key]:
+                            shuffled_targets.append(cat_buckets[c_key].pop(0))
+                            has_items = True
+                
+                all_target_products = shuffled_targets
+                logger.info(f"🔀 [라운드 로빈 믹싱] 전체 수집 편중 방지를 위해 카테고리별(Outer/Top/Bottom) 교대 재배열 완료.")
+
             # 1단계 완료 후, 수집 제한량(limit) 및 진행률 total 동적 보완
             total_scanned_count = sum(target_counts.values())
             logger.info(f"📊 [스캔 완료] 홈페이지 기준 전체 타겟 수: {total_scanned_count}개, 수집된 식별 코드 수: {len(all_target_products)}개")
             
             if total_scanned_count > 0:
-                # 사용자가 limit을 작게 명시했어도 실제 식별된 코드 전체를 긁어오도록 limit 확장
-                limit = max(limit, len(all_target_products))
-                logger.info(f"⚙️ 수집 제한량(limit)을 실제 식별된 상품 총 개수({limit}개)로 자동 상향 갱신합니다.")
+                if not is_manual_mode:
+                    # 자동 모드: 스캔한 식별 코드 전체를 limit으로 설정
+                    limit = max(limit, len(all_target_products))
+                    logger.info(f"⚙️ 수집 제한량(limit)을 실제 식별된 상품 총 개수({limit}개)로 자동 상향 갱신합니다.")
+                else:
+                    # [수동 모드 정합성 개선] 홈페이지 실시간 스캔 감지 수량을 목표 카운트에서 지우고, 사용자가 세운 limit 분배치로 정합화
+                    # 3개 카테고리에 limit을 라운드 로빈으로 배분
+                    for k in list(target_counts.keys()):
+                        target_counts[k] = 0
+                    
+                    if category: # 단일 카테고리 지정 구동 시
+                        target_counts[category] = limit
+                    else: # 전체(all) 카테고리 구동 시
+                        # 라운드 로빈 배분 시뮬레이션으로 정확한 몫 계산
+                        categories_list = ["Outer", "Top", "Bottom"]
+                        temp_limit = limit
+                        idx = 0
+                        while temp_limit > 0:
+                            cat_key = categories_list[idx % 3]
+                            target_counts[cat_key] += 1
+                            temp_limit -= 1
+                            idx += 1
+                            
+                    logger.info(f"📊 [수동 모드 목표 정합화 완료] 수집 제한: {limit}개, 카테고리별 목표: {dict(target_counts)}")
             
             # 스캔 결과를 반영하여 진행률 명시
             write_progress(brand, step="상품 상세 수집 시작", current=0, total=limit,
@@ -659,12 +738,12 @@ async def run_pipeline(
             launch_args = ["--disable-blink-features=AutomationControlled"]
             browser = None
             try:
-                browser = await p.chromium.launch(headless=True, channel="chrome", args=launch_args)
+                browser = await p.chromium.launch(headless=True, channel="chrome", args=launch_args, timeout=5000)
             except Exception:
                 try:
-                    browser = await p.chromium.launch(headless=True, channel="msedge", args=launch_args)
+                    browser = await p.chromium.launch(headless=True, channel="msedge", args=launch_args, timeout=5000)
                 except Exception:
-                    browser = await p.chromium.launch(headless=True, args=launch_args)
+                    browser = await p.chromium.launch(headless=True, args=launch_args, timeout=5000)
                     
             context = await browser.new_context(
                 viewport={"width": 1280, "height": 800},
@@ -696,8 +775,9 @@ async def run_pipeline(
                    status="running", run_id=run_id, started_at=_started_at)
     
     if not collected_products:
-        logger.error(f"❌ [{brand.upper()}] 크롤링된 데이터가 전혀 없습니다. WAF 차단 또는 목록 레이아웃 변경 여부를 점검해 주세요. 프로세스를 중단하지 않고 스킵합니다.")
-        return {"total_items": 0, "new_items": 0, "updated_items": 0}
+        err_msg = f"❌ [{brand.upper()}] 크롤링된 데이터가 전혀 없습니다. WAF 차단 또는 목록 레이아웃 변경 여부를 점검해 주세요."
+        logger.error(err_msg)
+        raise ValueError(err_msg)
 
     # 4. Cloudinary Staging 업로드 및 DB Staging 적재
     logger.info(f"🔄 [{brand}] Cloudinary Staging 업로드 및 Neon DB 스테이징 적재 시작...")
@@ -1003,7 +1083,19 @@ async def run_pipeline(
                             WHERE product_id = ANY(%s) AND image_vector IS NOT NULL AND text_vector IS NOT NULL
                         """, (prod_ids,))
                         for p_id, img_vec, txt_vec in prod_cur.fetchall():
-                            embedding_cache[p_id] = (img_vec, txt_vec)
+                            def parse_vec(v):
+                                if isinstance(v, str):
+                                    cleaned = v.strip('[]{}')
+                                    return [float(x) for x in cleaned.split(',') if x.strip()]
+                                return list(v) if v is not None else None
+                            
+                            try:
+                                p_img = parse_vec(img_vec)
+                                p_txt = parse_vec(txt_vec)
+                                if p_img and p_txt:
+                                    embedding_cache[p_id] = (p_img, p_txt)
+                            except Exception as parse_err:
+                                logger.warning(f"⚠️ 임베딩 캐시 벡터 파싱 에러 (상품 {p_id}): {parse_err}")
                     prod_cur.close()
                     prod_conn.close()
                     logger.info(f"💾 Core DB로부터 기존 임베딩 캐시 {len(embedding_cache)}건을 로드했습니다. (연산 생략 예정)")
@@ -1011,6 +1103,11 @@ async def run_pipeline(
                     logger.warning(f"⚠️ 기존 임베딩 캐시 로드 중 예외 발생 (새로 생성함): {cache_err}")
 
                 # 개별 상품 임베딩이 완료될 때마다 진행률을 기록하고 DB에 즉시 실시간 적재
+                # (임베딩 시작 전 닫았던 DW DB 커넥션을 다시 열어 공유 준비)
+                dw_conn = get_dw_db_connection()
+                dw_conn.autocommit = False
+                dw_cur = dw_conn.cursor()
+
                 async with aiohttp.ClientSession() as session:
                     tasks = []
                     cached_results = []
@@ -1030,33 +1127,23 @@ async def run_pipeline(
                     valid_embed_count = 0
                     total_collected = len(inserted_products)
                     
-                    # 1. 캐시 히트된 데이터 먼저 실시간 DB 적재
+                    # 1. 캐시 히트된 데이터 먼저 실시간 DB 적재 (기존 dw_cur 연결 공유 활용)
                     for res in cached_results:
                         completed_count += 1
                         try:
-                            def _save_to_db(row_data):
-                                conn = get_dw_db_connection()
-                                cur = conn.cursor()
-                                try:
-                                    cur.execute("""
-                                        INSERT INTO staging_product_embeddings (
-                                            product_id, image_vector, text_vector, brand, category, gender, image_path, create_dt
-                                        )
-                                        VALUES (%s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
-                                        ON CONFLICT (product_id) DO UPDATE
-                                        SET image_vector = EXCLUDED.image_vector,
-                                            text_vector = EXCLUDED.text_vector,
-                                            create_dt = CURRENT_TIMESTAMP
-                                    """, row_data)
-                                    conn.commit()
-                                finally:
-                                    cur.close()
-                                    conn.close()
-                            
-                            await asyncio.to_thread(_save_to_db, res)
+                            dw_cur.execute("""
+                                INSERT INTO staging_product_embeddings (
+                                    product_id, image_vector, text_vector, brand, category, gender, image_path, create_dt
+                                )
+                                VALUES (%s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+                                ON CONFLICT (product_id) DO UPDATE
+                                SET image_vector = EXCLUDED.image_vector,
+                                    text_vector = EXCLUDED.text_vector,
+                                    create_dt = CURRENT_TIMESTAMP
+                            """, res)
                             valid_embed_count += 1
                         except Exception as save_err:
-                            logger.error(f"❌ 임베딩 실시간 DB 적재 실패 (상품 {res[0]}): {save_err}")
+                            logger.error(f"❌ 임베딩 캐시 실시간 DB 적재 실패 (상품 {res[0]}): {save_err}")
                             
                         # 진행 정보 파일 업데이트 (실시간)
                         write_progress(brand, step="임베딩 생성 중", current=completed_count, total=total_collected,
@@ -1071,33 +1158,22 @@ async def run_pipeline(
                             res = await coro  # res: (prod_id, image_vector, text_vector, brand, category, gender, img_url)
                             completed_count += 1
                             
-                            # 1. DB 실시간 적재
+                            # 1. DB 실시간 적재 (기존 dw_cur 연결 공유 활용)
                             if res:
                                 try:
-                                    # 동기 DB 커넥션을 열고 한 건 저장 후 즉시 닫음 (Neon DB 안정성 극대화)
-                                    def _save_to_db(row_data):
-                                        conn = get_dw_db_connection()
-                                        cur = conn.cursor()
-                                        try:
-                                            cur.execute("""
-                                                INSERT INTO staging_product_embeddings (
-                                                    product_id, image_vector, text_vector, brand, category, gender, image_path, create_dt
-                                                )
-                                                VALUES (%s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
-                                                ON CONFLICT (product_id) DO UPDATE
-                                                SET image_vector = EXCLUDED.image_vector,
-                                                    text_vector = EXCLUDED.text_vector,
-                                                    create_dt = CURRENT_TIMESTAMP
-                                            """, row_data)
-                                            conn.commit()
-                                        finally:
-                                            cur.close()
-                                            conn.close()
-                                    
-                                    await asyncio.to_thread(_save_to_db, res)
+                                    dw_cur.execute("""
+                                        INSERT INTO staging_product_embeddings (
+                                            product_id, image_vector, text_vector, brand, category, gender, image_path, create_dt
+                                        )
+                                        VALUES (%s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+                                        ON CONFLICT (product_id) DO UPDATE
+                                        SET image_vector = EXCLUDED.image_vector,
+                                            text_vector = EXCLUDED.text_vector,
+                                            create_dt = CURRENT_TIMESTAMP
+                                    """, res)
                                     valid_embed_count += 1
                                 except Exception as save_err:
-                                    logger.error(f"❌ 임베딩 실시간 DB 적재 실패 (상품 {res[0]}): {save_err}")
+                                    logger.error(f"❌ 임베딩 연산 실시간 DB 적재 실패 (상품 {res[0]}): {save_err}")
                             
                             # 2. 진행 정보 파일 업데이트 (실시간)
                             current_item_str = f"임베딩 처리 중... ({completed_count}/{total_collected})"
@@ -1115,7 +1191,6 @@ async def run_pipeline(
             
             # 최종 DB 연결 수립 후 트랜잭션 정상 종료 처리 (이전 단계에서 다 끝났으므로 닫아줄 커넥션만 마무리)
             logger.info("🔌 최종 스테이징 적재 정리 완료. (Phase 1 완료)")
-            dw_conn = get_dw_db_connection()
             dw_conn.commit()
             logger.info(f"✅ 스테이징 테이블 {success_db_count}건 임시 적재 완료. (Phase 1 완료)")
             write_progress(brand, step="완료", current=success_db_count, total=total_collected,
@@ -1128,13 +1203,30 @@ async def run_pipeline(
             # 수집된 pending_errors 일괄 DB 적재 처리 (Neon DB 동시 커넥션 수 초과 방지)
             if pending_errors and not dry_run:
                 logger.info(f"📝 펜딩된 에러 로그 {len(pending_errors)}건을 단일 세션으로 일괄 적재 진행 중...")
-                for err_type, err_msg, p_id, src_url in pending_errors:
-                    try:
-                        # 에러 유형이 _WARN으로 끝날 경우 경고성(is_warning=True)으로 판별해 실행 횟수 에러 카운트를 올리지 않음
+                try:
+                    non_warn_count = 0
+                    for err_type, err_msg, p_id, src_url in pending_errors:
                         is_warn = err_type.endswith("_WARN")
-                        log_pipeline_error(run_id, err_type, err_msg, product_id=p_id, source_url=src_url, is_warning=is_warn)
-                    except Exception as log_err:
-                        logger.error(f"❌ 펜딩 에러 일괄 적재 중 예외: {log_err}")
+                        if not is_warn:
+                            non_warn_count += 1
+                        
+                        dw_cur.execute("""
+                            INSERT INTO pipeline_errors (
+                                run_id, error_type, error_message, stack_trace, product_id, source_url, created_at
+                            )
+                            VALUES (%s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+                        """, (run_id, err_type, err_msg, "", p_id or "", src_url or ""))
+                    
+                    if run_id and non_warn_count > 0:
+                        dw_cur.execute("""
+                            UPDATE pipeline_runs 
+                            SET error_count = error_count + %s 
+                            WHERE run_id = %s
+                        """, (non_warn_count, run_id))
+                    
+                    dw_conn.commit()
+                except Exception as log_err:
+                    logger.error(f"❌ 펜딩 에러 일괄 적재 중 예외: {log_err}")
 
             return {"total_items": success_db_count, "new_items": new_items_count, "updated_items": updated_items_count, "embed_count": valid_embed_count, "target_counts": target_counts}
             
@@ -1198,6 +1290,8 @@ def main():
                 "target_total": sum(t_counts.values()) if t_counts else 0
             }
             log_pipeline_end(run_id, "SUCCESS", total_items=total, new_items=new_val, updated_items=upd_val, embed_count=embed_val, metadata_dict=metadata)
+        # 백그라운드 스레드 고정으로 인한 지연 없는 강제 프로세스 정상 종료
+        sys.exit(0)
     except Exception as e:
         err_msg = f"❌ [{args.brand}] 크롤러 전체 프로세스 기동 실패!\n에러 원인: {e}"
         logger.critical(err_msg, exc_info=True)
