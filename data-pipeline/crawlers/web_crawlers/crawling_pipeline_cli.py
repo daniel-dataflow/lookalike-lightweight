@@ -113,12 +113,12 @@ try:
 except ImportError as e:
     logger.warning(f"8seconds scraper 임포트 에러: {e}")
 
-# musinsa
-try:
-    import scraper_musinsa as s_ms
-    BRAND_CRAWLER_MODELS["musinsa"] = s_ms
-except ImportError as e:
-    logger.warning(f"musinsa scraper 임포트 에러: {e}")
+# musinsa (주석 처리)
+# try:
+#     import scraper_musinsa as s_ms
+#     BRAND_CRAWLER_MODELS["musinsa"] = s_ms
+# except ImportError as e:
+#     logger.warning(f"musinsa scraper 임포트 에러: {e}")
 
 # topten
 try:
@@ -134,12 +134,54 @@ try:
 except ImportError as e:
     logger.warning(f"uniqlo scraper 임포트 에러: {e}")
 
-# zara
+# zara (주석 처리)
+# try:
+#     import scraper_zara as s_zr
+#     BRAND_CRAWLER_MODELS["zara"] = s_zr
+# except ImportError as e:
+#     logger.warning(f"zara scraper 임포트 에러: {e}")
+
+# spao (추가)
 try:
-    import scraper_zara as s_zr
-    BRAND_CRAWLER_MODELS["zara"] = s_zr
+    import scraper_spao as s_sp
+    BRAND_CRAWLER_MODELS["spao"] = s_sp
 except ImportError as e:
-    logger.warning(f"zara scraper 임포트 에러: {e}")
+    logger.warning(f"spao scraper 임포트 에러: {e}")
+
+# giordano (추가)
+try:
+    import scraper_giordano as s_gd
+    BRAND_CRAWLER_MODELS["giordano"] = s_gd
+except ImportError as e:
+    logger.warning(f"giordano scraper 임포트 에러: {e}")
+
+# polham (추가)
+try:
+    import scraper_polham as s_ph
+    BRAND_CRAWLER_MODELS["polham"] = s_ph
+except ImportError as e:
+    logger.warning(f"polham scraper 임포트 에러: {e}")
+
+# spao (추가)
+try:
+    import scraper_spao as s_sp
+    BRAND_CRAWLER_MODELS["spao"] = s_sp
+except ImportError as e:
+    logger.warning(f"spao scraper 임포트 에러: {e}")
+
+# giordano (추가)
+try:
+    import scraper_giordano as s_gd
+    BRAND_CRAWLER_MODELS["giordano"] = s_gd
+except ImportError as e:
+    logger.warning(f"giordano scraper 임포트 에러: {e}")
+
+# polham (추가)
+try:
+    import scraper_polham as s_ph
+    BRAND_CRAWLER_MODELS["polham"] = s_ph
+except ImportError as e:
+    logger.warning(f"polham scraper 임포트 에러: {e}")
 
 
 # ──────────────────────────────────────────────────────────────
@@ -280,17 +322,22 @@ async def run_pipeline(
         async with sem:
             if brand == "8seconds":
                 url = f"https://www.ssfshop.com/8-seconds/{product_id}/good?brandShopNo=BDMA07A01&brndShopId=8SBSS"
-            elif brand == "musinsa":
-                url = f"https://www.musinsa.com/products/{product_id}"
+            # elif brand == "musinsa":
+            #     url = f"https://www.musinsa.com/products/{product_id}"
             elif brand == "topten":
                 url = f"https://topten10.goodwearmall.com/product/{product_id}/detail"
             elif brand == "uniqlo":
                 url = f"https://www.uniqlo.com/kr/ko/products/{product_id.split('?')[0]}"
-            elif brand == "zara":
-                url = f"https://www.zara.com/kr/ko/man-outerwear-l715.html"
-                if product_id.startswith("http"):
-                    url = product_id
-
+            # elif brand == "zara":
+            #     url = f"https://www.zara.com/kr/ko/man-outerwear-l715.html"
+            #     if product_id.startswith("http"): 
+            #         url = product_id
+            elif brand == "spao":
+                url = f"https://www.spao.com/i/item?itemNo={product_id}"
+            elif brand == "giordano":
+                url = f"https://www.giordano.co.kr/shop/detail.php?pno={product_id}"
+            elif brand == "polham":
+                url = f"https://polham.goodwearmall.com/product/{product_id}/detail"
             p_page = await context.new_page()
             try:
                 # 불필요 리소스 차단 (속도 향상 및 레이트 리밋 예방)
@@ -306,17 +353,18 @@ async def run_pipeline(
                 product_dict = None
                 if brand == "8seconds":
                     product_dict = await scraper.extract_product_data_from_dom(p_page)
-                elif brand == "musinsa":
-                    product_dict = await scraper.extract_attribute_focus_data(p_page)
+                # elif brand == "musinsa":
+                #     product_dict = await scraper.extract_attribute_focus_data(p_page)
                 elif brand == "topten":
                     product_dict = await scraper.extract_product_data_from_dom(p_page)
                 elif brand == "uniqlo":
                     product_dict = await scraper.extract_product_base_data(p_page, product_id)
                     if product_dict:
                         product_dict["goodsImages"] = await scraper.extract_current_images(p_page)
-                elif brand == "zara":
+                # elif brand == "zara":
+                #     product_dict = await scraper.extract_product_data_from_dom(p_page)
+                elif brand in ["spao", "giordano", "polham"]:
                     product_dict = await scraper.extract_product_data_from_dom(p_page)
-
                 if product_dict and product_dict.get("goodsNm"):
                     pid = product_dict.get("goodsNo") or product_id
                     product_dict["product_id"] = pid
@@ -484,17 +532,17 @@ async def run_pipeline(
                                     p_codes = await page.evaluate("""() => 
                                         Array.from(document.querySelectorAll('li.god-item')).map(item => item.getAttribute('view-godno')).filter(c => c !== null)
                                     """)
-                                elif brand == "musinsa":
-                                    import re
-                                    hrefs = await page.evaluate("""() => Array.from(document.querySelectorAll('a')).map(a => a.href)""")
-                                    for h in hrefs:
-                                        m = re.search(r'(?:goods|products)/(\\d+)', h)
-                                        if m: p_codes.append(m.group(1))
-                                elif brand == "topten":
+                                # elif brand == "musinsa":
+                                #     import re
+                                #     hrefs = await page.evaluate("""() => Array.from(document.querySelectorAll('a')).map(a => a.href)""")
+                                #     for h in hrefs:
+                                #         m = re.search(r'(?:goods|products)/(\d+)', h)
+                                #         if m: p_codes.append(m.group(1))
+                                elif brand in ["topten", "polham"]:
                                     p_codes = await page.evaluate("""() => {
                                         const ids = new Set();
                                         document.querySelectorAll('a[href*="/product/"]').forEach(a => {
-                                            const m = a.href.match(/\\/product\\/([A-Z0-9]{8,20})\\/detail/);
+                                            const m = a.href.match(/\/product\/([A-Z0-9]{8,20})\/detail/);
                                             if (m) ids.add(m[1]);
                                         });
                                         document.querySelectorAll('[data-goods-no], [data-goodsno]').forEach(el => {
@@ -506,34 +554,52 @@ async def run_pipeline(
                                     if not p_codes:
                                         import re
                                         content = await page.content()
-                                        matches = re.findall(r"[A-Z]{3}\\d[A-Z]{2}\\d{4}[A-Z0-9]+", content)
+                                        matches = re.findall(r"[A-Z]{3}\d[A-Z]{2}\d{4}[A-Z0-9]+", content)
                                         p_codes = [pid for pid in matches if 10 <= len(pid) <= 15]
+                                elif brand == "spao":
+                                    p_codes = await page.evaluate("""() => {
+                                        const ids = new Set();
+                                        document.querySelectorAll('a[href*="itemNo="]').forEach(a => {
+                                            const m = a.href.match(/itemNo=([0-9]+)/i);
+                                            if (m) ids.add(m[1]);
+                                        });
+                                        return Array.from(ids);
+                                    }""")
+                                elif brand == "giordano":
+                                    p_codes = await page.evaluate("""() => {
+                                        const ids = new Set();
+                                        document.querySelectorAll('a[href*="pno="]').forEach(a => {
+                                            const m = a.href.match(/pno=([A-Z0-9]+)/i);
+                                            if (m) ids.add(m[1]);
+                                        });
+                                        return Array.from(ids);
+                                    }""")
                                 elif brand == "uniqlo":
                                     import re
                                     content = await page.content()
                                     matches = re.findall(r"/products/([A-Z0-9-]+)", content)
                                     p_codes = [pid for pid in matches if len(pid) >= 5 and "review" not in pid]
-                                elif brand == "zara":
-                                    import re
-                                    # Playwright API Response 인터셉터로 캡처된 데이터를 collected_products에 즉시 추가
-                                    _zara_intercepted = getattr(page, "_zara_intercepted_products", [])
-                                    logger.info(f"    Zara API Interceptor: {len(_zara_intercepted)} items captured.")
-                                    for item in _zara_intercepted:
-                                        if item and item.get("goodsNo"):
-                                            # 이미 수집된 목록에 중복 방지하며 추가
-                                            pid = item["goodsNo"]
-                                            item["gender"] = gender_key
-                                            item["category"] = category_key
-                                            if not any(x.get("goodsNo") == pid for x in collected_products) and len(collected_products) < limit:
-                                                collected_products.append(item)
-                                                logger.info(f"   ➕ [ZARA API] 수집 성공 ({len(collected_products)}/{limit}): {item['goodsNm']}")
-
-                                    # 기존 링크 파싱도 폴백으로 실행하여 crawling_pipeline_cli의 flow를 해치지 않음
-                                    links = await page.evaluate("""() => Array.from(document.querySelectorAll('a[href*="-p"][href*=".html"]')).map(a => a.href)""")
-                                    for link in links:
-                                        match = re.search(r'-p([0-9]+)\.html', link)
-                                        if match:
-                                            p_codes.append(link.split('?')[0])
+                                # elif brand == "zara":
+                                #     import re
+                                #     # Playwright API Response 인터셉터로 캡처된 데이터를 collected_products에 즉시 추가
+                                #     _zara_intercepted = getattr(page, "_zara_intercepted_products", [])
+                                #     logger.info(f"    Zara API Interceptor: {len(_zara_intercepted)} items captured.")
+                                #     for item in _zara_intercepted:
+                                #         if item and item.get("goodsNo"):
+                                #             # 이미 수집된 목록에 중복 방지하며 추가
+                                #             pid = item["goodsNo"]
+                                #             item["gender"] = gender_key
+                                #             item["category"] = category_key
+                                #             if not any(x.get("goodsNo") == pid for x in collected_products) and len(collected_products) < limit:
+                                #                 collected_products.append(item)
+                                #                 logger.info(f"   ➕ [ZARA API] 수집 성공 ({len(collected_products)}/{limit}): {item['goodsNm']}")
+                                # 
+                                #     # 기존 링크 파싱도 폴백으로 실행하여 crawling_pipeline_cli의 flow를 해치지 않음
+                                #     links = await page.evaluate("""() => Array.from(document.querySelectorAll('a[href*="-p"][href*=".html"]')).map(a => a.href)""")
+                                #     for link in links:
+                                #         match = re.search(r'-p([0-9]+)\.html', link)
+                                #         if match:
+                                #             p_codes.append(link.split('?')[0])
                                 p_codes = list(set(p_codes))
                                 if not p_codes:
                                     # WAF/지연 등으로 일시적으로 비어있을 수 있으므로 3페이지 연속 비어있는 경우에만 break
@@ -589,10 +655,14 @@ async def run_pipeline(
                                                     selectors = ['#godTotalCount', '.gods-total span', '.sub-category-title span'];
                                                 } else if (brnd === 'musinsa') {
                                                     selectors = ['[class*="Header__Count"]', '.Header__Count-sc-', '.Header__Count'];
-                                                } else if (brnd === 'topten') {
+                                                } else if (brnd === 'topten' || brnd === 'polham') {
                                                     selectors = ['.utility-number', '.st-goods-total', '.st-total', 'div.total-count', '.utility-bar .total', '[class*="total"]'];
                                                 } else if (brnd === 'uniqlo') {
                                                     selectors = ['.fr-ec-header-overlay__item-count', '.fr-ec-product-count', '.product-count', '.fr-ec-search-result-number'];
+                                                } else if (brnd === 'spao') {
+                                                    selectors = ['.goods_total_count', '.total', '.count', '.total-count'];
+                                                } else if (brnd === 'giordano') {
+                                                    selectors = ['.total', '.prd_total', '.total-goods', '.count'];
                                                 } else {
                                                     selectors = [
                                                         '.total-count', '.goods-list-total', '.goods-list .total',
@@ -857,6 +927,9 @@ async def run_pipeline(
                 else:
                     try:
                         base_price = int(base_price)
+                        # integer out of range 방지 안전장치 (1,000만원 이상 비현실 가격 보정)
+                        if base_price > 10000000 or base_price < 0:
+                            base_price = 0
                     except:
                         base_price = 0
 
@@ -979,7 +1052,7 @@ async def run_pipeline(
                     # 2. 성별 괄호 제거
                     query_term = re.sub(r'\([^\)]*\)|[남여]\)\s*', '', query_term)
                     # 3. 주요 브랜드 노이즈 단어 소거
-                    query_term = re.sub(r'(TOPTEN10|topten10|8SECONDS|8seconds|탑텐10|탑텐|에잇세컨즈|UNIQLO|uniqlo|유니클로|굿웨어몰|goodwearmall)', '', query_term)
+                    query_term = re.sub(r'(TOPTEN10|topten10|8SECONDS|8seconds|탑텐10|탑텐|에잇세컨즈|UNIQLO|uniqlo|유니클로|굿웨어몰|goodwearmall|SPAO|spao|스파오|GIORDANO|giordano|지오다노|POLHAM|polham|폴햄)', '', query_term)
                     query_term = query_term.strip()
                     if len(query_term) < 2:
                         query_term = original_name
@@ -1247,7 +1320,7 @@ async def run_pipeline(
 
 def main():
     parser = argparse.ArgumentParser(description="Lookalike 안심 모니터링 크롤러 CLI")
-    parser.add_argument("--brand", required=True, choices=["8seconds", "musinsa", "topten", "uniqlo", "zara"], help="크롤링할 타겟 패션 브랜드")
+    parser.add_argument("--brand", required=True, choices=["8seconds", "topten", "uniqlo", "polham", "spao", "giordano"], help="크롤링할 타겟 패션 브랜드")
     parser.add_argument("--limit", type=int, default=50, help="수집할 최대 상품 개수")
     parser.add_argument("--dry-run", action="store_true", help="실제 DB 반영을 생략하고 디버깅 출력만 활성화")
     parser.add_argument("--action", default="crawl", choices=["crawl", "swap"], help="실행할 파이프라인 액션 (crawl: 수집/임시적재, swap: 지연 이관)")

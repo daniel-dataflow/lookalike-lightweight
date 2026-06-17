@@ -567,7 +567,7 @@ def get_crawling_staging():
         settings = get_settings()
         
         # 1. 지원 브랜드 목록 정의 (DB에 저장되는 규격에 맞게 대문자로 통일)
-        brands = ["8SECONDS", "UNIQLO", "MUSINSA", "TOPTEN", "ZARA"]
+        brands = ["8SECONDS", "UNIQLO", "SPAO", "GIORDANO", "POLHAM", "TOPTEN"]
         brand_stats = []
         total_staging = 0
         
@@ -1439,12 +1439,12 @@ async def clear_crawling_history(
                     DELETE FROM pipeline_errors 
                     WHERE run_id IN (
                         SELECT run_id FROM pipeline_runs 
-                        WHERE pipeline_name IN ('manual_crawling_pipeline', 'crawling_pipeline', 'swap_pipeline')
+                        WHERE pipeline_name IN ('manual_crawling_pipeline', 'crawling_pipeline', 'manual_swap_pipeline', 'swap_pipeline')
                     );
                 """)
                 cur.execute("""
                     DELETE FROM pipeline_runs 
-                    WHERE pipeline_name IN ('manual_crawling_pipeline', 'crawling_pipeline', 'swap_pipeline');
+                    WHERE pipeline_name IN ('manual_crawling_pipeline', 'crawling_pipeline', 'manual_swap_pipeline', 'swap_pipeline');
                 """)
                 msg = "수동 크롤링 및 이관 구동 내역 히스토리가 성공적으로 초기화되었습니다."
             elif pipeline_type == "auto":
@@ -1453,12 +1453,12 @@ async def clear_crawling_history(
                     DELETE FROM pipeline_errors 
                     WHERE run_id IN (
                         SELECT run_id FROM pipeline_runs 
-                        WHERE pipeline_name = 'auto_crawling_pipeline'
+                        WHERE pipeline_name IN ('auto_crawling_pipeline', 'auto_swap_pipeline')
                     );
                 """)
                 cur.execute("""
                     DELETE FROM pipeline_runs 
-                    WHERE pipeline_name = 'auto_crawling_pipeline';
+                    WHERE pipeline_name IN ('auto_crawling_pipeline', 'auto_swap_pipeline');
                 """)
                 msg = "자동 크롤링 배치 구동 내역 히스토리가 성공적으로 초기화되었습니다."
             else:
