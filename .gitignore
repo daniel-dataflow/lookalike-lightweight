@@ -256,3 +256,4 @@ ai_antigravity/
 scratch/
 supabase/
 start_local_server.bat
+scratch_*.py

@@ -483,7 +483,10 @@ def get_next_product_id(cur, brand_name: str) -> str:
         "MUSINSA": "MS",
         "TOPTEN": "TT",
         "UNIQLO": "UQ",
-        "ZARA": "ZR"
+        "ZARA": "ZR",
+        "SPAO": "SP",
+        "GIORDANO": "GI",
+        "POLHAM": "PH"
     }
     header = brand_headers.get(brand_upper, brand_upper[:2])
     
