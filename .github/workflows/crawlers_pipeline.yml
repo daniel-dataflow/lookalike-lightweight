@@ -19,15 +19,12 @@ on:
         type: choice
         options:
           - all
-          
-          
           - uniqlo
           - topten
           - spao
           - polham
           - 8seconds
           - giordano
-          
           - musinsa
           - zara
       action:
