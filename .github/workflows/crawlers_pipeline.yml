@@ -24,6 +24,9 @@ on:
           - topten
           - uniqlo
           - zara
+          - spao
+          - giordano
+          - polham
       action:
         description: '실행할 파이프라인 액션'
         required: true
@@ -99,8 +102,12 @@ jobs:
                 LIMIT="$INPUT_LIMIT"
               fi
             fi
-            # 전체 브랜드에 대해 개별 Matrix 분기 생성 (무신사는 Men, Women 분할)
-            echo 'matrix={"include":[{"brand":"8seconds","limit":"'$LIMIT'","gender":"","category":""},{"brand":"topten","limit":"'$LIMIT'","gender":"","category":""},{"brand":"uniqlo","limit":"'$LIMIT'","gender":"","category":""},{"brand":"zara","limit":"'$LIMIT'","gender":"","category":""},{"brand":"musinsa","limit":"'$LIMIT'","gender":"Men","category":""},{"brand":"musinsa","limit":"'$LIMIT'","gender":"Women","category":""}]}' >> $GITHUB_OUTPUT
+            # 전체 브랜드에 대해 개별 Matrix 분기 생성
+            # [주석 처리] 아래 무신사와 자라는 자동 수집 대상에서 일시 주석 처리(제외)합니다.
+            # {"brand":"zara","limit":"'$LIMIT'","gender":"","category":""}
+            # {"brand":"musinsa","limit":"'$LIMIT'","gender":"Men","category":""}
+            # {"brand":"musinsa","limit":"'$LIMIT'","gender":"Women","category":""}
+            echo 'matrix={"include":[{"brand":"8seconds","limit":"'$LIMIT'","gender":"","category":""},{"brand":"topten","limit":"'$LIMIT'","gender":"","category":""},{"brand":"uniqlo","limit":"'$LIMIT'","gender":"","category":""},{"brand":"spao","limit":"'$LIMIT'","gender":"","category":""},{"brand":"giordano","limit":"'$LIMIT'","gender":"","category":""},{"brand":"polham","limit":"'$LIMIT'","gender":"","category":""}]}' >> $GITHUB_OUTPUT
           else
             # 단일 브랜드 수동 실행
             LIMIT="${{ github.event.inputs.limit }}"
@@ -214,7 +221,10 @@ jobs:
       - id: set-matrix
         run: |
           if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ github.event.inputs.brand }}" = "all" ]; then
-            echo 'matrix={"include":[{"brand":"8seconds"},{"brand":"musinsa"},{"brand":"topten"},{"brand":"uniqlo"},{"brand":"zara"}]}' >> $GITHUB_OUTPUT
+            # [주석 처리] 아래 무신사와 자라는 자동 스위칭(Swap) 대상에서 일시 주석 처리(제외)합니다.
+            # {"brand":"zara"}
+            # {"brand":"musinsa"}
+            echo 'matrix={"include":[{"brand":"8seconds"},{"brand":"topten"},{"brand":"uniqlo"},{"brand":"spao"},{"brand":"giordano"},{"brand":"polham"}]}' >> $GITHUB_OUTPUT
           else
             echo "matrix={\"include\":[{\"brand\":\"${{ github.event.inputs.brand }}\"}]}" >> $GITHUB_OUTPUT
           fi
