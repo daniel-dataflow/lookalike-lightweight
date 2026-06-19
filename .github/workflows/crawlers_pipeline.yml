@@ -19,14 +19,17 @@ on:
         type: choice
         options:
           - all
-          - 8seconds
-          - musinsa
-          - topten
+          
+          
           - uniqlo
-          - zara
+          - topten
           - spao
-          - giordano
           - polham
+          - 8seconds
+          - giordano
+          
+          - musinsa
+          - zara
       action:
         description: '실행할 파이프라인 액션'
         required: true
