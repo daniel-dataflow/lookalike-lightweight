@@ -309,6 +309,15 @@ async def get_clip_text_embedding(session: aiohttp.ClientSession, text: str, tok
     if not text:
         return None
         
+    def _pad(v):
+        if not v:
+            return None
+        if len(v) == 512:
+            return v + [0.0] * 256
+        elif len(v) < 768:
+            return v + [0.0] * (768 - len(v))
+        return v[:768]
+
     # 이미 API가 한 번 실패한 경우 타임아웃을 기다리지 않고 즉시 로컬 CLIP 모델 사용
     if not _HF_INFERENCE_API_FAILED:
         model_id = "openai/clip-vit-base-patch32"
@@ -328,7 +337,7 @@ async def get_clip_text_embedding(session: aiohttp.ClientSession, text: str, tok
                     s = sum(x * x for x in vec)
                     if s > 0:
                         norm = math.sqrt(s)
-                        return [x / norm for x in vec]
+                        return _pad([x / norm for x in vec])
         except Exception as e:
             logger.warning(f"HF Inference API 차단/실패: {e}. 로컬 CLIP 모델로 폴백 및 이후 API 호출 스킵 설정.")
             _HF_INFERENCE_API_FAILED = True
@@ -337,7 +346,7 @@ async def get_clip_text_embedding(session: aiohttp.ClientSession, text: str, tok
     local_vec = _get_local_clip_text_embedding(text)
     if local_vec:
         logger.info(f"로컬 CLIP 텍스트 임베딩 성공 (dim={len(local_vec)})")
-        return local_vec
+        return _pad(local_vec)
 
     # 로컬 모델도 실패 시 → None 반환 (mock 벡터 삽입 방지)
     logger.error("텍스트 임베딩 모든 방법 실패. None 반환.")
@@ -918,18 +927,18 @@ async def swap_staging_to_production(brand_name: str, force: bool = False) -> bo
         core_success_flag = False
         try:
             # 1) 기존 임베딩 데이터 DELETE (자식 레코드)
-            core_cur.execute("DELETE FROM product_embeddings WHERE brand = %s", (brand_upper,))
+            core_cur.execute("DELETE FROM product_embeddings WHERE UPPER(brand) = %s", (brand_upper,))
 
             # 2) 기존 최저가 데이터 DELETE (자식 레코드)
             core_cur.execute("""
                 DELETE FROM naver_prices 
                 WHERE product_id IN (
-                    SELECT product_id FROM products WHERE brand_name = %s
+                    SELECT product_id FROM products WHERE UPPER(brand_name) = %s
                 )
             """, (brand_upper,))
 
             # 3) 기존 브랜드 상품 데이터 DELETE (부모 레코드)
-            core_cur.execute("DELETE FROM products WHERE brand_name = %s", (brand_upper,))
+            core_cur.execute("DELETE FROM products WHERE UPPER(brand_name) = %s", (brand_upper,))
             
             # 4) 신규 상품 데이터 INSERT (부모 레코드)
             for u_row in updated_rows:
@@ -939,6 +948,16 @@ async def swap_staging_to_production(brand_name: str, force: bool = False) -> bo
                         category_code, img_url, origin_url, create_dt, update_dt
                     )
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+                    ON CONFLICT (product_id) DO UPDATE SET
+                        model_code = EXCLUDED.model_code,
+                        brand_name = EXCLUDED.brand_name,
+                        prod_name = EXCLUDED.prod_name,
+                        base_price = EXCLUDED.base_price,
+                        gender = EXCLUDED.gender,
+                        category_code = EXCLUDED.category_code,
+                        img_url = EXCLUDED.img_url,
+                        origin_url = EXCLUDED.origin_url,
+                        update_dt = CURRENT_TIMESTAMP
                 """, u_row)
 
             # 5) 신규 임베딩 데이터 INSERT (자식 레코드)
@@ -949,6 +968,14 @@ async def swap_staging_to_production(brand_name: str, force: bool = False) -> bo
                             product_id, image_vector, text_vector, brand, category, gender, image_path, create_dt
                         )
                         VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                        ON CONFLICT (product_id) DO UPDATE SET
+                            image_vector = EXCLUDED.image_vector,
+                            text_vector = EXCLUDED.text_vector,
+                            brand = EXCLUDED.brand,
+                            category = EXCLUDED.category,
+                            gender = EXCLUDED.gender,
+                            image_path = EXCLUDED.image_path,
+                            create_dt = EXCLUDED.create_dt
                     """, e_row)
 
             # 6) 신규 가격 비교 데이터 INSERT (자식 레코드)

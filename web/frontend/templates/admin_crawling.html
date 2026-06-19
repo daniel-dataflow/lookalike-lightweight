@@ -1065,10 +1065,10 @@ async function fetchManualLogs(isSilent = false) {
         const dateStr = r.finished_at ? new Date(r.finished_at).toLocaleString() : new Date(r.started_at).toLocaleString();
         
         let actionBadge = '';
-        if (r.pipeline_name === 'swap_pipeline') {
-          actionBadge = `<span class="badge bg-info text-dark me-1" style="font-size:0.68rem; padding: 2px 4px;">이관</span>`;
+        if (r.pipeline_name && r.pipeline_name.includes('swap')) {
+          actionBadge = `<span class="badge bg-secondary text-white me-1" style="font-size:0.68rem; padding: 2px 4px; font-weight: 500;">이관</span>`;
         } else {
-          actionBadge = `<span class="badge bg-warning text-dark me-1" style="font-size:0.68rem; padding: 2px 4px;">수집</span>`;
+          actionBadge = `<span class="badge bg-light text-dark border me-1" style="font-size:0.68rem; padding: 2px 4px; font-weight: 500;">수집</span>`;
         }
         
         const isSelected = selectedRunId === r.run_id;

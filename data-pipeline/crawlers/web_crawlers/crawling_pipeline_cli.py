@@ -254,11 +254,16 @@ async def run_pipeline(
     progress_path = os.path.join(_PROGRESS_LOG_DIR, f"progress_{brand.lower()}.json")
     if os.path.exists(progress_path):
         try:
-            with open(progress_path, "r", encoding="utf-8") as pf:
-                existing_data = _json.load(pf)
-                if existing_data.get("started_at"):
-                    _started_at = existing_data.get("started_at")
-                    logger.info(f"💾 어드민 백엔드가 기록한 최초 시작 시각을 계승합니다: {_started_at}")
+            # 윈도우 찌꺼기 파일 식별 방어: 파일의 마지막 수정 시각이 60초 이내인 경우에만 방금 어드민이 기록한 시작 시간으로 인정
+            file_mtime = os.path.getmtime(progress_path)
+            if _time.time() - file_mtime < 60:
+                with open(progress_path, "r", encoding="utf-8") as pf:
+                    existing_data = _json.load(pf)
+                    if existing_data.get("started_at"):
+                        _started_at = existing_data.get("started_at")
+                        logger.info(f"💾 어드민 백엔드가 기록한 최초 시작 시각을 계승합니다: {_started_at}")
+            else:
+                logger.info("⏳ 기존 진행률 파일이 오래되어(60초 초과) 시작 시각을 계승하지 않고 현재 시각을 사용합니다.")
         except Exception as read_err:
             logger.warning(f"기존 시작 시간 조회 실패: {read_err}")
 
@@ -279,12 +284,29 @@ async def run_pipeline(
     
     # [Phase 2] 24시간 검증 후 프로덕션 스위칭만 진행 (크롤링 스킵)
     if action == "swap":
+        # 스위칭 시작 단계 진행 상태 업데이트
+        write_progress(brand, step="스위칭 진행 중", current=0, total=1,
+                       phases_done=[], phases_remaining=["이관 및 스위칭"],
+                       status="running", run_id=run_id, started_at=_started_at,
+                       target_counts=target_counts)
         if not dry_run:
             swap_success = await swap_staging_to_production(brand, force=force)
             if not swap_success:
+                write_progress(brand, step="스위칭 실패", current=0, total=1,
+                               phases_done=[], phases_remaining=[],
+                               status="error", error=f"[{brand}] 데이터 스위칭 실패",
+                               run_id=run_id, started_at=_started_at,
+                               target_counts=target_counts)
                 raise RuntimeError(f"[{brand}] 데이터 프로덕션 스위칭 중 오류가 발생했습니다. 차단 이력을 점검하세요.")
         else:
             logger.info("ℹ️ [DRY RUN] 스위칭 및 이미지 이관 로직을 실행하지 않고 패스합니다.")
+        
+        # 스위칭 성공적으로 종료 시 progress를 완료 상태로 마킹
+        write_progress(brand, step="완료", current=1, total=1,
+                       phases_done=["이관 및 스위칭"], phases_remaining=[],
+                       current_item="이관 및 스위칭 완료",
+                       status="done", run_id=run_id, started_at=_started_at,
+                       target_counts=target_counts)
         return {"total_items": 0, "new_items": 0, "updated_items": 0}
 
     # [Phase 1] 크롤링 및 스테이징 적재 실행
@@ -625,9 +647,10 @@ async def run_pipeline(
                                 
                                 logger.info(f"   🔗 {page_num}페이지 스캔 결과: 신규 식별 {added_count}개 (전체 누적 {len(all_target_products)}개)")
                                 
-                                # [즉각 조기종료 반영] 수동 모드에서 전체 목표 상품수(limit)를 충분히 확보했다면 즉시 스캔 종료
-                                if is_manual_mode and len(all_target_products) >= limit:
-                                    logger.info(f"   ⏸️ [수동 전체 조기종료] 전체 목표 수량({limit}개)을 확보하여 전체 목록 스캔을 즉시 중단합니다. (누적: {len(all_target_products)}개)")
+                                # [즉각 조기종료 반영] 수동 모드에서 특정 카테고리가 지정되었고 목표 상품수(limit)를 충분히 확보했다면 즉시 스캔 종료
+                                # 전체(None) 수집 시에는 Outer만 수집되는 것을 방지하기 위해 목록 스캔의 조기종료를 건너뜁니다.
+                                if is_manual_mode and category and len(all_target_products) >= limit:
+                                    logger.info(f"   ⏸️ [수동 단일카테고리 조기종료] 목표 수량({limit}개)을 확보하여 목록 스캔을 즉시 중단합니다. (누적: {len(all_target_products)}개)")
                                     scan_finished = True
                                     await page.close()
                                     break
@@ -1126,7 +1149,7 @@ async def run_pipeline(
                             if img_url:
                                 image_vector = await get_yolo_clip_image_embedding(session, img_url)
                             
-                            # 2. HuggingFace CLIP 텍스트 임베딩 추출 (차단 시 로컬 CLIP 모델 폴백)
+                            # 2. HuggingFace CLIP 텍스트 임베딩 추출 (내부적으로 자동으로 768차원 패딩 완료)
                             if prod_name:
                                 text_vector = await get_clip_text_embedding(session, prod_name, hf_token)
                         except Exception as embed_err:
