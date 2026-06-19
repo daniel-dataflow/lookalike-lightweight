@@ -567,7 +567,7 @@ def get_crawling_staging():
         settings = get_settings()
         
         # 1. 지원 브랜드 목록 정의 (DB에 저장되는 규격에 맞게 대문자로 통일)
-        brands = ["8SECONDS", "UNIQLO", "SPAO", "GIORDANO", "POLHAM", "TOPTEN"]
+        brands = ["UNIQLO", "TOPTEN", "SPAO", "POLHAM", "8SECONDS", "GIORDANO"]
         brand_stats = []
         total_staging = 0
         
