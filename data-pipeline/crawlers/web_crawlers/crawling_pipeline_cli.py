@@ -445,8 +445,8 @@ async def run_pipeline(
             all_target_products = [] # (product_code, gender_key, category_key) 튜플 리스트
 
             # 수동 vs 자동 모드 판단 선언
-            # limit > 0 이고 GITHUB_ACTIONS가 아니면 수동/어드민 입력 모드로 간주
-            is_manual_mode = (limit > 0) and (os.getenv("GITHUB_ACTIONS") != "true")
+            # limit > 0 이면 수동/어드민 입력 모드로 간주하여 지정된 수집 한도를 강제 유지합니다.
+            is_manual_mode = (limit > 0)
             _mode_desc = f"수동 (limit={limit}개 조기종료 적용)" if is_manual_mode else "자동 (전체 사이트 스캔)"
             logger.info(f"🔄 [수동/자동 모드] {_mode_desc}")
 
@@ -1198,16 +1198,13 @@ async def run_pipeline(
                 except Exception as cache_err:
                     logger.warning(f"⚠️ 기존 임베딩 캐시 로드 중 예외 발생 (새로 생성함): {cache_err}")
 
-                # 개별 상품 임베딩이 완료될 때마다 진행률을 기록하고 DB에 즉시 실시간 적재
-                # (임베딩 시작 전 닫았던 DW DB 커넥션을 다시 열어 공유 준비)
-                dw_conn = get_dw_db_connection()
-                dw_conn.autocommit = False
-                dw_cur = dw_conn.cursor()
-
+                # 개별 상품 임베딩이 완료될 때마다 진행률을 기록하고 연산 완료 후 DB에 벌크 적재
+                # (임베딩 비동기 연산 중에는 Neon DB 세션을 장시간 홀딩하지 않고 완전히 끊어 과금을 방지합니다)
+                results_to_insert = []
+                cached_results = []
+                
                 async with aiohttp.ClientSession() as session:
                     tasks = []
-                    cached_results = []
-                    
                     for row in inserted_products:
                         prod_id, img_url, prod_name, gender, category = row
                         
@@ -1215,66 +1212,32 @@ async def run_pipeline(
                         if not force_download and prod_id in embedding_cache:
                             img_vec, txt_vec = embedding_cache[prod_id]
                             cached_results.append((prod_id, img_vec, txt_vec, brand.upper(), category, gender, img_url))
-                            logger.info(f"   💾 상품 {prod_id} ({prod_name[:20]}) -> 기존 임베딩 캐시 히트 (연산 스킵)")
                         else:
                             tasks.append(generate_and_save_embed(session, prod_id, img_url, prod_name, gender, category))
                     
                     completed_count = 0
-                    valid_embed_count = 0
                     total_collected = len(inserted_products)
                     
-                    # 1. 캐시 히트된 데이터 먼저 실시간 DB 적재 (기존 dw_cur 연결 공유 활용)
+                    # 1. 캐시 히트 처리 진행률 업데이트 (실시간 기록)
                     for res in cached_results:
                         completed_count += 1
-                        try:
-                            dw_cur.execute("""
-                                INSERT INTO staging_product_embeddings (
-                                    product_id, image_vector, text_vector, brand, category, gender, image_path, create_dt
-                                )
-                                VALUES (%s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
-                                ON CONFLICT (product_id) DO UPDATE
-                                SET image_vector = EXCLUDED.image_vector,
-                                    text_vector = EXCLUDED.text_vector,
-                                    create_dt = CURRENT_TIMESTAMP
-                            """, res)
-                            valid_embed_count += 1
-                        except Exception as save_err:
-                            logger.error(f"❌ 임베딩 캐시 실시간 DB 적재 실패 (상품 {res[0]}): {save_err}")
-                            
-                        # 진행 정보 파일 업데이트 (실시간)
                         write_progress(brand, step="임베딩 생성 중", current=completed_count, total=total_collected,
                                        phases_done=["카테고리 스캔", "상품 크롤링", "이미지 업로드"],
                                        phases_remaining=[f"임베딩 생성 ({total_collected}개)", "DB 저장"],
-                                       current_item=f"상품 {res[0]} 캐시 적용 완료",
+                                       current_item=f"상품 {res[0]} 캐시 복원 완료",
                                        status="running", run_id=run_id, started_at=_started_at)
                     
-                    # 2. 캐시 미스된 데이터 비동기 연산 및 실시간 DB 적재
+                    # 2. 캐시 미스된 데이터 비동기 연산 수행 (DB 연결 없이 순수 CPU/네트워크 연산 진행)
                     if tasks:
                         for coro in asyncio.as_completed(tasks):
                             res = await coro  # res: (prod_id, image_vector, text_vector, brand, category, gender, img_url)
                             completed_count += 1
-                            
-                            # 1. DB 실시간 적재 (기존 dw_cur 연결 공유 활용)
                             if res:
-                                try:
-                                    dw_cur.execute("""
-                                        INSERT INTO staging_product_embeddings (
-                                            product_id, image_vector, text_vector, brand, category, gender, image_path, create_dt
-                                        )
-                                        VALUES (%s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
-                                        ON CONFLICT (product_id) DO UPDATE
-                                        SET image_vector = EXCLUDED.image_vector,
-                                            text_vector = EXCLUDED.text_vector,
-                                            create_dt = CURRENT_TIMESTAMP
-                                    """, res)
-                                    valid_embed_count += 1
-                                except Exception as save_err:
-                                    logger.error(f"❌ 임베딩 연산 실시간 DB 적재 실패 (상품 {res[0]}): {save_err}")
+                                results_to_insert.append(res)
                             
-                            # 2. 진행 정보 파일 업데이트 (실시간)
                             current_item_str = f"임베딩 처리 중... ({completed_count}/{total_collected})"
                             if res and len(res) > 0 and res[0]:
-                                current_item_str = f"상품 {res[0]} 임베딩 완료 및 DB 저장"
+                                current_item_str = f"상품 {res[0]} 임베딩 연산 완료"
                                 
                             write_progress(brand, step="임베딩 생성 중", current=completed_count, total=total_collected,
                                            phases_done=["카테고리 스캔", "상품 크롤링", "이미지 업로드"],
@@ -1283,9 +1246,39 @@ async def run_pipeline(
                                            status="running", run_id=run_id, started_at=_started_at,
                                            target_counts=target_counts)
                 
-                logger.info(f"✨ staging_product_embeddings 테이블에 실시간으로 {valid_embed_count}건 임베딩 벡터 적재 완료.")
+                # ③ 모든 임베딩 연산이 최종 완료된 시점에 비로소 DW DB 커넥션을 맺고 단일 트랜잭션 벌크 저장
+                logger.info("🔌 모든 임베딩 연산 완료. DW DB에 단일 트랜잭션 벌크(Bulk) 적재 시작...")
+                dw_conn = get_dw_db_connection()
+                dw_conn.autocommit = False
+                dw_cur = dw_conn.cursor()
+                
+                valid_embed_count = 0
+                try:
+                    # 캐시 히트 데이터와 새로 연산한 데이터 병합
+                    all_embeddings = cached_results + results_to_insert
+                    if all_embeddings:
+                        # psycopg2 extras의 execute_values를 이용해 벌크 업서트 수행
+                        execute_values(dw_cur, """
+                            INSERT INTO staging_product_embeddings (
+                                product_id, image_vector, text_vector, brand, category, gender, image_path, create_dt
+                            )
+                            VALUES %s
+                            ON CONFLICT (product_id) DO UPDATE
+                            SET image_vector = EXCLUDED.image_vector,
+                                text_vector = EXCLUDED.text_vector,
+                                create_dt = CURRENT_TIMESTAMP
+                        """, [(
+                            item[0], item[1], item[2], item[3], item[4], item[5], item[6]
+                        ) for item in all_embeddings])
+                        valid_embed_count = len(all_embeddings)
+                    
+                    logger.info(f"✨ staging_product_embeddings 테이블에 벌크(Bulk)로 {valid_embed_count}건 임베딩 벡터 적재 완료.")
+                except Exception as save_err:
+                    dw_conn.rollback()
+                    logger.error(f"❌ 임베딩 벡터 벌크 적재 실패 (롤백 수행): {save_err}")
+                    raise save_err
             
-            # 최종 DB 연결 수립 후 트랜잭션 정상 종료 처리 (이전 단계에서 다 끝났으므로 닫아줄 커넥션만 마무리)
+            # 최종 DB 연결 수립 후 트랜잭션 정상 종료 처리
             logger.info("🔌 최종 스테이징 적재 정리 완료. (Phase 1 완료)")
             dw_conn.commit()
             logger.info(f"✅ 스테이징 테이블 {success_db_count}건 임시 적재 완료. (Phase 1 완료)")
@@ -1298,6 +1291,10 @@ async def run_pipeline(
             
             # 수집된 pending_errors 일괄 DB 적재 처리 (Neon DB 동시 커넥션 수 초과 방지)
             if pending_errors and not dry_run:
+                # 펜딩 에러 적재를 위해 새로운 트랜잭션용 세션 수립
+                error_conn = get_dw_db_connection()
+                error_conn.autocommit = False
+                error_cur = error_conn.cursor()
                 logger.info(f"📝 펜딩된 에러 로그 {len(pending_errors)}건을 단일 세션으로 일괄 적재 진행 중...")
                 try:
                     non_warn_count = 0
@@ -1306,7 +1303,7 @@ async def run_pipeline(
                         if not is_warn:
                             non_warn_count += 1
                         
-                        dw_cur.execute("""
+                        error_cur.execute("""
                             INSERT INTO pipeline_errors (
                                 run_id, error_type, error_message, stack_trace, product_id, source_url, created_at
                             )
@@ -1314,16 +1311,27 @@ async def run_pipeline(
                         """, (run_id, err_type, err_msg, "", p_id or "", src_url or ""))
                     
                     if run_id and non_warn_count > 0:
-                        dw_cur.execute("""
+                        error_cur.execute("""
                             UPDATE pipeline_runs 
                             SET error_count = error_count + %s 
                             WHERE run_id = %s
                         """, (non_warn_count, run_id))
                     
-                    dw_conn.commit()
+                    error_conn.commit()
                 except Exception as log_err:
+                    error_conn.rollback()
                     logger.error(f"❌ 펜딩 에러 일괄 적재 중 예외: {log_err}")
-
+                finally:
+                    error_cur.close()
+                    error_conn.close()
+ 
+            # dw_conn 및 dw_cur 세션 안전 종료
+            try:
+                dw_cur.close()
+                dw_conn.close()
+            except Exception:
+                pass
+ 
             return {"total_items": success_db_count, "new_items": new_items_count, "updated_items": updated_items_count, "embed_count": valid_embed_count, "target_counts": target_counts}
             
         except Exception as db_err:
@@ -1332,13 +1340,33 @@ async def run_pipeline(
                            status="error", error=str(db_err)[:200],
                            run_id=run_id, started_at=_started_at,
                            target_counts=target_counts)
-            dw_conn.rollback()
+            try:
+                dw_conn.rollback()
+            except Exception:
+                pass
             raise RuntimeError(f"스테이징 적재 중 DB 에러: {db_err}")
         finally:
-            prod_cur.close()
-            prod_conn.close()
-            dw_cur.close()
-            dw_conn.close()
+            # 커넥션 및 커서 인스턴스들의 존재 여부 및 연결 상태를 점검하여 안전 종료 처리
+            try:
+                if 'prod_cur' in locals() and prod_cur:
+                    prod_cur.close()
+            except Exception:
+                pass
+            try:
+                if 'prod_conn' in locals() and prod_conn:
+                    prod_conn.close()
+            except Exception:
+                pass
+            try:
+                if 'dw_cur' in locals() and dw_cur:
+                    dw_cur.close()
+            except Exception:
+                pass
+            try:
+                if 'dw_conn' in locals() and dw_conn:
+                    dw_conn.close()
+            except Exception:
+                pass
 
 
 def main():

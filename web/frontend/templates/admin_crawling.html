@@ -443,11 +443,12 @@
                     <th class="text-end">임베딩</th>
                     <th class="text-end">신규/갱신</th>
                     <th class="text-end">에러</th>
+                    <th>시간</th>
                   </tr>
                 </thead>
                 <tbody id="autoRunsTableBody" style="font-size:.85rem;">
                   <tr>
-                    <td colspan="6" class="text-center py-4 text-muted">자동 배치 구동 내역이 없습니다.</td>
+                    <td colspan="7" class="text-center py-4 text-muted">자동 배치 구동 내역이 없습니다.</td>
                   </tr>
                 </tbody>
               </table>
@@ -1228,17 +1229,31 @@ async function fetchAutoLogs() {
           statusBadge = `<span class="badge bg-primary spinner-grow-sm">실행 중</span>`;
         }
         
+        let actionBadge = '';
+        if (r.pipeline_name && r.pipeline_name.includes('swap')) {
+          actionBadge = `<span class="badge bg-secondary text-white me-1" style="font-size:0.68rem; padding: 2px 4px; font-weight: 500;">이관</span>`;
+        } else {
+          actionBadge = `<span class="badge bg-light text-dark border me-1" style="font-size:0.68rem; padding: 2px 4px; font-weight: 500;">수집</span>`;
+        }
+        
+        const dateStr = r.finished_at ? new Date(r.finished_at).toLocaleString() : new Date(r.started_at).toLocaleString();
         const isSelected = selectedAutoRunId === r.run_id;
         const rowStyle = isSelected ? 'background-color: #f0fdf4; border-left: 4px solid #16a34a;' : 'cursor: pointer;';
         
         runsHtml += `
           <tr style="${rowStyle}" onclick="selectAutoRun(${r.run_id})">
-            <td><strong>[#${r.display_run_id}] ${r.brand}</strong></td>
+            <td>
+              <div class="d-flex align-items-center">
+                ${actionBadge}
+                <strong>[#${r.display_run_id}] ${r.brand}</strong>
+              </div>
+            </td>
             <td>${statusBadge}</td>
             <td class="text-end">${r.total_items.toLocaleString()}</td>
             <td class="text-end">${(r.embed_count || 0).toLocaleString()}</td>
             <td class="text-end">${r.new_items}/${r.updated_items}</td>
             <td class="text-end text-danger fw-semibold">${r.error_count.toLocaleString()}</td>
+            <td><small class="text-muted">${dateStr}</small></td>
           </tr>`;
       });
       autoRunsBody.innerHTML = runsHtml;

@@ -766,16 +766,28 @@ async def swap_staging_to_production(brand_name: str, force: bool = False) -> bo
             
             last_crawl_run_id, last_crawl_finished_at, last_crawl_error_count, last_crawl_total = last_crawl
             
-            # 에러 건수 검증 (에러가 있으면 스위칭 차단)
+            # 에러 건수 검증 (심각한 정합성 오류인 경우에만 스위칭 차단)
+            # 허용 기준: 에러율 15% 이하이고 에러 건수 30건 이하인 경우, 경고만 발송하고 이관(스위칭) 허용
+            error_rate = 0.0
+            if last_crawl_total and last_crawl_total > 0:
+                error_rate = (last_crawl_error_count / last_crawl_total) * 100
+
             if last_crawl_error_count and last_crawl_error_count > 0:
-                err_msg = f"❌ [{brand_name}] 가장 최근 크롤링(run_id={last_crawl_run_id})에서 에러 {last_crawl_error_count}건이 발생했습니다. 완벽한 수집 상태가 아니므로 자동 스위칭을 차단합니다."
-                logger.error(err_msg)
-                send_alert(err_msg, level="WARNING")
-                log_pipeline_error(run_id, "SWAP_CRAWL_HAS_ERRORS", err_msg)
-                log_pipeline_end(run_id, "FAILED", total_items=0, error_count=1)
-                stage_cur.close()
-                stage_conn.close()
-                return False
+                is_critical = (last_crawl_error_count > 30) or (error_rate > 15.0)
+                if is_critical:
+                    err_msg = f"❌ [{brand_name}] 가장 최근 크롤링(run_id={last_crawl_run_id})에서 심각한 에러 {last_crawl_error_count}건이 발생했습니다 (에러율 {error_rate:.1f}%). 완벽한 수집 상태가 아니므로 자동 스위칭을 차단합니다."
+                    logger.error(err_msg)
+                    send_alert(err_msg, level="WARNING")
+                    log_pipeline_error(run_id, "SWAP_CRAWL_HAS_CRITICAL_ERRORS", err_msg)
+                    log_pipeline_end(run_id, "FAILED", total_items=0, error_count=1)
+                    stage_cur.close()
+                    stage_conn.close()
+                    return False
+                else:
+                    # 마이너 에러 경고 발송 후 스위칭 허용
+                    warn_msg = f"⚠️ [{brand_name}] 가장 최근 크롤링(run_id={last_crawl_run_id})에서 경미한 에러 {last_crawl_error_count}건이 검출되었으나 (에러율 {error_rate:.1f}%), 허용 한도 이내이므로 이관(스위칭)을 정상 진행합니다."
+                    logger.warning(warn_msg)
+                    send_alert(warn_msg, level="WARNING")
             
             # 24시간 경과 여부 검증
             stage_cur.execute("""

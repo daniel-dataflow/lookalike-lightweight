@@ -2,14 +2,10 @@ name: Lookalike Fashion Crawling Pipeline
 
 on:
   schedule:
-    # Phase 1: 매일 새벽 3시(KST / UTC 18:00) 정기 수집 배치 실행
-    # 정식 상용화 시 7일 주기용 설정: 0 18 * * 0 (매주 일요일 KST 새벽 3시)
-    - cron: '0 18 * * *'
-    # Phase 2: 매일 새벽 4시(KST / UTC 19:00) 정기 스위칭 배치 실행
-    # Phase 1 크롤링 완료(보통 03:00~04:00 KST 사이 완료) 후 다음날 04:00 KST에 실행.
-    # base_utils.py의 pipeline_runs.finished_at 기준 24시간 검증이 실질 안전망이므로
-    # 이 스케줄 시간은 대략 24시간 경과 여부를 맞추기 위한 용도임.
-    - cron: '0 19 * * *'
+    # Phase 1: 일요일 저녁 9시(KST 21:00 / UTC 12:00) 정기 수집 배치 실행
+    - cron: '0 12 * * 0'
+    # Phase 2: 화요일 새벽 4시(KST 04:00 / UTC 월요일 19:00) 정기 스위칭 배치 실행
+    - cron: '0 19 * * 1'
   workflow_dispatch:
     inputs:
       brand:
@@ -126,10 +122,10 @@ jobs:
     strategy:
       matrix: ${{ fromJson(needs.setup-matrix.outputs.matrix) }}
       fail-fast: false  # 특정 브랜드 수집이 실패해도 다른 브랜드에 영향이 가지 않음
-    # 수동 crawl 모드이거나, 18:00 UTC 스케줄 구동 시 실행
+    # 수동 crawl 모드이거나, 일요일 저녁 9시 KST (12:00 UTC) 스케줄 구동 시 실행
     if: |
       (github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'crawl') ||
-      (github.event_name == 'schedule' && github.event.schedule == '0 18 * * *')
+      (github.event_name == 'schedule' && github.event.schedule == '0 12 * * 0')
 
     steps:
       - name: 저장소 체크아웃
@@ -239,10 +235,10 @@ jobs:
     strategy:
       matrix: ${{ fromJson(needs.setup-swap-matrix.outputs.matrix) }}
       fail-fast: false
-    # 수동 swap 모드이거나, 19:00 UTC 스케줄 구동 시 실행
+    # 수동 swap 모드이거나, 화요일 새벽 4시 KST (월요일 19:00 UTC) 스케줄 구동 시 실행
     if: |
       (github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'swap') ||
-      (github.event_name == 'schedule' && github.event.schedule == '0 19 * * *')
+      (github.event_name == 'schedule' && github.event.schedule == '0 19 * * 1')
 
     steps:
       - name: 저장소 체크아웃
@@ -257,7 +253,7 @@ jobs:
       - name: 의존성 설치
         run: |
           python -m pip install --upgrade pip
-          pip install psycopg2-binary aiohttp cloudinary python-dotenv requests numpy
+          pip install psycopg2-binary aiohttp cloudinary python-dotenv requests numpy playwright
 
       - name: 스위칭 실행
         env:
