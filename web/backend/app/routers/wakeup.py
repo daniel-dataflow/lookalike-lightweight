@@ -3,7 +3,7 @@ from fastapi.responses import JSONResponse
 
 router = APIRouter(prefix="/api/v1")
 
-@router.get("/health-check")
+@router.api_route("/health-check", methods=["GET", "HEAD"])
 async def health_check_wakeup():
     """
     외부 모니터링용 초경량 헬스체크 API.
