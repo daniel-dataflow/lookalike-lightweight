@@ -1395,8 +1395,8 @@ def main():
         run_id = log_pipeline_start(args.brand, pipeline_name=pipeline_name)
 
     try:
-        # GitHub Actions 환경 여부 또는 CLI --auto 플래그로 자동/수동 모드 결정
-        is_auto_mode = (os.getenv("GITHUB_ACTIONS") == "true") or args.auto
+        # CLI --auto 플래그로 자동/수동 모드 결정 (깃액션 내에서도 수동 수집이 가능하도록 args.auto에 의해서만 결정)
+        is_auto_mode = args.auto
         metrics = asyncio.run(run_pipeline(
             brand=args.brand, 
             limit=args.limit, 
