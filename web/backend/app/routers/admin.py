@@ -831,7 +831,20 @@ def run_manual_crawling(data: dict):
     """
     try:
         brand = data.get("brand", "").lower()
-        limit = data.get("limit", 10)
+        is_auto = data.get("is_auto", False)
+        
+        if is_auto:
+            limit = 0
+        else:
+            _raw_limit = data.get("limit")
+            try:
+                if _raw_limit is None:
+                    raise ValueError
+                limit = int(_raw_limit)
+            except (TypeError, ValueError):
+                raise HTTPException(status_code=400, detail="최대 수집 상품 수는 1개 이상의 올바른 정수여야 합니다.")
+            if limit <= 0:
+                raise HTTPException(status_code=400, detail="최대 수집 상품 수는 1개 이상이어야 합니다.")
         category = data.get("category", "all")
         
         if not brand:
@@ -869,10 +882,12 @@ def run_manual_crawling(data: dict):
         log_file_path = os.path.join(log_dir, f"crawl_{brand}.log")
         
         cmd = [python_exe, cli_path, "--brand", brand, "--limit", str(limit), "--action", "crawl"]
+        if is_auto:
+            cmd.append("--auto")
         if category and category != "all":
             cmd += ["--category", category]
             
-        logger.info(f"수동 크롤링 백그라운드 구동 명령: {' '.join(cmd)} (Python: {python_exe})")
+        logger.info(f"크롤링 백그라운드 구동 명령: {' '.join(cmd)} (Python: {python_exe})")
         
         # 비동기로 subprocess 실행 (로그 파일로 출력 저장)
         # Windows 환경에서 한글 깨짐 방지를 위해 PYTHONIOENCODING=utf-8 강제 주입
@@ -881,7 +896,7 @@ def run_manual_crawling(data: dict):
         env["PYTHONIOENCODING"] = "utf-8"
         
         log_f = open(log_file_path, "a", encoding="utf-8")
-        subprocess.Popen(
+        proc = subprocess.Popen(
             cmd,
             stdout=log_f,
             stderr=log_f,
@@ -898,6 +913,8 @@ def run_manual_crawling(data: dict):
             )
             initial_progress = {
                 "brand": brand.upper(),
+                "pid": proc.pid,
+                "run_id": run_id,
                 "status": "running",
                 "step": "크롤러 기동 중...",
                 "percent": 1,
@@ -916,6 +933,114 @@ def run_manual_crawling(data: dict):
         return {"success": True, "message": f"{brand.upper()} 브랜드 수집(크롤링) 백그라운드 작업이 성공적으로 실행되었습니다. 로그: logs/crawl_{brand}.log"}
     except Exception as e:
         logger.error(f"수동 크롤링 실행 실패: {e}")
+        return {"success": False, "detail": str(e)}
+
+
+@router.post("/crawling/stop")
+def stop_manual_crawling(data: dict):
+    """
+    실행 중인 크롤링 백그라운드 작업을 강제 종료합니다.
+    """
+    try:
+        brand = data.get("brand", "").lower()
+        if not brand:
+            raise HTTPException(status_code=400, detail="브랜드명이 필요합니다.")
+            
+        # progress_{brand}.json 파일에서 pid 및 run_id 조회
+        log_dir = os.path.normpath(
+            os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "..", "logs")
+        )
+        progress_path = os.path.join(log_dir, f"progress_{brand}.json")
+        
+        if not os.path.exists(progress_path):
+            raise HTTPException(status_code=404, detail=f"{brand.upper()} 브랜드의 진행 중인 크롤링 작업이 없거나 진행 정보 파일이 없습니다.")
+            
+        import json as _json
+        try:
+            with open(progress_path, "r", encoding="utf-8") as pf:
+                progress_data = _json.load(pf)
+        except Exception as read_err:
+            raise HTTPException(status_code=500, detail=f"진행 정보 파일을 읽는 도중 에러가 발생했습니다: {read_err}")
+            
+        pid = progress_data.get("pid")
+        run_id = progress_data.get("run_id")
+        
+        if not pid:
+            raise HTTPException(status_code=400, detail=f"{brand.upper()} 크롤러의 프로세스 ID(PID) 정보가 존재하지 않습니다.")
+            
+        # 프로세스 존재 여부 및 강제 종료 수행 (Windows 및 Linux/macOS 크로스 플랫폼 대응)
+        import platform
+        import subprocess as _sub
+        is_windows = platform.system() == "Windows"
+        
+        logger.info(f"🛑 [{brand.upper()}] 크롤러 프로세스 강제 종료 시도 (PID: {pid}, OS: {platform.system()})")
+        
+        if is_windows:
+            # taskkill /F /T /PID <pid> 명령어로 하위 브라우저 프로세스까지 깔끔하게 트리를 강제 강제종료
+            kill_cmd = ["taskkill", "/F", "/T", "/PID", str(pid)]
+            try:
+                kill_res = _sub.run(kill_cmd, capture_output=True, text=True, check=True)
+                logger.info(f"🛑 taskkill 실행 결과: {kill_res.stdout}")
+            except _sub.CalledProcessError as k_err:
+                logger.warning(f"⚠️ taskkill 실패 또는 대상 프로세스가 이미 종료됨: {k_err.stderr}")
+        else:
+            # Linux / macOS: pkill -9 -P <pid> (자식들 종료) 및 kill -9 <pid> (부모 종료)
+            try:
+                _sub.run(["pkill", "-9", "-P", str(pid)], capture_output=True, check=False)
+            except Exception as e:
+                logger.warning(f"⚠️ pkill 자식 프로세스 종료 중 오류: {e}")
+            try:
+                _sub.run(["kill", "-9", str(pid)], capture_output=True, check=False)
+            except Exception as e:
+                logger.warning(f"⚠️ kill 본체 프로세스 종료 중 오류: {e}")
+            
+        # DB의 pipeline_runs 상태 업데이트 (실패 상태로 마킹)
+        if run_id:
+            try:
+                dw_conn = get_dw_db_connection()
+                dw_conn.autocommit = True
+                dw_cur = dw_conn.cursor()
+                dw_cur.execute("""
+                    UPDATE pipeline_runs 
+                    SET status = 'FAILED', finished_at = CURRENT_TIMESTAMP, error_count = error_count + 1 
+                    WHERE run_id = %s
+                """, (run_id,))
+                
+                dw_cur.execute("""
+                    INSERT INTO pipeline_errors (
+                        run_id, error_type, error_message, stack_trace, created_at
+                    )
+                    VALUES (%s, 'USER_STOP', '사용자에 의해 크롤링 파이프라인이 강제 중지되었습니다.', '', CURRENT_TIMESTAMP)
+                """, (run_id,))
+                
+                dw_cur.close()
+                dw_conn.close()
+                logger.info(f"💾 DB pipeline_runs [#{run_id}] 상태 FAILED 및 USER_STOP 처리 완료.")
+            except Exception as db_err:
+                logger.error(f"⚠️ DB 상태 갱신 실패: {db_err}")
+                
+        # progress.json을 중지된 상태로 변경
+        try:
+            from datetime import datetime as _datetime
+            progress_data["status"] = "failed"
+            progress_data["step"] = "사용자에 의해 강제 중지됨"
+            progress_data["percent"] = 0
+            progress_data["current_item"] = "사용자가 대시보드에서 크롤링 작업을 강제 종료하였습니다."
+            progress_data["phases_done"] = []
+            progress_data["phases_remaining"] = []
+            progress_data["error"] = "사용자 강제 중단"
+            progress_data["updated_at"] = _datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+            
+            with open(progress_path, "w", encoding="utf-8") as pf:
+                _json.dump(progress_data, pf, ensure_ascii=False, indent=2)
+        except Exception as file_err:
+            logger.warning(f"진행 파일 강제종료 상태 업데이트 실패: {file_err}")
+            
+        return {"success": True, "message": f"{brand.upper()} 브랜드 크롤러 프로세스(PID: {pid}) 및 하위 프로세스 트리가 강제 중지되었습니다."}
+    except HTTPException as http_e:
+        raise http_e
+    except Exception as e:
+        logger.error(f"크롤러 작업 중지 실패: {e}")
         return {"success": False, "detail": str(e)}
 
 

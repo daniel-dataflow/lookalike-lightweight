@@ -162,26 +162,6 @@ try:
 except ImportError as e:
     logger.warning(f"polham scraper 임포트 에러: {e}")
 
-# spao (추가)
-try:
-    import scraper_spao as s_sp
-    BRAND_CRAWLER_MODELS["spao"] = s_sp
-except ImportError as e:
-    logger.warning(f"spao scraper 임포트 에러: {e}")
-
-# giordano (추가)
-try:
-    import scraper_giordano as s_gd
-    BRAND_CRAWLER_MODELS["giordano"] = s_gd
-except ImportError as e:
-    logger.warning(f"giordano scraper 임포트 에러: {e}")
-
-# polham (추가)
-try:
-    import scraper_polham as s_ph
-    BRAND_CRAWLER_MODELS["polham"] = s_ph
-except ImportError as e:
-    logger.warning(f"polham scraper 임포트 에러: {e}")
 
 
 # ──────────────────────────────────────────────────────────────
@@ -210,8 +190,10 @@ def write_progress(
     os.makedirs(_PROGRESS_LOG_DIR, exist_ok=True)
     path = os.path.join(_PROGRESS_LOG_DIR, f"progress_{brand.lower()}.json")
     percent = int((current / total * 100)) if total > 0 else 0
+    import os as _os
     data = {
         "brand": brand.upper(),
+        "pid": _os.getpid(),
         "run_id": run_id,
         "step": step,
         "current": current,
@@ -237,7 +219,8 @@ async def run_pipeline(
     brand: str, limit: int = 50, dry_run: bool = False, 
     action: str = "crawl", force: bool = False,
     gender: str = None, category: str = None, run_id: int = None,
-    force_download: bool = False, product_id: str = None
+    force_download: bool = False, product_id: str = None,
+    is_auto: bool = False  # True면 GitHub Actions 자동 크롤링, False면 수동/어드민 모드
 ):
     """
     특정 브랜드의 Playwright 크롤링 실행 및 
@@ -249,6 +232,9 @@ async def run_pipeline(
 
     logger.info(f"🚀 [{brand}] 크롤링 파이프라인 기동 (action={action}, limit={limit}, dry_run={dry_run}, force={force}, gender={gender}, category={category}, force_download={force_download}, product_id={product_id})")
     
+    # [방어 코드] 수동 크롤링 시 limit이 0 이하이거나 지정되지 않은 경우 실행을 즉시 차단합니다.
+    if not is_auto and (limit is None or limit <= 0):
+        raise ValueError(f"수동 크롤링 모드에서는 최대 수집 상품 수(limit)가 1 이상이어야 합니다. (입력값: {limit})")
     # [시작 시각 보존] 어드민 백엔드가 버튼 클릭 즉시 기록한 started_at이 있다면,
     # 파이썬 기동 대기 시간(프로세스 로딩 시간 등)을 전체 경과 시간에 누락 없이 반영하기 위해 덮어쓰지 않고 계승합니다.
     progress_path = os.path.join(_PROGRESS_LOG_DIR, f"progress_{brand.lower()}.json")
@@ -443,11 +429,13 @@ async def run_pipeline(
 
             target_map = scraper.TARGET_MAP
             all_target_products = [] # (product_code, gender_key, category_key) 튜플 리스트
+            all_target_set = set()   # O(1) 중복 체크용 Set (코드만 보관)
 
-            # 수동 vs 자동 모드 판단 선언
-            # limit > 0 이면 수동/어드민 입력 모드로 간주하여 지정된 수집 한도를 강제 유지합니다.
-            is_manual_mode = (limit > 0)
-            _mode_desc = f"수동 (limit={limit}개 조기종료 적용)" if is_manual_mode else "자동 (전체 사이트 스캔)"
+            # 수동 vs 자동 모드 판단
+            # is_auto=True(GitHub Actions) → 전체 스캔 후 실제 코드 수 만큼 limit을 동적 갱신
+            # is_auto=False(어드민/수동)     → limit을 엄격하게 준수하고 카테고리별 조기종료 적용
+            is_manual_mode = not is_auto
+            _mode_desc = f"수동 (limit={limit}개 균등 배분)" if is_manual_mode else "자동 (전체 사이트 스캔 후 동적 limit)"
             logger.info(f"🔄 [수동/자동 모드] {_mode_desc}")
 
             # 1단계: 전체 지정 카테고리 목록 스캔 및 통계 산출
@@ -636,9 +624,11 @@ async def run_pipeline(
                                         continue
                                     
                                 # 수집된 신규 코드들을 all_target_products에 실시간으로 중복 없이 추가
+                                # O(1) Set으로 중복 체크하여 코드 수 증가 시 성능 저하 방지
                                 added_count = 0
                                 for code in p_codes:
-                                    if not any(x[0] == code for x in all_target_products):
+                                    if code not in all_target_set:
+                                        all_target_set.add(code)
                                         all_target_products.append((code, gender_key, category_key))
                                         added_count += 1
 
@@ -647,13 +637,25 @@ async def run_pipeline(
                                 
                                 logger.info(f"   🔗 {page_num}페이지 스캔 결과: 신규 식별 {added_count}개 (전체 누적 {len(all_target_products)}개)")
                                 
-                                # [즉각 조기종료 반영] 수동 모드에서 특정 카테고리가 지정되었고 목표 상품수(limit)를 충분히 확보했다면 즉시 스캔 종료
-                                # 전체(None) 수집 시에는 Outer만 수집되는 것을 방지하기 위해 목록 스캔의 조기종료를 건너뜁니다.
-                                if is_manual_mode and category and len(all_target_products) >= limit:
-                                    logger.info(f"   ⏸️ [수동 단일카테고리 조기종료] 목표 수량({limit}개)을 확보하여 목록 스캔을 즉시 중단합니다. (누적: {len(all_target_products)}개)")
-                                    scan_finished = True
-                                    await page.close()
-                                    break
+                                # [즉각 조기종료 반영] 수동 모드 조기 종료 로직
+                                if is_manual_mode:
+                                    if category:
+                                        # 단일 카테고리 지정: 해당 카테고리에서 limit 채우면 즉시 종료
+                                        if len(all_target_products) >= limit:
+                                            logger.info(f"   ⏸️ [수동/단일카테고리] 목표 수량({limit}개) 확보 → 스캔 즉시 종료 (누적: {len(all_target_products)}개)")
+                                            scan_finished = True
+                                            await page.close()
+                                            break
+                                    else:
+                                        # 전체 카테고리: 각 카테고리별 필요 수량(ceil(limit/3))의 배수만큼 확보되면 이 카테고리 스캔 종료
+                                        # → Outer/Top/Bottom이 라운드 로빈으로 균등 배분되므로, 한 카테고리당 ceil(limit/3) 이상이면 충분
+                                        import math
+                                        per_cat_needed = math.ceil(limit / 3)
+                                        cat_collected = sum(1 for _, _, ck in all_target_products if ck == category_key)
+                                        if cat_collected >= per_cat_needed:
+                                            logger.info(f"   ⏸️ [수동/전체/카테고리별 조기종료] {category_key} 카테고리 목표 {per_cat_needed}개 확보 → 다음 카테고리로 이동")
+                                            await page.close()
+                                            break
 
                                 # 신규 식별이 0개이더라도 중복 배치 섞임이 있을 수 있으므로 조기 break를 완화
                                 # 연속 5페이지 이상 신규 식별이 없거나 전체 limit을 넘길 때 탈출하도록 안전장치 변경
@@ -745,13 +747,13 @@ async def run_pipeline(
                 for code, gender_key, category_key in all_target_products:
                     cat_buckets.setdefault(category_key, []).append((code, gender_key, category_key))
                 
-                # 라운드 로빈 재배열 실행
+                # 라운드 로빈 재배열 실행 (아우터 -> 상의 -> 하의 순서로 고르게 믹싱)
                 shuffled_targets = []
                 has_items = True
                 while has_items:
                     has_items = False
-                    for c_key in sorted(cat_buckets.keys()):
-                        if cat_buckets[c_key]:
+                    for c_key in ["Outer", "Top", "Bottom"]:
+                        if c_key in cat_buckets and cat_buckets[c_key]:
                             shuffled_targets.append(cat_buckets[c_key].pop(0))
                             has_items = True
                 
@@ -1258,9 +1260,11 @@ async def run_pipeline(
                     all_embeddings = cached_results + results_to_insert
                     if all_embeddings:
                         # psycopg2 extras의 execute_values를 이용해 벌크 업서트 수행
+                        # create_dt는 DB DEFAULT(CURRENT_TIMESTAMP)로 자동 적재되므로 컬럼 목록에서 제외
+                        # (INSERT 컬럼 수와 VALUES 수를 일치시켜 RuntimeError 방지)
                         execute_values(dw_cur, """
                             INSERT INTO staging_product_embeddings (
-                                product_id, image_vector, text_vector, brand, category, gender, image_path, create_dt
+                                product_id, image_vector, text_vector, brand, category, gender, image_path
                             )
                             VALUES %s
                             ON CONFLICT (product_id) DO UPDATE
@@ -1380,6 +1384,7 @@ def main():
     parser.add_argument("--category", choices=["Outer", "Top", "Bottom"], help="수집할 카테고리 (분할 크롤링용)")
     parser.add_argument("--force-download", action="store_true", help="캐시를 강제 스킵하고 이미지를 새로 다운로드하며 네이버 최저가 API 구동")
     parser.add_argument("--product-id", help="단일 재수집을 실행할 상품 ID")
+    parser.add_argument("--auto", action="store_true", help="자동 크롤링 모드 활성화 (전체 스캔 후 수집)")
     
     args = parser.parse_args()
     
@@ -1390,6 +1395,8 @@ def main():
         run_id = log_pipeline_start(args.brand, pipeline_name=pipeline_name)
 
     try:
+        # GitHub Actions 환경 여부 또는 CLI --auto 플래그로 자동/수동 모드 결정
+        is_auto_mode = (os.getenv("GITHUB_ACTIONS") == "true") or args.auto
         metrics = asyncio.run(run_pipeline(
             brand=args.brand, 
             limit=args.limit, 
@@ -1400,7 +1407,8 @@ def main():
             category=args.category,
             run_id=run_id,
             force_download=args.force_download,
-            product_id=args.product_id
+            product_id=args.product_id,
+            is_auto=is_auto_mode
         ))
         logger.info(f"🎉 [{args.brand}] 배치 파이프라인이 성공적으로 완수되었습니다.")
         if run_id:

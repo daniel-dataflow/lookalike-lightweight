@@ -530,9 +530,20 @@
             </select>
           </div>
           <div class="mb-3">
+            <label class="form-label fw-semibold d-block" style="font-size:.85rem;">실행 모드</label>
+            <div class="form-check form-check-inline">
+              <input class="form-check-input" type="radio" name="crawlMode" id="modeManual" value="manual" checked onchange="toggleCrawlModeInput()">
+              <label class="form-check-label" for="modeManual" style="font-size:.85rem;">수동 크롤링 (개수 지정)</label>
+            </div>
+            <div class="form-check form-check-inline">
+              <input class="form-check-input" type="radio" name="crawlMode" id="modeAuto" value="auto" onchange="toggleCrawlModeInput()">
+              <label class="form-check-label" for="modeAuto" style="font-size:.85rem;">자동 크롤링 (전체 수집)</label>
+            </div>
+          </div>
+          <div class="mb-3" id="crawlLimitGroup">
             <label for="crawlLimit" class="form-label fw-semibold" style="font-size:.85rem;">최대 수집 상품 수 (기본 10)</label>
             <input type="number" class="form-control" id="crawlLimit" name="limit" value="10" min="1" max="100">
-            <div class="form-text">로컬 테스트 보호 모드로 최대 100건으로 제한됩니다.</div>
+            <div class="form-text" id="crawlLimitHelp">로컬 테스트 보호 모드로 최대 100건으로 제한됩니다.</div>
           </div>
         </form>
       </div>
@@ -842,6 +853,26 @@ async function fetchStagingStatus() {
         ? `<div class="text-warning small mt-1"><i class="far fa-clock me-1"></i>배치 이관 대기: ${hoursLeft}시간 남음</div>`
         : '';
 
+      const pCache = cachedProgressState[b.brand] || {
+        step: '대기 중 (Idle)', percent: '0%', width: '0%', item: '준비 완료', time: '경과 시간: 0초', count: '0 / 0', isRunning: false
+      };
+      const animClasses = pCache.isRunning ? 'progress-bar-striped progress-bar-animated' : '';
+      const actualWaitingBadge = pCache.isRunning 
+        ? `<span class="text-primary text-end fw-semibold" style="font-size:.7rem;"><i class="fas fa-spinner fa-spin me-1"></i>작업 진행 중</span>`
+        : (waitingText ? `<span class="text-warning text-end fw-semibold" style="font-size:.7rem;"><i class="far fa-clock me-1"></i>대기: ${hoursLeft}h</span>` : `<span class="text-muted" style="font-size:.7rem;">이관 대기 없음</span>`);
+      const isDetailsVisible = openedBrands.has(b.brand) ? 'block' : 'none';
+
+      const crawlBtnHtml = pCache.isRunning
+        ? `<button class="btn btn-sm btn-danger flex-fill" onclick="stopCrawl('${b.brand}')">
+             <i class="fas fa-stop me-1"></i>중지
+           </button>`
+        : `<button class="btn btn-sm btn-primary flex-fill" onclick="openCrawlModal('${b.brand}')">
+             <i class="fas fa-play me-1"></i>크롤링 실행
+           </button>`;
+
+      const isSwapDisabled = (pCache.isRunning || !isReadyOrWaiting) ? 'disabled' : '';
+      const isClearDisabled = (pCache.isRunning || isStagingEmpty) ? 'disabled' : '';
+
       // 수집 진행도(%) 계산
       const targetCount = b.staging_count === 0 ? 0 : (b.target_count || b.staging_count || 1);
       const progressPercent = targetCount === 0 ? 0 : Math.min(100, Math.round((b.staging_count / targetCount) * 100));
@@ -919,86 +950,70 @@ async function fetchStagingStatus() {
             </div>
 
             <!-- 실시간 진행률 + 아코디언 세부 지표 + 버튼 -->
-            ${(() => {
-              const pCache = cachedProgressState[b.brand] || {
-                step: '대기 중 (Idle)', percent: '0%', width: '0%', item: '준비 완료', time: '경과 시간: 0초', count: '0 / 0', isRunning: false
-              };
-              const animClasses = pCache.isRunning ? 'progress-bar-striped progress-bar-animated' : '';
-              const actualWaitingBadge = pCache.isRunning 
-                ? `<span class="text-primary text-end fw-semibold" style="font-size:.7rem;"><i class="fas fa-spinner fa-spin me-1"></i>작업 진행 중</span>`
-                : (waitingText ? `<span class="text-warning text-end fw-semibold" style="font-size:.7rem;"><i class="far fa-clock me-1"></i>대기: ${hoursLeft}h</span>` : `<span class="text-muted" style="font-size:.7rem;">이관 대기 없음</span>`);
-              // 폴링 후 리렌더링 시 아코디언 열림/닫힘 상태 복원
-              const isDetailsVisible = openedBrands.has(b.brand) ? 'block' : 'none';
-              console.log('DEBUG BRAND STAGING OBJECT:', b.brand, 'duration_sec:', b.last_duration_sec);
+            <div id="progress-container-${b.brand}" class="mt-3 p-2 border rounded bg-light" style="font-size: 0.73rem;">
+              <div class="d-flex justify-content-between align-items-center mb-1">
+                <span class="fw-bold text-secondary" id="progress-step-${b.brand}">${pCache.step}</span>
+                <span class="fw-bold text-secondary" id="progress-percent-${b.brand}">${pCache.percent}</span>
+              </div>
+              <div class="progress mb-1" style="height: 6px;">
+                <div class="progress-bar ${animClasses} bg-primary" id="progress-bar-${b.brand}" role="progressbar" style="width: ${pCache.width}"></div>
+              </div>
+              <div class="text-truncate text-muted mb-1" id="progress-item-${b.brand}" style="font-size: 0.68rem; max-width: 100%;">${pCache.item}</div>
+              <div class="d-flex justify-content-between text-muted" style="font-size: 0.63rem;">
+                <span id="progress-time-${b.brand}">${pCache.time}</span>
+                <span id="progress-count-${b.brand}">${pCache.count}</span>
+              </div>
+            </div>
 
-              return `
-              <div id="progress-container-${b.brand}" class="mt-3 p-2 border rounded bg-light" style="font-size: 0.73rem;">
-                <div class="d-flex justify-content-between align-items-center mb-1">
-                  <span class="fw-bold text-secondary" id="progress-step-${b.brand}">${pCache.step}</span>
-                  <span class="fw-bold text-secondary" id="progress-percent-${b.brand}">${pCache.percent}</span>
-                </div>
-                <div class="progress mb-1" style="height: 6px;">
-                  <div class="progress-bar ${animClasses} bg-primary" id="progress-bar-${b.brand}" role="progressbar" style="width: ${pCache.width}"></div>
-                </div>
-                <div class="text-truncate text-muted mb-1" id="progress-item-${b.brand}" style="font-size: 0.68rem; max-width: 100%;">${pCache.item}</div>
-                <div class="d-flex justify-content-between text-muted" style="font-size: 0.63rem;">
-                  <span id="progress-time-${b.brand}">${pCache.time}</span>
-                  <span id="progress-count-${b.brand}">${pCache.count}</span>
+            <div class="pt-2 mt-2 border-top">
+              <div class="d-flex justify-content-between align-items-center mb-2" style="font-size:.73rem;">
+                <span class="text-muted text-truncate" style="max-width: 60%;" title="최근 파이프라인: ${latestDtStr}">
+                  <i class="fas fa-history me-1"></i>${latestDtStr.split('오')[1] ? '오' + latestDtStr.split('오')[1] : latestDtStr}
+                  ${b.pipeline_error_count > 0 ? `<span class="badge bg-danger ms-1">에러 ${b.pipeline_error_count}</span>` : ''}
+                </span>
+                ${actualWaitingBadge}
+              </div>
+            </div>
+
+            <!-- 총 소요 시간 표시 -->
+            ${b.last_duration_sec !== undefined && b.last_duration_sec !== null ? 
+            '<div class="d-flex justify-content-between align-items-center mb-2 p-2 bg-light rounded text-secondary" style="font-size: 0.73rem;">' +
+              '<span class="fw-semibold text-muted"><i class="fas fa-stopwatch me-1 text-primary"></i>총 소요 시간</span>' +
+              '<span class="fw-bold text-dark">' + (b.last_duration_sec >= 60 ? Math.floor(b.last_duration_sec / 60) + '분 ' + (b.last_duration_sec % 60) + '초' : b.last_duration_sec + '초') + '</span>' +
+            '</div>' : ''}
+
+            <!-- 카테고리별 세부 지표 (아코디언 - 상태 보존형) -->
+            <div class="mb-2">
+              <button class="btn btn-xs btn-outline-secondary w-100 mb-2 py-1" onclick="toggleDetails('${b.brand}')" style="font-size: 0.7rem;">
+                <i class="fas fa-list-alt me-1"></i>카테고리별 세부 지표 보기/접기
+              </button>
+              <div id="details-${b.brand}" class="p-2 border rounded bg-white" style="display: ${isDetailsVisible};">
+                <div class="table-responsive">
+                  <table class="table table-sm table-borderless mb-0 align-middle">
+                    <thead>
+                      <tr class="text-muted border-bottom" style="font-size:0.68rem;">
+                        <th>카테고리</th>
+                        <th class="text-end">수집/목표</th>
+                        <th class="text-end">벡터</th>
+                        <th class="text-end">이미지</th>
+                        <th class="text-end">최저가</th>
+                      </tr>
+                    </thead>
+                    <tbody>${catRowsHtml}</tbody>
+                  </table>
                 </div>
               </div>
+            </div>
 
-              <div class="pt-2 mt-2 border-top">
-                <div class="d-flex justify-content-between align-items-center mb-2" style="font-size:.73rem;">
-                  <span class="text-muted text-truncate" style="max-width: 60%;" title="최근 파이프라인: ${latestDtStr}">
-                    <i class="fas fa-history me-1"></i>${latestDtStr.split('오')[1] ? '오' + latestDtStr.split('오')[1] : latestDtStr}
-                    ${b.pipeline_error_count > 0 ? `<span class="badge bg-danger ms-1">에러 ${b.pipeline_error_count}</span>` : ''}
-                  </span>
-                  ${actualWaitingBadge}
-                </div>
-              </div>
-
-              <!-- 총 소요 시간 표시 -->
-              ${b.last_duration_sec !== undefined && b.last_duration_sec !== null ? 
-              '<div class="d-flex justify-content-between align-items-center mb-2 p-2 bg-light rounded text-secondary" style="font-size: 0.73rem;">' +
-                '<span class="fw-semibold text-muted"><i class="fas fa-stopwatch me-1 text-primary"></i>총 소요 시간</span>' +
-                '<span class="fw-bold text-dark">' + (b.last_duration_sec >= 60 ? Math.floor(b.last_duration_sec / 60) + '분 ' + (b.last_duration_sec % 60) + '초' : b.last_duration_sec + '초') + '</span>' +
-              '</div>' : ''}
-
-              <!-- 카테고리별 세부 지표 (아코디언 - 상태 보존형) -->
-              <div class="mb-2">
-                <button class="btn btn-xs btn-outline-secondary w-100 mb-2 py-1" onclick="toggleDetails('${b.brand}')" style="font-size: 0.7rem;">
-                  <i class="fas fa-list-alt me-1"></i>카테고리별 세부 지표 보기/접기
-                </button>
-                <div id="details-${b.brand}" class="p-2 border rounded bg-white" style="display: ${isDetailsVisible};">
-                  <div class="table-responsive">
-                    <table class="table table-sm table-borderless mb-0 align-middle">
-                      <thead>
-                        <tr class="text-muted border-bottom" style="font-size:0.68rem;">
-                          <th>카테고리</th>
-                          <th class="text-end">수집/목표</th>
-                          <th class="text-end">벡터</th>
-                          <th class="text-end">이미지</th>
-                          <th class="text-end">최저가</th>
-                        </tr>
-                      </thead>
-                      <tbody>${catRowsHtml}</tbody>
-                    </table>
-                  </div>
-                </div>
-              </div>
-
-              <div class="d-flex gap-2">
-                <button class="btn btn-sm btn-primary flex-fill" onclick="openCrawlModal('${b.brand}')">
-                  <i class="fas fa-play me-1"></i>크롤링 실행
-                </button>
-                <button class="btn btn-sm btn-success flex-fill" ${!isReadyOrWaiting ? 'disabled' : ''} onclick="openSwapModal('${b.brand}')">
-                  <i class="fas fa-exchange-alt me-1"></i>스위칭(Swap)
-                </button>
-                <button class="btn btn-sm btn-outline-danger" title="스테이징 비우기" ${isStagingEmpty ? 'disabled' : ''} onclick="clearStaging('${b.brand}')">
-                  <i class="fas fa-trash-alt"></i>
-                </button>
-              </div>`;
-            })()}
+            <div class="d-flex gap-2">
+              ${crawlBtnHtml}
+              <button class="btn btn-sm btn-success flex-fill" ${isSwapDisabled} onclick="openSwapModal('${b.brand}')">
+                <i class="fas fa-exchange-alt me-1"></i>스위칭(Swap)
+              </button>
+              <button class="btn btn-sm btn-outline-danger" title="스테이징 비우기" ${isClearDisabled} onclick="clearStaging('${b.brand}')">
+                <i class="fas fa-trash-alt"></i>
+              </button>
+            </div>
           </div>
         </div>
       </div>`;
@@ -1567,11 +1582,33 @@ function getStatusBadge(status) {
   }
 }
 
+// ─── 실행 모드 토글에 따른 입력란 비활성화 제어 ───
+function toggleCrawlModeInput() {
+  const isAuto = document.getElementById('modeAuto').checked;
+  const limitInput = document.getElementById('crawlLimit');
+  const limitHelp = document.getElementById('crawlLimitHelp');
+  if (isAuto) {
+    limitInput.disabled = true;
+    limitInput.value = "";
+    limitHelp.style.display = "none";
+  } else {
+    limitInput.disabled = false;
+    limitInput.value = "10";
+    limitHelp.style.display = "block";
+  }
+}
+
 // ─── 수동 크롤링 실행 모달 오픈 ───
 function openCrawlModal(brand) {
   document.getElementById('crawlBrand').value = brand;
   document.getElementById('crawlBrandDisplay').value = brand.toUpperCase();
-  document.getElementById('crawlLimit').value = 10;
+  document.getElementById('modeManual').checked = true;
+  
+  // 모드 및 입력창 초기화
+  const limitInput = document.getElementById('crawlLimit');
+  limitInput.disabled = false;
+  limitInput.value = 10;
+  document.getElementById('crawlLimitHelp').style.display = "block";
   
   const modal = new bootstrap.Modal(document.getElementById('runCrawlModal'));
   modal.show();
@@ -1579,7 +1616,23 @@ function openCrawlModal(brand) {
 
 async function submitCrawl() {
   const brand = document.getElementById('crawlBrand').value;
-  const limit = parseInt(document.getElementById('crawlLimit').value, 10);
+  const isAuto = document.getElementById('modeAuto').checked;
+  let limit = 0;
+  
+  if (!isAuto) {
+    const rawVal = document.getElementById('crawlLimit').value.trim();
+    if (rawVal === "") {
+      alert("수동 크롤링 시 최대 수집 상품 수를 입력해 주세요.");
+      return;
+    }
+    const parsedLimit = parseInt(rawVal, 10);
+    if (isNaN(parsedLimit) || parsedLimit <= 0) {
+      alert("최대 수집 상품 수는 1 이상의 정수로 입력해 주세요.");
+      return;
+    }
+    limit = parsedLimit;
+  }
+  
   const category = document.getElementById('crawlCategory').value;
   
   const btn = document.getElementById('confirmRunCrawlBtn');
@@ -1590,13 +1643,14 @@ async function submitCrawl() {
     const res = await fetch('/api/admin/crawling/run', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ brand, limit, category, force_download: true })
+      body: JSON.stringify({ brand, limit, category, is_auto: isAuto, force_download: true })
     });
     const data = await res.json();
     
     bootstrap.Modal.getInstance(document.getElementById('runCrawlModal')).hide();
     
     if (res.ok) {
+      const displayLimitStr = isAuto ? "전체" : limit;
       // 프론트엔드 캐시 즉시 강제 갱신으로 반응속도 최적화
       cachedProgressState[brand] = {
         step: '크롤러 기동 중...',
@@ -1604,7 +1658,7 @@ async function submitCrawl() {
         width: '1%',
         item: '크롤링 파이프라인 리소스 준비 중',
         time: '경과 시간: 0초',
-        count: `0 / ${limit}`,
+        count: `0 / ${displayLimitStr}`,
         isRunning: true
       };
       
@@ -1632,6 +1686,43 @@ async function submitCrawl() {
   } finally {
     btn.disabled = false;
     btn.textContent = '백그라운드 실행';
+  }
+}
+
+// ─── 수동 크롤링 강제 중지 실행 ───
+async function stopCrawl(brand) {
+  if (!confirm(`정말로 [${brand.toUpperCase()}] 브랜드의 크롤링 작업을 강제 중지하시겠습니까?\n실행 중인 브라우저와 파이프라인 프로세스가 강제로 종료됩니다.`)) {
+    return;
+  }
+  
+  try {
+    const res = await fetch('/api/admin/crawling/stop', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ brand })
+    });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      alert(data.message);
+      // UI 즉시 강제 중지 상태 갱신
+      const stepEl = document.getElementById(`progress-step-${brand}`);
+      const percentEl = document.getElementById(`progress-percent-${brand}`);
+      const barEl = document.getElementById(`progress-bar-${brand}`);
+      const itemEl = document.getElementById(`progress-item-${brand}`);
+      if (stepEl) stepEl.textContent = '강제 중지됨';
+      if (percentEl) percentEl.textContent = '0%';
+      if (barEl) {
+        barEl.style.width = '0%';
+        barEl.classList.remove('progress-bar-animated', 'progress-bar-striped');
+      }
+      if (itemEl) itemEl.textContent = '사용자에 의해 작업이 강제 중지되었습니다.';
+      
+      loadManualData();
+    } else {
+      alert(`작업 중지 오류: ${data.detail || '알 수 없는 서버 오류'}`);
+    }
+  } catch (err) {
+    alert(`네트워크 통신 오류: ${err.message}`);
   }
 }
 
