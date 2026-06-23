@@ -8,21 +8,6 @@ on:
     - cron: '0 19 * * 1'
   workflow_dispatch:
     inputs:
-      brand:
-        description: '크롤링할 타겟 브랜드를 선택하세요 (all 선택 시 전체 브랜드 병렬 크롤링)'
-        required: true
-        default: '8seconds'
-        type: choice
-        options:
-          - all
-          - uniqlo
-          - topten
-          - spao
-          - polham
-          - 8seconds
-          - giordano
-          - musinsa
-          - zara
       action:
         description: '실행할 파이프라인 액션'
         required: true
@@ -41,11 +26,21 @@ on:
         options:
           - dev
           - prod
-      limit:
-        description: '최대 수집 상품 개수 (crawl 액션 시)'
-        required: false
-        default: '100'
-        type: string
+      brand:
+        description: '크롤링할 타겟 브랜드를 선택하세요 (all 선택 시 전체 브랜드 병렬 크롤링)'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - uniqlo
+          - topten
+          - spao
+          - polham
+          - 8seconds
+          - giordano
+          - musinsa
+          - zara
       gender:
         description: '성별 분할 수집 필터 (비워두면 전체, 무신사 등 대용량 분할용)'
         required: false
@@ -73,6 +68,19 @@ on:
         options:
           - 'false'
           - 'true'
+      auto:
+        description: '자동 크롤링 모드 활성화 (true 선택 시 전체 상품 수집, false 시 최대 수집 개수 제한)'
+        required: true
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+      limit:
+        description: '최대 수집 상품 개수 (crawl 액션 시, auto=false일 때만 의미 있음)'
+        required: false
+        default: '100'
+        type: string
 
 jobs:
   # ─────────────────────────────────────────────────────────────────────────────
@@ -91,25 +99,28 @@ jobs:
             # 자동 스케줄 배치: limit=0으로 설정하여 전체 사이트 스캔 후 감지된 수량을 자동 결정
             # (참고: crawling_pipeline_cli.py에서 limit==0이면 자동 모드로 실행하여 전체 타겟 수량을 limit으로 사용)
             LIMIT="0"
+            AUTO="true"
             if [ "${{ github.event_name }}" != "schedule" ]; then
-              # 수동 'all' 실행 시는 입력한 limit 값 사용
+              # 수동 'all' 실행 시는 입력한 limit 및 auto 값 사용
               INPUT_LIMIT="${{ github.event.inputs.limit }}"
               if [ -n "$INPUT_LIMIT" ] && [ "$INPUT_LIMIT" != "0" ]; then
                 LIMIT="$INPUT_LIMIT"
               fi
+              AUTO="${{ github.event.inputs.auto }}"
             fi
             # 전체 브랜드에 대해 개별 Matrix 분기 생성
             # [주석 처리] 아래 무신사와 자라는 자동 수집 대상에서 일시 주석 처리(제외)합니다.
-            # {"brand":"zara","limit":"'$LIMIT'","gender":"","category":""}
-            # {"brand":"musinsa","limit":"'$LIMIT'","gender":"Men","category":""}
-            # {"brand":"musinsa","limit":"'$LIMIT'","gender":"Women","category":""}
-            echo 'matrix={"include":[{"brand":"8seconds","limit":"'$LIMIT'","gender":"","category":""},{"brand":"topten","limit":"'$LIMIT'","gender":"","category":""},{"brand":"uniqlo","limit":"'$LIMIT'","gender":"","category":""},{"brand":"spao","limit":"'$LIMIT'","gender":"","category":""},{"brand":"giordano","limit":"'$LIMIT'","gender":"","category":""},{"brand":"polham","limit":"'$LIMIT'","gender":"","category":""}]}' >> $GITHUB_OUTPUT
+            # {"brand":"zara","limit":"'$LIMIT'","auto":"'$AUTO'","gender":"","category":""}
+            # {"brand":"musinsa","limit":"'$LIMIT'","auto":"'$AUTO'","gender":"Men","category":""}
+            # {"brand":"musinsa","limit":"'$LIMIT'","auto":"'$AUTO'","gender":"Women","category":""}
+            echo 'matrix={"include":[{"brand":"8seconds","limit":"'$LIMIT'","auto":"'$AUTO'","gender":"","category":""},{"brand":"topten","limit":"'$LIMIT'","auto":"'$AUTO'","gender":"","category":""},{"brand":"uniqlo","limit":"'$LIMIT'","auto":"'$AUTO'","gender":"","category":""},{"brand":"spao","limit":"'$LIMIT'","auto":"'$AUTO'","gender":"","category":""},{"brand":"giordano","limit":"'$LIMIT'","auto":"'$AUTO'","gender":"","category":""},{"brand":"polham","limit":"'$LIMIT'","auto":"'$AUTO'","gender":"","category":""}]}' >> $GITHUB_OUTPUT
           else
             # 단일 브랜드 수동 실행
             LIMIT="${{ github.event.inputs.limit }}"
+            AUTO="${{ github.event.inputs.auto }}"
             GENDER="${{ github.event.inputs.gender }}"
             CATEGORY="${{ github.event.inputs.category }}"
-            echo "matrix={\"include\":[{\"brand\":\"${{ github.event.inputs.brand }}\",\"limit\":\"$LIMIT\",\"gender\":\"$GENDER\",\"category\":\"$CATEGORY\"}]}" >> $GITHUB_OUTPUT
+            echo "matrix={\"include\":[{\"brand\":\"${{ github.event.inputs.brand }}\",\"limit\":\"$LIMIT\",\"auto\":\"$AUTO\",\"gender\":\"$GENDER\",\"category\":\"$CATEGORY\"}]}" >> $GITHUB_OUTPUT
           fi
 
   # ─────────────────────────────────────────────────────────────────────────────
@@ -198,8 +209,11 @@ jobs:
           if [ -n "${{ matrix.category }}" ]; then
             EXTRA_ARGS="$EXTRA_ARGS --category ${{ matrix.category }}"
           fi
+          if [ "${{ matrix.auto }}" = "true" ]; then
+            EXTRA_ARGS="$EXTRA_ARGS --auto"
+          fi
 
-          echo ">>> 🚀 Starting Phase 1 crawl for ${{ matrix.brand }} (limit=${{ matrix.limit }}) $EXTRA_ARGS on environment: ${ENV_MODE}"
+          echo ">>> 🚀 Starting Phase 1 crawl for ${{ matrix.brand }} (limit=${{ matrix.limit }}) $EXTRA_ARGS on environment: ${APP_ENV}"
           python data-pipeline/crawlers/web_crawlers/crawling_pipeline_cli.py \
             --brand "${{ matrix.brand }}" \
             --limit "${{ matrix.limit }}" \
