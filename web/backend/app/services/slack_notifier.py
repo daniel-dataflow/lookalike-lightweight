@@ -87,8 +87,8 @@ class SlackNotifier:
         }
 
         # 서버 접속 URL (슬랙 링크에 사용)
-        _env = os.environ.get("APP_ENV", "development").lower()
-        if _env == "production":
+        _env = os.environ.get("APP_ENV", "prod").lower()
+        if _env in ("prod", "production"):
             self.app_base_url = os.environ.get(
                 "APP_BASE_URL_PROD", "http://localhost:8900"
             ).rstrip("/")

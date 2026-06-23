@@ -286,15 +286,20 @@ async function fetchDbStatus() {
         updateNeonBadge('neonProdDbBadge', neonStatus.PROD_DATABASE_URL);
         updateNeonBadge('neonProdDwDbBadge', neonStatus.PROD_DW_DATABASE_URL);
 
-        document.getElementById('neonDevDbSize').textContent = data.db_dev_size_mb ? `${data.db_dev_size_mb} MB` : '0.0 MB';
-        document.getElementById('neonDevDwDbSize').textContent = data.db_dev_dw_size_mb ? `${data.db_dev_dw_size_mb} MB` : '0.0 MB';
-        document.getElementById('neonDevTotalSize').textContent = data.db_dev_total_size_mb ? `${data.db_dev_total_size_mb} MB` : '0.0 MB';
-        
-        document.getElementById('neonProdDbSize').textContent = data.db_prod_size_mb ? `${data.db_prod_size_mb} MB` : '0.0 MB';
-        document.getElementById('neonProdDwDbSize').textContent = data.db_prod_dw_size_mb ? `${data.db_prod_dw_size_mb} MB` : '0.0 MB';
-        document.getElementById('neonProdTotalSize').textContent = data.db_prod_total_size_mb ? `${data.db_prod_total_size_mb} MB` : '0.0 MB';
+        const setElText = (id, text) => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = text;
+        };
 
-        // ENV_MODE에 따라서 DEV 또는 PROD 행만 노출
+        setElText('neonDevDbSize', data.db_dev_size_mb ? `${data.db_dev_size_mb} MB` : '0.0 MB');
+        setElText('neonDevDwDbSize', data.db_dev_dw_size_mb ? `${data.db_dev_dw_size_mb} MB` : '0.0 MB');
+        setElText('neonDevTotalSize', data.db_dev_total_size_mb ? `${data.db_dev_total_size_mb} MB` : '0.0 MB');
+        
+        setElText('neonProdDbSize', data.db_prod_size_mb ? `${data.db_prod_size_mb} MB` : '0.0 MB');
+        setElText('neonProdDwDbSize', data.db_prod_dw_size_mb ? `${data.db_prod_dw_size_mb} MB` : '0.0 MB');
+        setElText('neonProdTotalSize', data.db_prod_total_size_mb ? `${data.db_prod_total_size_mb} MB` : '0.0 MB');
+
+        // APP_ENV에 따라서 DEV 또는 PROD 행만 노출
         const isLocalEnv = (data.environment && (data.environment.toLowerCase() === 'local' || data.environment.toLowerCase() === 'dev'));
         const devElements = ['neonDevRowGroup1', 'neonDevRowGroup2', 'neonDevRowGroup3'];
         const prodElements = ['neonProdRowGroup1', 'neonProdRowGroup2', 'neonProdRowGroup3'];
@@ -316,7 +321,7 @@ async function fetchDbStatus() {
 
 
         // 운영체제 표시 동적 반영
-        if (data.environment === 'local') {
+        if (data.environment === 'local' || data.environment === 'dev') {
             document.getElementById('osName').textContent = 'Windows';
         } else {
             document.getElementById('osName').textContent = 'Linux (Render)';

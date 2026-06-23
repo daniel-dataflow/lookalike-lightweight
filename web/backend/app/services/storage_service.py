@@ -2,7 +2,7 @@
 Cloudflare R2 / 로컬 통합 스토리지 서비스
 
 동작 모드 (자동 감지):
-  1. 로컬 모드 (ENV_MODE=local) 또는 R2 키 누락
+  1. 로컬 모드 (APP_ENV=local) 또는 R2 키 누락
      -> web/frontend/static/uploads/ 에 WebP 저장
      -> URL: /static/uploads/<folder>/<id>.webp
   2. 프로덕션 모드 + R2 키 완비
@@ -37,7 +37,7 @@ class StorageService:
     # 모드 판별
     # ──────────────────────────────────────
     def _is_local_mode(self) -> bool:
-        if self._settings.ENV_MODE.lower() == "local":
+        if self._settings.APP_ENV.lower() == "local":
             return True
         r2_ready = all([
             self._settings.CF_R2_ACCESS_KEY,

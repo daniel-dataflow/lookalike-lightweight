@@ -167,12 +167,13 @@ jobs:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: |
           # target_env 기본값 설정 및 공백 제거 처리
-          ENV_MODE="${TARGET_ENV}"
-          if [ -z "$ENV_MODE" ]; then
-            ENV_MODE="dev"
+          APP_ENV="${TARGET_ENV}"
+          if [ -z "$APP_ENV" ]; then
+            APP_ENV="dev"
           fi
+          export APP_ENV="$APP_ENV"
 
-          if [ "$ENV_MODE" = "prod" ]; then
+          if [ "$APP_ENV" = "prod" ] || [ "$APP_ENV" = "production" ]; then
             export DATABASE_URL="$PROD_DATABASE_URL"
             export DW_DATABASE_URL="$PROD_DW_DATABASE_URL"
             export CLOUDINARY_CLOUD_NAME="$PROD_CLOUDINARY_CLOUD_NAME"
@@ -272,12 +273,13 @@ jobs:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: |
           # target_env 기본값 설정 및 공백 제거 처리
-          ENV_MODE="${TARGET_ENV}"
-          if [ -z "$ENV_MODE" ]; then
-            ENV_MODE="dev"
+          APP_ENV="${TARGET_ENV}"
+          if [ -z "$APP_ENV" ]; then
+            APP_ENV="dev"
           fi
+          export APP_ENV="$APP_ENV"
 
-          if [ "$ENV_MODE" = "prod" ]; then
+          if [ "$APP_ENV" = "prod" ] || [ "$APP_ENV" = "production" ]; then
             export DATABASE_URL="$PROD_DATABASE_URL"
             export DW_DATABASE_URL="$PROD_DW_DATABASE_URL"
             export CLOUDINARY_CLOUD_NAME="$PROD_CLOUDINARY_CLOUD_NAME"
@@ -297,7 +299,7 @@ jobs:
             echo "⚡ Force 스위칭 모드 활성화"
           fi
 
-          echo ">>> 🔄 Starting Phase 2 swap for ${{ matrix.brand }} $FORCE_FLAG on environment: ${ENV_MODE}"
+          echo ">>> 🔄 Starting Phase 2 swap for ${{ matrix.brand }} $FORCE_FLAG on environment: ${APP_ENV}"
           python data-pipeline/crawlers/web_crawlers/crawling_pipeline_cli.py \
             --brand "${{ matrix.brand }}" \
             --action swap \
