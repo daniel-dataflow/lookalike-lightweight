@@ -16,7 +16,9 @@ router = APIRouter(tags=["웹 페이지"])
 _TEMPLATES_DIR = os.path.normpath(
     os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "frontend", "templates")
 )
+from ..config import get_settings
 templates = Jinja2Templates(directory=_TEMPLATES_DIR)
+templates.env.globals["settings"] = get_settings()
 
 def _get_session(request: Request) -> dict | None:
     token = request.cookies.get("session_token")

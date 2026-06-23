@@ -151,8 +151,9 @@
                             </thead>
                             <tbody>
                                 <!-- DEV 환경 (APP_ENV가 local 또는 dev일 때만 노출) -->
+                                {% if settings.APP_ENV in ['local', 'dev'] %}
                                 <tr id="neonDevRowGroup1" class="border-bottom-0">
-                                    <td class="fw-bold text-success">운영 DB</td>
+                                    <td class="fw-bold text-success">개발 DB</td>
                                     <td><span class="badge badge-sm" id="neonDevDbBadge">-</span> DEV_DB</td>
                                     <td class="text-end fw-bold text-dark" id="neonDevDbSize">-</td>
                                 </tr>
@@ -165,7 +166,7 @@
                                     <td colspan="2" class="text-muted">DEV 합계 용량</td>
                                     <td class="text-end fw-bold text-success" id="neonDevTotalSize">-</td>
                                 </tr>
-
+                                {% else %}
                                 <!-- PROD 환경 (APP_ENV가 prod 또는 production일 때만 노출) -->
                                 <tr id="neonProdRowGroup1" class="border-bottom-0">
                                     <td class="fw-bold text-primary">운영 DB</td>
@@ -181,6 +182,7 @@
                                     <td colspan="2" class="text-muted">PROD 합계 용량</td>
                                     <td class="text-end fw-bold text-primary" id="neonProdTotalSize">-</td>
                                 </tr>
+                                {% endif %}
                             </tbody>
                         </table>
                     </div>
