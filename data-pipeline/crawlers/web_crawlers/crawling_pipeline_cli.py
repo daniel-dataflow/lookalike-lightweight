@@ -1018,8 +1018,8 @@ async def run_pipeline(
                              # 파일명 규격화: 브랜드_성별_카테고리_모델코드 (한글 배제하여 Cloudinary 인코딩 및 리네임 이관 정합성 에러 해결)
                              public_id = f"{brand.upper()}_{item.get('gender')}_{item.get('category')}_{model_code}"
                              
-                             # ENV_MODE에 따라 DEV/PROD 폴더 분리하여 staging/{brand} 폴더에 업로드
-                             _env_prefix = "PROD" if os.getenv("ENV_MODE", "local").lower() in ["prod", "production"] else "DEV"
+                             # APP_ENV에 따라 DEV/PROD 폴더 분리하여 staging/{brand} 폴더에 업로드
+                             _env_prefix = "PROD" if os.getenv("APP_ENV", "local").lower() in ["prod", "production"] else "DEV"
                              cloudinary_url = await upload_image_to_cloudinary(
                                  session, primary_url, folder=f"{_env_prefix}/staging/{brand}", public_id=public_id
                              )

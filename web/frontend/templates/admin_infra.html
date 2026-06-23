@@ -139,7 +139,7 @@
                         <span class="fw-bold" id="pgConnections">-</span>
                     </div>
 
-                    <!-- Neon DB 환경별 현황 상세 뷰 (ENV_MODE에 따라 DEV 또는 PROD 선택 노출) -->
+                    <!-- Neon DB 환경별 현황 상세 뷰 (APP_ENV에 따라 DEV 또는 PROD 선택 노출) -->
                     <div class="table-responsive">
                         <table class="table table-sm table-borderless align-middle mb-0" style="font-size: 0.82rem;">
                             <thead>
@@ -150,7 +150,7 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                <!-- DEV 환경 (ENV_MODE가 local 또는 dev일 때만 노출) -->
+                                <!-- DEV 환경 (APP_ENV가 local 또는 dev일 때만 노출) -->
                                 <tr id="neonDevRowGroup1" class="border-bottom-0">
                                     <td class="fw-bold text-success">운영 DB</td>
                                     <td><span class="badge badge-sm" id="neonDevDbBadge">-</span> DEV_DB</td>
@@ -166,7 +166,7 @@
                                     <td class="text-end fw-bold text-success" id="neonDevTotalSize">-</td>
                                 </tr>
 
-                                <!-- PROD 환경 (ENV_MODE가 production일 때만 노출) -->
+                                <!-- PROD 환경 (APP_ENV가 prod 또는 production일 때만 노출) -->
                                 <tr id="neonProdRowGroup1" class="border-bottom-0">
                                     <td class="fw-bold text-primary">운영 DB</td>
                                     <td><span class="badge badge-sm" id="neonProdDbBadge">-</span> PROD_DB</td>

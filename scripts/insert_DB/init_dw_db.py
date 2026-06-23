@@ -3,7 +3,7 @@ import re
 import psycopg2
 
 def parse_env_dw_url():
-    """ENV_MODE에 따라 DEV_DW_DATABASE_URL 또는 PROD_DW_DATABASE_URL을 .env에서 읽어 반환"""
+    """APP_ENV에 따라 DEV_DW_DATABASE_URL 또는 PROD_DW_DATABASE_URL을 .env에서 읽어 반환"""
     _env_candidates = [
         r"D:\dev\lookalike-lightweight\.env",
         os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", ".env")),
@@ -17,7 +17,7 @@ def parse_env_dw_url():
                     _line = _line.strip()
                     if not _line or _line.startswith("#"):
                         continue
-                    _m_mode = re.match(r'^ENV_MODE\s*=\s*(.+)$', _line)
+                    _m_mode = re.match(r'^APP_ENV\s*=\s*(.+)$', _line)
                     if _m_mode:
                         env_mode = _m_mode.group(1).strip().strip('"').strip("'").lower()
                     # DEV 환경
@@ -26,10 +26,10 @@ def parse_env_dw_url():
                         dw_url = _m_dev_dw.group(1).strip().strip('"').strip("'")
                     # PROD 환경
                     _m_prod_dw = re.match(r'^PROD_DW_DATABASE_URL\s*=\s*(.+)$', _line)
-                    if _m_prod_dw and env_mode == "prod":
+                    if _m_prod_dw and env_mode in ["prod", "production"]:
                         dw_url = _m_prod_dw.group(1).strip().strip('"').strip("'")
             break
-    print(f"[ENV_MODE={env_mode}] -> {'DEV' if env_mode in ['local', 'dev'] else 'PROD'}_DW_DB 연결")
+    print(f"[APP_ENV={env_mode}] -> {'DEV' if env_mode in ['local', 'dev'] else 'PROD'}_DW_DB 연결")
     return dw_url
 
 def main():

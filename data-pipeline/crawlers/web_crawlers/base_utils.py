@@ -36,7 +36,7 @@ try:
                     _line = _line.strip()
                     if not _line or _line.startswith("#"):
                         continue
-                    _m_mode = re.match(r'^ENV_MODE\s*=\s*(.+)$', _line)
+                    _m_mode = re.match(r'^APP_ENV\s*=\s*(.+)$', _line)
                     if _m_mode:
                         _env_mode_found = _m_mode.group(1).strip().strip('"').strip("'").lower()
                     _m_prod = re.match(r'^PROD_DATABASE_URL\s*=\s*(.+)$', _line)
@@ -87,7 +87,7 @@ try:
             if _hf_space_url:
                 os.environ["HF_SPACE_URL"] = _hf_space_url
 
-            # ENV_MODE에 맞게 DEV/PROD DB 및 Cloudinary 세트 매핑 (TEST 단계 제거됨)
+            # APP_ENV에 맞게 DEV/PROD DB 및 Cloudinary 세트 매핑
             if _env_mode_found in ["local", "dev"]:
                 if _dev_found and "${" not in _dev_found:
                     os.environ["DATABASE_URL"] = _dev_found
@@ -1148,8 +1148,8 @@ def clear_staging_data(brand_name: str) -> None:
         try:
             configure_cloudinary()
             import cloudinary.api
-            # ENV_MODE에 따라 DEV/PROD Cloudinary 폴더 분리 삭제
-            _env_prefix = "PROD" if os.getenv("ENV_MODE", "local").lower() in ["prod", "production"] else "DEV"
+            # APP_ENV에 따라 DEV/PROD Cloudinary 폴더 분리 삭제
+            _env_prefix = "PROD" if os.getenv("APP_ENV", "local").lower() in ["prod", "production"] else "DEV"
             folder_prefix = f"{_env_prefix}/staging/{brand_name.lower()}/"
             logger.info(f"☁️ [{brand_name}] Cloudinary Staging 이미지 삭제 시도: {folder_prefix}")
             cloudinary.api.delete_resources_by_prefix(folder_prefix)

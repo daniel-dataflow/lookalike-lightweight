@@ -33,9 +33,8 @@ async def get_realtime_metrics():
         import os
         settings = get_settings()
         is_prod = (
-            (settings.ENV_MODE == "production") or 
-            (os.getenv("APP_ENV") == "production") or 
-            (os.getenv("ENV_MODE") == "production")
+            (settings.APP_ENV.lower() in ("prod", "production")) or 
+            (os.getenv("APP_ENV", "").lower() in ("prod", "production"))
         )
 
         def _snap():

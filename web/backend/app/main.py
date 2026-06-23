@@ -1,8 +1,8 @@
 """
 FastAPI 기반 백엔드 애플리케이션 진입점
 - 일체형 단일 서버 아키텍처 (Jinja2 SSR 100%)
-- ENV_MODE=local  -> 로컬 PostgreSQL(5433) + 로컬 static/uploads
-- ENV_MODE=production -> Supabase DB + Cloudflare R2
+- APP_ENV=local  -> 로컬 PostgreSQL(5433) + 로컬 static/uploads
+- APP_ENV=prod   -> Supabase DB + Cloudflare R2
 """
 import os
 import asyncio
@@ -126,7 +126,7 @@ if SENTRY_DSN:
     sentry_sdk.init(
         dsn=SENTRY_DSN,
         traces_sample_rate=1.0,
-        environment=settings.ENV_MODE,
+        environment=settings.APP_ENV,
         profiles_sample_rate=1.0,
     )
     logger.info("Sentry SDK 초기화 완료")
@@ -137,8 +137,8 @@ if SENTRY_DSN:
 # ──────────────────────────────────────
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """서버 구동/종료 시 DB 연결 초기화/해제 (ENV_MODE에 따라 자동 분기)"""
-    logger.info(f"앱 시작 [모드: {settings.ENV_MODE}] - DB 연결 초기화")
+    """서버 구동/종료 시 DB 연결 초기화/해제 (APP_ENV에 따라 자동 분기)"""
+    logger.info(f"앱 시작 [모드: {settings.APP_ENV}] - DB 연결 초기화")
     
     # 서버 기동 시 기존 진행률 JSON 파일들을 삭제하여 모든 대시보드를 대기 중(Idle) 상태로 초기화
     try:
@@ -357,7 +357,7 @@ async def health_check():
     """헬스체크 엔드포인트"""
     return {
         "status": "healthy",
-        "environment": settings.ENV_MODE,
+        "environment": settings.APP_ENV,
         "version": settings.APP_VERSION,
     }
 
@@ -367,7 +367,7 @@ async def api_status():
     """DB 연결 상태 확인"""
     return {
         "status": "running",
-        "environment": settings.ENV_MODE,
+        "environment": settings.APP_ENV,
         "databases": {
             "postgresql": "connected" if _db_module.get_engine() is not None else "disconnected",
         },

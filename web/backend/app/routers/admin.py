@@ -332,7 +332,7 @@ def _get_system_health() -> SystemHealthResponse:
         db_active_connections=active_connections,
         db_size_mb=round(db_size / 1024 / 1024, 2),
         app_version=settings.APP_VERSION,
-        environment=settings.ENV_MODE,
+        environment=settings.APP_ENV,
         db_dev_size_mb=db_dev_size_mb,
         db_dev_dw_size_mb=db_dev_dw_size_mb,
         db_dev_total_size_mb=db_dev_total_size_mb,
@@ -805,18 +805,18 @@ def get_crawling_staging():
 async def toggle_database_mode(data: dict):
     """
     DB 모드 확인 API (DEV/PROD 구조로 단순화 - TEST 단계 제거)
-    ENV_MODE에 의해 시작 시에 결정되며, 런타임에서 변경 불필요
+    APP_ENV에 의해 시작 시에 결정되며, 런타임에서 변경 불필요
     """
     try:
         settings = get_settings()
-        env_mode = settings.ENV_MODE.lower()
+        env_mode = settings.APP_ENV.lower()
         active_url = settings.PROD_DATABASE_URL_ACTIVE or settings.DATABASE_URL
         
         return {
             "success": True,
             "env_mode": env_mode,
             "active_db": "DEV" if env_mode in ["local", "dev"] else "PROD",
-            "message": f"{'DEV(LOCAL)' if env_mode in ['local', 'dev'] else 'PROD(실서버)'} 환경으로 고정 동작 중입니다. DB 모드 변경은 .env의 ENV_MODE 수정 후 서버 재시작으로 적용하세요."
+            "message": f"{'DEV(LOCAL)' if env_mode in ['local', 'dev'] else 'PROD(실서버)'} 환경으로 고정 동작 중입니다. DB 모드 변경은 .env의 APP_ENV 수정 후 서버 재시작으로 적용하세요."
         }
     except Exception as e:
         logger.error(f"모드 확인 실패: {e}")

@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     # === 앱 ===
     APP_TITLE: str = "Lookalike"
     APP_VERSION: str = "2.0.0"
-    ENV_MODE: str = "production"   # "local" | "production"
+    APP_ENV: str = "prod"   # "local" | "dev" | "prod"
 
     # === Cloudflare R2 스토리지 ===
     CF_R2_ACCESS_KEY: str = ""
@@ -112,7 +112,7 @@ class Settings(BaseSettings):
                 return self
 
         # 2. 로컬 및 도커 컨테이너 환경의 기본값 생성
-        mode = self.ENV_MODE.lower()
+        mode = self.APP_ENV.lower()
         if mode == "local":
             self.DATABASE_URL = (
                 f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
@@ -128,8 +128,8 @@ class Settings(BaseSettings):
             if not self.DATABASE_URL:
                 self.DATABASE_URL = self.SUPABASE_DB_URL
 
-        # 3. ENV_MODE에 맞는 DB 런타임 적용 필드 및 Cloudinary 계정 분기 바인딩 설정
-        if mode == "local" or mode == "dev":
+        # 3. APP_ENV에 맞는 DB 런타임 적용 필드 및 Cloudinary 계정 분기 바인딩 설정
+        if mode in ["local", "dev"]:
             self.PROD_DATABASE_URL_ACTIVE = self.DEV_DATABASE_URL or self.DATABASE_URL
             self.DW_DATABASE_URL = self.DEV_DW_DATABASE_URL or self.DEV_DATABASE_URL or self.DATABASE_URL
             
