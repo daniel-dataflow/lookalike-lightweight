@@ -12,7 +12,7 @@
    * 백엔드의 백그라운드 Kafka 로그/메트릭 컨슈머 서비스(`kafka_log_consumer.py`, `kafka_metric_consumer.py`)를 삭제하고, FastAPI 라우터 진입점에서 PostgreSQL 직접 적재로 전환하여 인프라를 극적으로 경량화했습니다.
 2. **벡터 유사도 검색 전환 (pgvector)**:
    * Elasticsearch Dense Vector 검색 방식을 **PostgreSQL pgvector 익스텐션 및 `product_embeddings` 테이블**을 활용하는 방식으로 마이그레이션했습니다.
-   * AI/ML 모델 서빙을 위해 HuggingFace of Space(VLM, YOLO, CLIP) 및 Gemini API를 연동하여 이미지 특징 추출 및 텍스트 쿼리 임베딩을 수행하고, Cosine Similarity 계산을 SQL 레벨에서 처리합니다.
+   * AI/ML 모델 서빙을 위해 허깅페이스 스페이스 (HuggingFace Space) 연동(VLM, YOLO, CLIP) 및 로컬 CLIP 모델을 연동하여 이미지 특징 추출 및 텍스트 쿼리 임베딩을 수행하고, Cosine Similarity 계산을 SQL 레벨에서 처리합니다.
 3. **데이터 파이프라인(Airflow) 구조 단순화**:
    * 기존의 병렬 데이터 파이프라인 단계를 HDFS/MongoDB 적재 대신 **로컬 JSON 보존 + PostgreSQL 직접 삽입** 구조로 대폭 간소화했습니다.
 4. **SQLAlchemy 기반 표준 데이터베이스 연동 & SSL 강화**:
@@ -38,7 +38,7 @@
 * **[MODIFY] [docker-compose.yml](file:///home/ubuntu/lookalike-lightweight/docker-compose.yml)**
   * 로컬 개발 환경에서 불필요한 kafka, zookeeper, mongodb, elasticsearch, hadoop 관련 서비스 정의를 제거하고 PostgreSQL(5433), Redis, FastAPI, Airflow 서비스 중심으로 도커 환경을 간소화했습니다.
 * **[MODIFY] [requirements.txt](file:///home/ubuntu/lookalike-lightweight/ml-models/api/requirements.txt) & [backend/requirements.txt](file:///home/ubuntu/lookalike-lightweight/web/backend/requirements.txt)**
-  * 레거시 라이브러리(elasticsearch, pymongo, kafka-python) 패키지를 제거하고, PostgreSQL 연동에 필요한 `psycopg2-binary`, Pydantic v2 관련 호환 라이브러리, DB 표준 연동을 위한 `sqlalchemy`, 그리고 임베딩 처리를 위한 `google-generativeai` 패키지를 추가했습니다.
+  * 레거시 라이브러리(elasticsearch, pymongo, kafka-python) 패키지를 제거하고, PostgreSQL 연동에 필요한 `psycopg2-binary`, Pydantic v2 관련 호환 라이브러리, DB 표준 연동을 위한 `sqlalchemy`, 그리고 임베딩 처리를 위한 패키지들을 추가했습니다.
 * **[MODIFY] [scripts 폴더 내 실행 쉘 스크립트](file:///home/ubuntu/lookalike-lightweight/scripts)**
   * 대상 파일: `start_all.sh`, `stop_all.sh`, `restart_all.sh`
   * 분산 미들웨어 컨테이너 모니터링 단계를 스킵하고 경량 단일 서버 구동 중심으로 스크립트를 재정비했습니다.
@@ -49,7 +49,7 @@
   * `DATABASE_URL`을 Pydantic 필드로 등록하고 `@model_validator(mode="after")`를 활용한 동적 폴백 처리를 적용하여, 로컬/도커 디버그 모드와 외부 프로덕션 모드 설정이 포트 충돌 없이 깔끔하게 분기되도록 개선했습니다.
 * **[MODIFY] [database.py](file:///home/ubuntu/lookalike-lightweight/web/backend/app/database.py)**
   * 기존 `psycopg2` 전용 `ThreadedConnectionPool` 기반의 로직을 **SQLAlchemy 엔진 및 Connection Pool** 구동으로 전환했습니다.
-  * Render 프로덕션 환경 등 외부 DB 접속 시 안전한 암호화 채널을 의무적으로 생성할 수 있도록, 원격지 접속 판별 시 `sslmode=require` 옵션을 커넥션 인자로 자동 주입하는 보안 가드레일을 설치했습니다.
+  * 렌더(Render) 프로덕션 환경 등 외부 DB 접속 시 안전한 암호화 채널을 의무적으로 생성할 수 있도록, 원격지 접속 판별 시 `sslmode=require` 옵션을 커넥션 인자로 자동 주입하는 보안 가드레일을 설치했습니다.
   * 기존에 작성된 개별 라우터/서비스들의 소스코드 정합성을 해치지 않기 위해 `get_pg_connection()` 및 `get_pg_cursor()` 등의 콘텍스트 매니저 헬퍼는 SQLAlchemy의 `engine.raw_connection()`을 활용하도록 파사드(Facade) 패턴 형태로 리팩토링했습니다.
 * **[MODIFY] [main.py](file:///home/ubuntu/lookalike-lightweight/web/backend/app/main.py)**
   * 애플리케이션 라이프사이클 기동 시 데이터베이스 풀 초기화 및 PostgreSQL 접속 세팅 단계를 재설정하고 정적 디렉토리 마운트 처리를 강화했습니다.
@@ -58,9 +58,9 @@
 
 ### D. 웹 백엔드 라우터 및 서비스
 * **[MODIFY] [search_service.py](file:///home/ubuntu/lookalike-lightweight/web/backend/app/services/search_service.py)**
-  * 네이버 최저가 비교 API 연동 로직 리팩토링 및 가격 정보가 없는 브랜드 상품(ZARA 등) 조회 시 필수 필드인 `mall_name`, `mall_url`이 `None`으로 전달되어 직렬화 에러를 유발하던 구조를 방어 코드(`Fallback` 및 `origin_url` 사용)로 보강했습니다.
+  * 네이버 최저가 비교 API 연동 로직 리팩토링 및 가격 정보가 없는 브랜드 상품(자라 등) 조회 시 필수 필드인 `mall_name`, `mall_url`이 `None`으로 전달되어 직렬화 에러를 유발하던 구조를 방어 코드(`Fallback` 및 `origin_url` 사용)로 보강했습니다.
 * **[MODIFY] [auth.py](file:///home/ubuntu/lookalike-lightweight/web/backend/app/routers/auth.py)**
-  * 누락되었던 관리자 보안 접속 API 엔드포인트(`POST /admin/login`, `POST /admin/logout`)를 추가했습니다.
+  * 로그인 인증 관련 로직을 개선하고, 관리자 로그인 시 쿠키 보안 옵션을 적절히 세팅했습니다.
   * 로그인 요청 시 데이터베이스 세션 외래키 제약조건(`user_sessions_user_id_fkey`)을 통과할 수 있도록 `users` 테이블에 어드민 시스템 유저 레코드의 자동 생성(`ON CONFLICT DO NOTHING`)을 보장했습니다.
   * 로컬 HTTP 개발 환경에서 크롬 브라우저가 관리자 쿠키를 정상 저장할 수 있도록 SameSite 정책을 `lax`로, Secure 속성을 `False`로 완화했습니다.
 * **[MODIFY] [inquiry.py](file:///home/ubuntu/lookalike-lightweight/web/backend/app/routers/inquiry.py)**
@@ -85,69 +85,22 @@
 이전 버전의 아키텍처 마이그레이션 이후 추가된 고도화 및 환경 최적화 설계의 중심축은 다음과 같습니다.
 
 ### Pillar 1. 완벽하게 격리된 이중화 개발/상용 환경 (DEV vs PROD)
-* **물리적 스토리지 격리**: Cloudinary 서버의 최상위 디렉터리 경로를 `DEV/`와 `PROD/`로 완전히 격리 분기하여 개발 테스트가 실제 상용 서비스의 이미지 데이터를 오염시키지 않도록 원천 가두었습니다.
+* **물리적 스토리지 격리**: 클라우디너리(Cloudinary) 서버의 최상위 디렉터리 경로를 `DEV/`와 `PROD/`로 완전히 격리 분기하여 개발 테스트가 실제 상용 서비스의 이미지 데이터를 오염시키지 않도록 원천 가두었습니다.
 * **샌드박스 검증**: 스위칭(Swap) 전 데이터가 정상적으로 조립되는지 독립적으로 테스트하기 위해 운영 DB와 구조가 100% 동일한 격리형 `TEST DB` 세트를 갖추었습니다.
 
 ### Pillar 2. 역할 및 용량 분담형 멀티 DB 설계 (DB vs DW DB)
-* **메인 서비스 DB**: `products`, `naver_prices`, `product_embeddings` 등 검색 매칭 실 서비스 노출 테이블만 보관하여 Neon DB의 0.5GB 무료 용량을 방어하고 쿼리 속도를 최대로 확보합니다.
-* **DW(데이터웨어하우스) DB**: 크롤러가 수집 격리한 임시 상품 목록(`staging_`), 실시간 생성 부하 방지를 위해 수집 단계에서 선(Pre) 연산한 CLIP 이미지/Gemini 텍스트 임베딩 정보, 그리고 시스템 장애 로그 및 메트릭 기록을 전담하도록 나누어 물리적 분산 배치를 완료했습니다.
+* **메인 서비스 DB**: `products`, `naver_prices`, `product_embeddings` 등 검색 매칭 실 서비스 노출 테이블만 보관하여 네온 DB의 0.5GB 무료 용량을 방어하고 쿼리 속도를 최대로 확보합니다.
+* **DW(데이터웨어하우스) DB**: 크롤러가 수집 격리한 임시 상품 목록(`staging_`), 실시간 생성 부하 방지를 위해 수집 단계에서 선(Pre) 연산한 CLIP 이미지/텍스트 임베딩 정보, 그리고 시스템 장애 로그 및 메트릭 기록을 전담하도록 나누어 물리적 분산 배치를 완료했습니다.
 
 ### Pillar 3. 실시간 리소스 동적 감지 및 클라우드 실측 관제
 * **cgroups 기반 감지**: 512MB RAM, 1vCPU가 할당된 클라우드 컨테이너의 물리 사양을 하드코딩 마스킹하지 않고 cgroups 커널 시스템 파일을 읽어 동적으로 점유율을 추적합니다.
-* **Neon DB 이중 용량 감지**: 어드민 대시보드 화면 내에서 DEV DB 세트와 PROD DB 세트의 상세 크기 및 합계 용량을 직관적으로 분리 모니터링할 수 있도록 렌더링을 고도화했습니다.
+* **네온 DB 이중 용량 감지**: 어드민 대시보드 화면 내에서 DEV DB 세트와 PROD DB 세트의 상세 크기 및 합계 용량을 직관적으로 분리 모니터링할 수 있도록 렌더링을 고도화했습니다.
 
 ---
 
-## 4. 핵심 수정 파일 요약 표 (Change Registry)
+## 4. HuggingFace Space 운영 구조
 
-| 컴포넌트 | 파일 경로 | 변경 구분 | 핵심 사유 및 내용 |
-| :--- | :--- | :---: | :--- |
-| **Backend** | `web/backend/app/routers/auth.py` | `MODIFY` | `/admin/login` 엔드포인트 신설, 로컬용 세션 쿠키 정책(`Lax`, `Secure=False`) 조정 |
-| **Backend** | `web/backend/app/routers/inquiry.py` | `MODIFY` | 세션 하이재킹 방지를 위해 일반/어드민 세션 인증 헬퍼 전면 격리 및 분리 |
-| **Backend** | `web/backend/app/routers/search.py` | `MODIFY` | 네이버 최저가 검색 예외 복구 및 검색 기록 DB 저장 복구 |
-| **Backend** | `web/backend/app/services/search_service.py` | `MODIFY` | 최저가 미기재 상품 파싱 시 다운되는 버그(Serializer Null error) 방어 로직 추가 |
-| **Backend** | `web/backend/app/database.py` | `MODIFY` | psycopg2 풀 대신 SQLAlchemy 엔진으로 연동 전환 및 SSL 접속(sslmode=require) 강제화 |
-| **Backend** | `web/backend/app/services/kafka_*_consumer.py` | `DELETE` | 불필요한 백그라운드 Kafka 로그 및 지표 컨슈머 코드 제거 |
-| **Frontend** | `web/frontend/static/js/common.js` | `MODIFY` | 좋아요 및 최근 본 상품의 렌더링 영역이 상호 오염 및 혼선되던 버그 분기 수정 |
-| **Frontend** | `web/frontend/templates/base.html` | `MODIFY` | 템플릿 스크립트 캐싱 방지용 난수 캐시 버스터(`Cache Buster`) 추가 |
-| **Frontend** | `web/frontend/static/js/admin_infra.js` | `MODIFY` | Cloudinary API 마이너스 지표 응답 시 Math.max(0, ...) 보정 예외 필터 장치 주입 |
-| **Scripts** | `scripts/insert_DB/init_dev_db.py` | `NEW` | 신규 개발용 Neon 데이터베이스 DDL 스키마 및 pgvector 생성 스크립트 구축 |
-| **Scripts** | `scripts/insert_DB/init_dw_db.py` | `NEW` | 분산 배치 처리를 위한 데이터웨어하우스 DB 구조화 자동 생성 스크립트 구축 |
-| **Scripts** | `scripts/supabase/` | `DELETE` | 루트의 supabase/migrations 와 꼬여있던 중복 레거시 마이그레이션 폴더 영구 삭제 |
-| **Scripts** | `scripts/start_all.sh 등 쉘` | `DELETE` | 로컬 도커 컨테이너를 더 이상 띄울 필요가 없으므로 불필요한 레거시 쉘 파일 6종 영구 격하 |
-
----
-
-## 5. 6차 리팩토링 및 3세대 격리 아키텍처 보강 (2026-06-02)
-
-Neon DB 다중 계정 분리 및 로컬 런타임 최적화를 위해 프로젝트 전반에 남아있던 레거시 및 임시 파일들을 완전히 정리하고 환경을 3세대 경량 아키텍처에 맞게 고도화했습니다.
-
-### A. Cloudinary 계정 및 데이터베이스 분기 정돈
-* `DEV_CLOUDINARY_...` 환경 변수의 등호(`=`) 전후에 있던 공백을 제거하여 런타임 시 파싱 및 바인딩 오류가 발생할 수 있는 소지를 제거했습니다.
-* 기존에 사용 중인 서버가 존재하지 않는 레거시 컨테이너용 변수(MongoDB, Redis, Jupyter, Airflow, Spark, Hadoop, Kafka, ES 통신용 변수) 및 GCP 가상머신 접속 주소(`GCP_PG_HOST` 등)를 주석(`#`) 처리하여 환경 변수 오염을 원천 차단했습니다.
-* 이로써 `ENV_MODE` 분기(`local`/`dev` vs `production`)에 따라 알맞은 Cloudinary 및 Neon DB 주소가 자동으로 동적 바인딩되도록 정비했습니다.
-
-### B. Neon 데이터베이스 뼈대 스키마(migrations) 정리 및 신규 DB 구성
-* **신규 개발/용량 분담 DB 테이블 구축**:
-  * 신규 개발용 데이터베이스(`DEV_DATABASE_URL`)의 테이블을 독립적으로 안전하게 초기화할 수 있도록 지원하는 전용 스크립트(`init_dev_db.py`, `init_dw_db.py`)를 작성하여 구동했습니다.
-  * 이 스크립트를 통해 새로운 개발용 Neon DB에 `pgvector` 확장을 자동으로 로드하고 상품/임베딩/관리자 관련 테이블을 성공적으로 구축했습니다.
-* **마이그레이션 도면 단일화**:
-  * 프로젝트 내에 이중으로 저장되어 유지보수 혼선을 주던 `scripts/supabase/migrations` 디렉토리를 완전히 삭제하고, 데이터베이스의 근간 설계도인 `001_create_tables.sql`과 `002_admin_tables.sql`을 루트 경로의 `supabase/migrations/`로 이관하여 스키마 관리 일관성을 확보했습니다.
-
-### C. 미사용 임시 스크립트 및 레거시 쉘 파일 정리
-* 작업 중 HTML 복구를 위해 임시로 만들어 활용했던 `scratch/` 폴더 내 `restore_html.py` 스크립트를 삭제했습니다.
-* Git 민감 정보 히스토리 치환용 임시 스크립트(`clean_git_history.sh`) 및 캐시 강제 갱신용 임시 파일(`.github_cache_refresh`)을 삭제했습니다.
-* 로컬 DB 초기화용 중복 파일 `init_db.py`를 제거했습니다.
-* 로컬 환경에서 더 이상 도커를 구동 및 제어할 필요가 없으므로 `scripts/` 바로 하위에 남아있던 `start_all.sh`, `stop_all.sh`, `restart_all.sh`, `init-db.sh`, `restore_prod.sh`, `check_status.sh` 등 쉘 스크립트 6개를 일괄 영구 삭제했습니다.
-
-### D. 프론트엔드 모니터링 수치 보정
-* Cloudinary API 캐시 지연 등으로 인해 일시적으로 전송량이나 리소스 개수가 음수(-) 값으로 반환될 경우, UI 대시보드 상에서 마이너스 수치가 노출되던 화면 오류를 발견하여 `Math.max(0, ...)` 보정 코드를 적용해 `0` 단위로 출력되도록 수정했습니다.
-
----
-
-## 3. HuggingFace Space 운영 구조
-
-### 3-1. 파일 역할 및 배포 방법
+### 4-1. 파일 역할 및 배포 방법
 
 `ml-models/backup/` 폴더에는 두 개의 파일이 있습니다.
 
@@ -165,9 +118,9 @@ Neon DB 다중 계정 분리 및 로컬 런타임 최적화를 위해 프로젝�
 
 ---
 
-### 3-2. HF Space 콜드 스타트(Cold Start) 문제
+### 4-2. HF Space 콜드 스타트(Cold Start) 문제
 
-HuggingFace Space 무료 플랜은 **15분 동안 요청이 없으면 절전 상태**에 들어갑니다.
+허깅페이스 스페이스(HuggingFace Space) 무료 플랜은 **15분 동안 요청이 없으면 절전 상태**에 들어갑니다.
 절전 해제 시 YOLO + Fashion-CLIP 모델을 다시 메모리에 올리는 데 **30초 ~ 1분**이 걸립니다.
 
 ```
@@ -189,7 +142,7 @@ HuggingFace Space 무료 플랜은 **15분 동안 요청이 없으면 절전 상
 
 ---
 
-### 3-3. Keep-Alive 백그라운드 태스크 구조
+### 4-3. Keep-Alive 백그라운드 태스크 구조
 
 #### ❌ 기존 방식 (cron-job.org) — 효과 없음
 
@@ -255,7 +208,7 @@ web/backend/app/main.py
 
 ---
 
-## 4. YOLO 박스 후처리 파이프라인
+## 5. YOLO 박스 후처리 파이프라인
 
 이미지 업로드 → YOLO 탐지 → 후처리 → 프론트엔드 표시 흐름:
 
@@ -287,3 +240,56 @@ web/backend/app/main.py
 > 오른쪽 다리처럼 가려진 부분은 YOLO가 낮은 신뢰도로 탐지하므로,
 > 0.35 기준이면 걸러지지만 0.20 기준으로는 살아남아 Union에 포함됩니다.
 
+---
+
+## 6. 핵심 수정 파일 요약 표 (Change Registry)
+
+| 컴포넌트 | 파일 경로 | 변경 구분 | 핵심 사유 및 내용 |
+| :--- | :--- | :---: | :--- |
+| **Backend** | `web/backend/app/routers/auth.py` | `MODIFY` | `/admin/login` 엔드포인트 신설, 로컬용 세션 쿠키 정책(`Lax`, `Secure=False`) 조정 |
+| **Backend** | `web/backend/app/routers/inquiry.py` | `MODIFY` | 세션 하이재킹 방지를 위해 일반/어드민 세션 인증 헬퍼 전면 격리 및 분리 |
+| **Backend** | `web/backend/app/routers/search.py` | `MODIFY` | 네이버 최저가 검색 예외 복구 및 검색 기록 DB 저장 복구 |
+| **Backend** | `web/backend/app/services/search_service.py` | `MODIFY` | 최저가 미기재 상품 파싱 시 다운되는 버그(Serializer Null error) 방어 로직 추가 |
+| **Backend** | `web/backend/app/database.py` | `MODIFY` | psycopg2 풀 대신 SQLAlchemy 엔진으로 연동 전환 및 SSL 접속(sslmode=require) 강제화 |
+| **Backend** | `web/backend/app/services/kafka_*_consumer.py` | `DELETE` | 불필요한 백그라운드 Kafka 로그 및 지표 컨슈머 코드 제거 |
+| **Frontend** | `web/frontend/static/js/common.js` | `MODIFY` | 좋아요 및 최근 본 상품의 렌더링 영역이 상호 오염 및 혼선되던 버그 분기 수정 |
+| **Frontend** | `web/frontend/templates/base.html` | `MODIFY` | 템플릿 스크립트 캐싱 방지용 난수 캐시 버스터(`Cache Buster`) 추가 |
+| **Frontend** | `web/frontend/static/js/admin_infra.js` | `MODIFY` | 클라우디너리 API 마이너스 지표 응답 시 Math.max(0, ...) 보정 예외 필터 장치 주입 |
+| **Scripts** | `scripts/insert_DB/init_dev_db.py` | `NEW` | 신규 개발용 네온 데이터베이스 DDL 스키마 및 pgvector 생성 스크립트 구축 |
+| **Scripts** | `scripts/insert_DB/init_dw_db.py` | `NEW` | 분산 배치 처리를 위한 데이터웨어하우스 DB 구조화 자동 생성 스크립트 구축 |
+| **Scripts** | `scripts/supabase/` | `DELETE` | 루트의 supabase/migrations 와 꼬여있던 중복 레거시 마이그레이션 폴더 영구 삭제 |
+| **Scripts** | `scripts/start_all.sh 등 쉘` | `DELETE` | 로컬 DB 초기화용 중복 파일 및 로컬 컨테이너 제어 쉘 파일 6종 영구 삭제 |
+
+---
+
+## 7. 리팩토링 및 최적화 이력 (1차 ~ 8차 고도화)
+
+* **1차 리팩토링: Actions 기반 수집 분리 (2026-05-24)**
+  * 렌더(Render) 무료 서버의 CPU/메모리 부하 경감을 위해 대규모 크롤링 연산을 깃허브 액션(GitHub Actions) 환경으로 이관했습니다.
+  * 명령줄 인터페이스(CLI) 엔트리포인트(`crawling_pipeline_cli.py`)를 개발하고, 수집 데이터를 임시 스테이징 테이블에 1차 격리 저장하는 구조를 설계했습니다.
+* **2차 최적화: HDFS 의존성 제거 및 수집 캐시(CDC) 도입 (2026-05-28)**
+  * 레거시 하둡(Hadoop) 및 HDFS 연동 모듈을 완전히 제거하고 PostgreSQL 네온 DB 구조로 통합했습니다.
+  * 크롤링 시 이전 수집 캐시를 대조하여, 가격이나 이미지에 변경이 없는 상품의 경우 클라우디너리 업로드를 건너뛰는 변경 감지(CDC) 로직을 적용해 API 비용과 실행 시간을 절감했습니다.
+* **3차 리팩토링: 물리 DB 이중화 및 한국 표준시(KST) 동기화 (2026-05-30)**
+  * 네온 DB의 무료 플랜 용량(0.5GB) 한계를 준수하고 실시간 성능을 보장하기 위해, 메인 프로덕션 DB와 데이터웨어하우스 DB(DW DB)로 데이터베이스 커넥션을 물리적으로 분리했습니다.
+  * 모든 데이터베이스 커넥션 세션 연결 시 `SET TIME ZONE 'Asia/Seoul';`을 실행하여 시계열 데이터가 한국 표준시(KST) 기준으로 저장되도록 동기화했습니다.
+* **4차 최적화: 어드민 런타임 오류 복구 (2026-06-04)**
+  * 어드민 API 서버가 `data-pipeline` 내의 `base_utils.py` 모듈을 참조할 때, 실행 디렉터리 경로에 무관하게 작동하도록 절대 경로 산출법으로 전면 수정했습니다.
+  * 실행 가상환경(`ml-env`) 상의 누락 패키지(`aiohttp`)를 추가하고, 임시 테스트 이관 대기 시간을 기존 스펙인 24시간(`hours_elapsed < 24`)으로 원복 조치했습니다.
+* **5차 리팩토링: YOLOv11 + Fashion-CLIP 사전 임베딩 추출 설계 (2026-06-05)**
+  * 데이터 이관 시점에 대량의 벡터 연산을 수행해 발생하는 병목을 차단하기 위해, **Phase 1 (수집)** 단계에서 상품 수집 직후 YOLOv11 추론 서버(HuggingFace Space)를 거쳐 의류 영역을 사전 크롭(Pre-Cropping)하고, 512차원 패션 클립(Fashion-CLIP) 이미지 임베딩과 텍스트 임베딩을 선 생성하여 DW DB의 `staging_product_embeddings`에 사전 보존하도록 고도화했습니다.
+  * **Phase 2 (이관/스위칭)** 단계에서는 이미 계산 완료된 벡터 데이터를 대상 운영 DB로 단순 복사(`INSERT INTO ... SELECT`)하여 트랜잭션 처리 시간을 1초 내외로 단축했습니다.
+* **6차 최적화: 환경 변수 정돈 및 마이그레이션(Migrations) 설계서 단일화 (2026-06-08)**
+  * `.env` 파일 내 환경변수의 등호 전후 공백을 제거하여 런타임 에러를 방지하고, 미사용 레거시 컨테이너 변수(MongoDB, Redis, Airflow, Hadoop 등)를 주석 처리 및 정리했습니다.
+  * 중복으로 존재하던 `scripts/supabase/migrations` 디렉터리를 완전 삭제하고, 스키마 관리 일관성을 위해 루트의 `supabase/migrations/`로 단일화했습니다.
+  * HTML 복구용 임시 스크립트 및 쉘 파일 6종을 일괄 영구 삭제했습니다.
+  * 클라우디너리 API 수치 전달 지연 시 마이너스 값이 노출되던 모니터링 화면 오류를 `Math.max(0, ...)` 보정 코드를 통해 개선했습니다.
+* **7차 리팩토링: 모니터 대시보드 리뉴얼 및 긴급 단일 재수집 기능 추가 (2026-06-16)**
+  * 자동 크롤링 모니터링 탭을 읽기 전용 대시보드로 개편하고, 실시간 스캔 결과 총량 대비 수집 현황 게이지바를 연동했습니다.
+  * 에러 로그 클릭 시 상세한 예외 원인을 확인할 수 있는 '에러 정밀 진단 모달'을 추가했습니다.
+  * 실패한 특정 상품 1건만 단독 타겟팅하여 가상환경(`ml-env`)에서 즉각 백그라운드로 수집을 재시도하는 연동 기능을 탑재했습니다.
+* **8차 최적화: 스파오 상세 수집 개선 및 임베딩 3중 안전망 구축 (2026-06-24)**
+  * **스파오 상세 수집 실패 차단**: 상세 페이지 URL 구성 시 `itemNo`뿐만 아니라 `lowerVendNo`를 함께 추출하도록 크롤러 파싱 로직을 고도화하여 리다이렉트로 인한 수집 스킵 버그를 제거했습니다.
+  * **네트워크 3중 재시도 로직**: 일시적 DNS 실패나 Gradio API 콜드 스타트 지연 등에 대응하기 위해 이미지 다운로드 **3회 재시도** 및 Gradio API **2회 호출 재시도**를 구현하여 에러율을 최소화했습니다.
+  * **로컬 CLIP 모델 이미지 임베딩 폴백(Fallback)**: API 서버 장애나 YOLOv11 크롭 실패 시 `image_vector`가 `NULL`로 수집되는 현상을 막기 위해, 실패 발생 시 자동으로 로컬 캐시 모델(`openai/clip-vit-base-patch32`)을 가동하여 **원본 이미지 전체에 대해 로컬에서 직접 512차원 임베딩을 생성**해 적재하는 자동 방어막을 구축했습니다.
+  * **브랜드 구성 최신화**: 기존의 무신사, 자라 브랜드를 수집 대상에서 제외하고, 에잇세컨즈, 탑텐, 유니클로, 스파오, 지오다노, 폴햄의 6대 브랜드 체제로 전면 리뉴얼했습니다. 어드민 페이지에 강제 정지, 캐시 무시, 강제 이관 등의 관리 제어 기능을 추가했습니다.

@@ -17,34 +17,36 @@ else:
 
 LOCAL_SAVE_DIR = f"data/{BRAND_NAME}/{TODAY_STR}"
 
-# 크롤링 대상 카테고리 URL 맵 (폴햄 고유 카테고리 코드 사용)
+# 크롤링 대상 카테고리 URL 맵 (폴햄 브랜드관 실제 카테고리 코드 사용)
 TARGET_MAP = {
     "Men": {
         "Outer": [
-            "https://polham.goodwearmall.com/display/category/list?dspCtgryNo=PHMA42A06",
-            "https://polham.goodwearmall.com/display/category/list?dspCtgryNo=PHMA42A03"
+            "https://www.goodwearmall.com/polhamshop/category/SSMA02A05",
+            "https://www.goodwearmall.com/polhamshop/category/SSMA02A06"
         ],
         "Top": [
-            "https://polham.goodwearmall.com/display/category/list?dspCtgryNo=PHMA42A02",
-            "https://polham.goodwearmall.com/display/category/list?dspCtgryNo=PHMA42A01",
-            "https://polham.goodwearmall.com/display/category/list?dspCtgryNo=PHMA42A04"
+            "https://www.goodwearmall.com/polhamshop/category/SSMA02A01",
+            "https://www.goodwearmall.com/polhamshop/category/SSMA02A02",
+            "https://www.goodwearmall.com/polhamshop/category/SSMA02A04"
         ],
         "Bottom": [
-            "https://polham.goodwearmall.com/display/category/list?dspCtgryNo=PHMA42A07",
-            "https://polham.goodwearmall.com/display/category/list?dspCtgryNo=PHMA42A21"
+            "https://www.goodwearmall.com/polhamshop/category/SSMA02A07",
+            "https://www.goodwearmall.com/polhamshop/category/SSMA02A13"
         ]
     },
     "Women": {
         "Outer": [
-            "https://polham.goodwearmall.com/display/category/list?dspCtgryNo=PHMA41A04A01",
-            "https://polham.goodwearmall.com/display/category/list?dspCtgryNo=PHMA41A02"
+            "https://www.goodwearmall.com/polhamshop/category/SSMA01A04"
         ],
         "Top": [
-            "https://polham.goodwearmall.com/display/category/list?dspCtgryNo=PHMA41A01",
-            "https://polham.goodwearmall.com/display/category/list?dspCtgryNo=PHMA41A03"
+            "https://www.goodwearmall.com/polhamshop/category/SSMA01A01",
+            "https://www.goodwearmall.com/polhamshop/category/SSMA01A02",
+            "https://www.goodwearmall.com/polhamshop/category/SSMA01A03"
         ],
         "Bottom": [
-            "https://polham.goodwearmall.com/display/category/list?dspCtgryNo=PHMA41A06"
+            "https://www.goodwearmall.com/polhamshop/category/SSMA01A06",
+            "https://www.goodwearmall.com/polhamshop/category/SSMA01A13",
+            "https://www.goodwearmall.com/polhamshop/category/SSMA01A05"
         ]
     }
 }
@@ -59,11 +61,28 @@ async def extract_product_data_from_dom(page):
     굿웨어몰 표준 구조를 사용하여 데이터 파싱을 수행합니다.
     """
     try:
-        await asyncio.sleep(1)
+        # 로딩 안정성을 위해 주요 엘리먼트 로드 대기
+        try:
+            await page.wait_for_selector('.price, .goods-name, script[type="application/ld+json"]', timeout=5000)
+        except Exception:
+            pass
+        await asyncio.sleep(2)  # 리다이렉트 후 JS 렌더링 완료 대기
         data = await page.evaluate("""() => {
+            const ogTitle = document.querySelector('meta[property="og:title"]')?.content || document.title;
+            // 만약 og:title에 굿웨어몰 메인 슬로건이 들어있다면 아직 상품 페이지가 덜 로드된 것이므로 None 처리 유도
+            if (ogTitle.includes("좋은 옷을 모두에게")) {
+                return null;
+            }
+
             const result = {};
             result.goodsNo = location.href.match(/\/product\/([A-Z0-9]+)\/detail/)?.[1] || "";
-            result.goodsNm = document.querySelector('meta[property="og:title"]')?.content || document.title;
+
+            // 상품명: og:title에서 브랜드/쇼핑몰명 제거 ("POLHAM 여성 20수..." → "여성 20수...")
+            // " | 굿 셀렉션..." 이후 제거, 앞에 브랜드명 있으면 제거
+            let goodsNm = ogTitle.split('|')[0].trim();
+            // "POLHAM " 또는 "폴햄 " 접두어 제거
+            goodsNm = goodsNm.replace(/^(POLHAM|폴햄)\s*/i, '').trim();
+            result.goodsNm = goodsNm || document.title;
             result.brandName = "POLHAM";
 
             // 이미지 유효성 검증
@@ -80,7 +99,7 @@ async def extract_product_data_from_dom(page):
 
             let thumb = "";
 
-            // 1. ld+json 구조에서 이미지 추출
+            // 1. ld+json 구조에서 이미지 추출 (가장 신뢰도 높음)
             try {
                 const ldJsonScripts = document.querySelectorAll('script[type="application/ld+json"]');
                 for (const script of ldJsonScripts) {
@@ -98,7 +117,18 @@ async def extract_product_data_from_dom(page):
                 }
             } catch (e) {}
 
-            // 2. DOM 엘리먼트에서 lazy loading 이미지 우선 탐색
+            // 2. carousel-img 클래스 이미지 (실제 상품 이미지 셀렉터)
+            if (!thumb) {
+                const carouselImg = document.querySelector('.carousel-img');
+                if (carouselImg) {
+                    const src = carouselImg.getAttribute('data-src') || carouselImg.getAttribute('src') || "";
+                    if (isValidImg(src) && src.includes('img.goodwearmall.com/goods/')) {
+                        thumb = src;
+                    }
+                }
+            }
+
+            // 3. DOM 엘리먼트에서 lazy loading 이미지 우선 탐색
             if (!thumb) {
                 const mainImg = document.querySelector('.goods-img img, .img-zoom img, .prd-detail-img img, #goodsImg img');
                 if (mainImg) {
@@ -109,7 +139,7 @@ async def extract_product_data_from_dom(page):
                 }
             }
 
-            // 3. og:image 메타 태그 차선책
+            // 4. og:image 메타 태그 차선책
             if (!thumb) {
                 const og = document.querySelector('meta[property="og:image"]')?.content || "";
                 if (isValidImg(og)) {
@@ -117,12 +147,12 @@ async def extract_product_data_from_dom(page):
                 }
             }
 
-            // 4. 최후 수단: goodwearmall 이미지 직접 탐색
+            // 5. 최후 수단: img.goodwearmall.com/goods/ 경로 이미지 직접 탐색
             if (!thumb) {
                 const allImgs = document.querySelectorAll('img[src], img[data-src]');
                 for (const img of allImgs) {
                     const src = img.getAttribute('data-src') || img.getAttribute('src') || "";
-                    if (src.includes('goodwearmall') && isValidImg(src)) {
+                    if (src.includes('img.goodwearmall.com/goods/') && isValidImg(src)) {
                         thumb = src;
                         break;
                     }
@@ -189,19 +219,25 @@ async def extract_product_data_from_dom(page):
             });
             result.other_color_ids = [...new Set(otherColorIds)];
 
-            // 추가 이미지 목록
+            // 추가 이미지 목록: carousel-img(실제 상품 이미지) 우선 수집
             const images = [];
-            document.querySelectorAll('img').forEach(img => {
-                const src = img.getAttribute('src') || img.getAttribute('data-src');
-                if (src && isValidImg(src)) {
-                    images.push(src.startsWith('//') ? 'https:' + src : src);
+            // carousel-img 클래스에서 img.goodwearmall.com/goods/ 경로 이미지 우선 수집
+            document.querySelectorAll('.carousel-img').forEach(img => {
+                const src = img.getAttribute('data-src') || img.getAttribute('src');
+                if (src && src.includes('img.goodwearmall.com/goods/') && isValidImg(src)) {
+                    const cleanSrc = src.split('?')[0];  // 쿼리스트링 제거
+                    images.push(cleanSrc.startsWith('//') ? 'https:' + cleanSrc : cleanSrc);
                 }
             });
-            images.sort((a, b) => {
-                const aIsProduct = a.includes('img.goodwearmall.com');
-                const bIsProduct = b.includes('img.goodwearmall.com');
-                return (bIsProduct ? 1 : 0) - (aIsProduct ? 1 : 0);
-            });
+            // carousel-img에서 못 찾으면 전체 img 탐색
+            if (images.length === 0) {
+                document.querySelectorAll('img').forEach(img => {
+                    const src = img.getAttribute('src') || img.getAttribute('data-src');
+                    if (src && src.includes('img.goodwearmall.com/goods/') && isValidImg(src)) {
+                        images.push(src.startsWith('//') ? 'https:' + src : src);
+                    }
+                });
+            }
             result.goodsImages = [...new Set(images)];
 
             // 소재/스펙 정보
@@ -216,7 +252,7 @@ async def extract_product_data_from_dom(page):
             return result;
         }""")
 
-        if not data or not data.get('goodsNm'):
+        if not data or not data.get('goodsNm') or data.get('goodsNm').strip() == "" or data.get('price', 0) == 0:
             return None
         data['url'] = page.url
         data['scraped_at'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -242,7 +278,8 @@ async def process_product(product_id, gender, category, context):
     new_ids = []
 
     async with sem:
-        url = f"https://polham.goodwearmall.com/product/{product_id}/detail"
+        # 리다이렉트를 방지하기 위해 www.goodwearmall.com 도메인 직접 사용
+        url = f"https://www.goodwearmall.com/product/{product_id}/detail"
         max_retries = 3
 
         for attempt in range(max_retries):

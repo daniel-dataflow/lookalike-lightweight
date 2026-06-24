@@ -832,6 +832,7 @@ def run_manual_crawling(data: dict):
     try:
         brand = data.get("brand", "").lower()
         is_auto = data.get("is_auto", False)
+        force_download = data.get("force_download", False)
         
         if is_auto:
             limit = 0
@@ -884,6 +885,8 @@ def run_manual_crawling(data: dict):
         cmd = [python_exe, cli_path, "--brand", brand, "--limit", str(limit), "--action", "crawl"]
         if is_auto:
             cmd.append("--auto")
+        if force_download:
+            cmd.append("--force-download")
         if category and category != "all":
             cmd += ["--category", category]
             
