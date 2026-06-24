@@ -81,6 +81,14 @@ on:
         required: false
         default: '100'
         type: string
+      force_download:
+        description: '이미지 강제 재업로드 (true 선택 시 캐시 우회하고 새로 업로드)'
+        required: true
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
 
 jobs:
   # ─────────────────────────────────────────────────────────────────────────────
@@ -100,6 +108,7 @@ jobs:
             # (참고: crawling_pipeline_cli.py에서 limit==0이면 자동 모드로 실행하여 전체 타겟 수량을 limit으로 사용)
             LIMIT="0"
             AUTO="true"
+            FORCE_DOWNLOAD="false"
             if [ "${{ github.event_name }}" != "schedule" ]; then
               # 수동 'all' 실행 시는 입력한 limit 및 auto 값 사용
               INPUT_LIMIT="${{ github.event.inputs.limit }}"
@@ -107,20 +116,22 @@ jobs:
                 LIMIT="$INPUT_LIMIT"
               fi
               AUTO="${{ github.event.inputs.auto }}"
+              FORCE_DOWNLOAD="${{ github.event.inputs.force_download }}"
             fi
             # 전체 브랜드에 대해 개별 Matrix 분기 생성
             # [주석 처리] 아래 무신사와 자라는 자동 수집 대상에서 일시 주석 처리(제외)합니다.
-            # {"brand":"zara","limit":"'$LIMIT'","auto":"'$AUTO'","gender":"","category":""}
-            # {"brand":"musinsa","limit":"'$LIMIT'","auto":"'$AUTO'","gender":"Men","category":""}
-            # {"brand":"musinsa","limit":"'$LIMIT'","auto":"'$AUTO'","gender":"Women","category":""}
-            echo 'matrix={"include":[{"brand":"8seconds","limit":"'$LIMIT'","auto":"'$AUTO'","gender":"","category":""},{"brand":"topten","limit":"'$LIMIT'","auto":"'$AUTO'","gender":"","category":""},{"brand":"uniqlo","limit":"'$LIMIT'","auto":"'$AUTO'","gender":"","category":""},{"brand":"spao","limit":"'$LIMIT'","auto":"'$AUTO'","gender":"","category":""},{"brand":"giordano","limit":"'$LIMIT'","auto":"'$AUTO'","gender":"","category":""},{"brand":"polham","limit":"'$LIMIT'","auto":"'$AUTO'","gender":"","category":""}]}' >> $GITHUB_OUTPUT
+            # {"brand":"zara","limit":"'$LIMIT'","auto":"'$AUTO'","force_download":"'$FORCE_DOWNLOAD'","gender":"","category":""}
+            # {"brand":"musinsa","limit":"'$LIMIT'","auto":"'$AUTO'","force_download":"'$FORCE_DOWNLOAD'","gender":"Men","category":""}
+            # {"brand":"musinsa","limit":"'$LIMIT'","auto":"'$AUTO'","force_download":"'$FORCE_DOWNLOAD'","gender":"Women","category":""}
+            echo 'matrix={"include":[{"brand":"8seconds","limit":"'$LIMIT'","auto":"'$AUTO'","force_download":"'$FORCE_DOWNLOAD'","gender":"","category":""},{"brand":"topten","limit":"'$LIMIT'","auto":"'$AUTO'","force_download":"'$FORCE_DOWNLOAD'","gender":"","category":""},{"brand":"uniqlo","limit":"'$LIMIT'","auto":"'$AUTO'","force_download":"'$FORCE_DOWNLOAD'","gender":"","category":""},{"brand":"spao","limit":"'$LIMIT'","auto":"'$AUTO'","force_download":"'$FORCE_DOWNLOAD'","gender":"","category":""},{"brand":"giordano","limit":"'$LIMIT'","auto":"'$AUTO'","force_download":"'$FORCE_DOWNLOAD'","gender":"","category":""},{"brand":"polham","limit":"'$LIMIT'","auto":"'$AUTO'","force_download":"'$FORCE_DOWNLOAD'","gender":"","category":""}]}' >> $GITHUB_OUTPUT
           else
             # 단일 브랜드 수동 실행
             LIMIT="${{ github.event.inputs.limit }}"
             AUTO="${{ github.event.inputs.auto }}"
+            FORCE_DOWNLOAD="${{ github.event.inputs.force_download }}"
             GENDER="${{ github.event.inputs.gender }}"
             CATEGORY="${{ github.event.inputs.category }}"
-            echo "matrix={\"include\":[{\"brand\":\"${{ github.event.inputs.brand }}\",\"limit\":\"$LIMIT\",\"auto\":\"$AUTO\",\"gender\":\"$GENDER\",\"category\":\"$CATEGORY\"}]}" >> $GITHUB_OUTPUT
+            echo "matrix={\"include\":[{\"brand\":\"${{ github.event.inputs.brand }}\",\"limit\":\"$LIMIT\",\"auto\":\"$AUTO\",\"force_download\":\"$FORCE_DOWNLOAD\",\"gender\":\"$GENDER\",\"category\":\"$CATEGORY\"}]}" >> $GITHUB_OUTPUT
           fi
 
   # ─────────────────────────────────────────────────────────────────────────────
@@ -211,6 +222,9 @@ jobs:
           fi
           if [ "${{ matrix.auto }}" = "true" ]; then
             EXTRA_ARGS="$EXTRA_ARGS --auto"
+          fi
+          if [ "${{ matrix.force_download }}" = "true" ]; then
+            EXTRA_ARGS="$EXTRA_ARGS --force-download"
           fi
 
           echo ">>> 🚀 Starting Phase 1 crawl for ${{ matrix.brand }} (limit=${{ matrix.limit }}) $EXTRA_ARGS on environment: ${APP_ENV}"

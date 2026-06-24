@@ -545,6 +545,13 @@
             <input type="number" class="form-control" id="crawlLimit" name="limit" value="10" min="1" max="100">
             <div class="form-text" id="crawlLimitHelp">로컬 테스트 보호 모드로 최대 100건으로 제한됩니다.</div>
           </div>
+          <div class="mb-3 form-check">
+            <input type="checkbox" class="form-check-input" id="crawlForceDownload" name="force_download" checked>
+            <label class="form-check-label fw-semibold text-danger" for="crawlForceDownload" style="font-size:.85rem;">
+              <i class="fas fa-redo-alt me-1"></i>이미지 강제 재업로드 (캐시 무시)
+            </label>
+            <div class="form-text" style="font-size: 0.72rem;">체크 시 기존 DB 캐시를 무시하고 이미지를 Cloudinary에 새로 강제 업로드합니다.</div>
+          </div>
         </form>
       </div>
       <div class="modal-footer">
@@ -1634,6 +1641,7 @@ async function submitCrawl() {
   }
   
   const category = document.getElementById('crawlCategory').value;
+  const forceDownload = document.getElementById('crawlForceDownload').checked;
   
   const btn = document.getElementById('confirmRunCrawlBtn');
   btn.disabled = true;
@@ -1643,7 +1651,7 @@ async function submitCrawl() {
     const res = await fetch('/api/admin/crawling/run', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ brand, limit, category, is_auto: isAuto, force_download: true })
+      body: JSON.stringify({ brand, limit, category, is_auto: isAuto, force_download: forceDownload })
     });
     const data = await res.json();
     
