@@ -61,6 +61,11 @@ async def extract_product_data_from_dom(page):
     """
     try:
         await asyncio.sleep(1)
+        # 판매 종료 등으로 메인 페이지로 리다이렉트된 경우 예외 처리
+        if "/i/item" not in page.url or "itemNo=" not in page.url:
+            import logging
+            logging.getLogger("crawling_pipeline").warning(f"   ⚠️ 상세 페이지 리다이렉트 감지 (수집 스킵): {page.url}")
+            return None
         data = await page.evaluate("""() => {
             const result = {};
             
@@ -73,17 +78,17 @@ async def extract_product_data_from_dom(page):
             result.goodsNm = titleEl ? titleEl.innerText.trim() : document.title.split('|')[0].trim();
             result.brandName = "SPAO";
 
-            // 이미지 유효성 체크
-            const logoKeywords = ['logo', 'icon', 'banner', 'btn', 'common', 'noimage', 'naver', 'kakao'];
+            // 이미지 유효성 체크 (배너, 이벤트성 키워드 추가 차단)
+            const logoKeywords = ['logo', 'icon', 'banner', 'btn', 'common', 'noimage', 'naver', 'kakao', 'popup', 'event', 'member', 'benefit'];
             const isValidImg = (url) => {
                 if (!url) return false;
                 const lower = url.toLowerCase();
                 return !logoKeywords.some(kwd => lower.includes(kwd));
             };
 
-            // 1. 썸네일 리스트 또는 스와이퍼 이미지 탐색
+            // 1. 썸네일 리스트 또는 스와이퍼 이미지 탐색 (대표 이미지 ID인 #repImg 및 .goods_img img를 최우선으로 조회하여 배너 오파싱 차단)
             let thumb = "";
-            const mainImg = document.querySelector('.goods_thumb_list img, .swiper-slide img, .item_img img, .goods_img img');
+            const mainImg = document.querySelector('#repImg, .goods_img img, .goods_thumb_list img, .item_img img, .swiper-slide img');
             if (mainImg) {
                 thumb = mainImg.getAttribute('data-src') || mainImg.getAttribute('src') || "";
             }

@@ -341,18 +341,26 @@ async def run_pipeline(
             #     if product_id.startswith("http"): 
             #         url = product_id
             elif brand == "spao":
-                url = f"https://www.spao.com/i/item?itemNo={product_id}"
+                if "itemNo=" in str(product_id):
+                    url = f"https://www.spao.com/i/item?{product_id}"
+                else:
+                    url = f"https://www.spao.com/i/item?itemNo={product_id}"
             elif brand == "giordano":
                 url = f"https://www.giordano.co.kr/shop/detail.php?pno={product_id}"
             elif brand == "polham":
-                url = f"https://polham.goodwearmall.com/product/{product_id}/detail"
+                url = f"https://www.goodwearmall.com/product/{product_id}/detail"
+            
+            logger.info(f"   [DEBUG] 상세 페이지 접속 준비 완료: {url}")
             p_page = await context.new_page()
+            logger.info(f"   [DEBUG] 새 페이지 탭 생성 완료")
             try:
                 # 불필요 리소스 차단 (속도 향상 및 레이트 리밋 예방)
                 await p_page.route("**/*review*", lambda route: route.abort())
                 await p_page.route("**/*recommend*", lambda route: route.abort())
                 
+                logger.info(f"   [DEBUG] page.goto 시도 중...")
                 await p_page.goto(url, timeout=15000, wait_until="domcontentloaded")
+                logger.info(f"   [DEBUG] page.goto 완료 (현재 URL: {p_page.url})")
                 
                 # 봇 방지 우회형 지능적 미세 지연 추가 (Anti-Scraping)
                 import random
@@ -369,10 +377,13 @@ async def run_pipeline(
                     product_dict = await scraper.extract_product_base_data(p_page, product_id)
                     if product_dict:
                         product_dict["goodsImages"] = await scraper.extract_current_images(p_page)
+                        product_dict["url"] = url  # origin_url 누락 방지를 위해 홈페이지 상세 URL 주입
                 # elif brand == "zara":
                 #     product_dict = await scraper.extract_product_data_from_dom(p_page)
                 elif brand in ["spao", "giordano", "polham"]:
+                    logger.info(f"   [DEBUG] DOM 데이터 파싱 시도 중...")
                     product_dict = await scraper.extract_product_data_from_dom(p_page)
+                    logger.info(f"   [DEBUG] DOM 데이터 파싱 완료 (결과 존재 여부: {product_dict is not None})")
                 if product_dict and product_dict.get("goodsNm"):
                     pid = product_dict.get("goodsNo") or product_id
                     product_dict["product_id"] = pid
@@ -380,12 +391,14 @@ async def run_pipeline(
                     product_dict["category"] = category_val
                     collected_products.append(product_dict)
                     logger.info(f"   ➕ [{brand.upper()}] 수집 성공 ({len(collected_products)}/{limit}): {product_dict['goodsNm']}")
+                    logger.info(f"   [DEBUG RESULT] product_dict details: {json.dumps(product_dict, ensure_ascii=False)}")
                     
                     return product_dict.get("other_color_ids", [])
             except Exception as e:
                 logger.warning(f"   ⚠️ [{brand.upper()}] {product_id} 수집 에러: {e}")
             finally:
                 await p_page.close()
+                logger.info(f"   [DEBUG] 페이지 탭 닫기 완료")
         return []
 
     async def crawl_brand_categories():
@@ -570,8 +583,17 @@ async def run_pipeline(
                                     p_codes = await page.evaluate("""() => {
                                         const ids = new Set();
                                         document.querySelectorAll('a[href*="itemNo="]').forEach(a => {
-                                            const m = a.href.match(/itemNo=([0-9]+)/i);
-                                            if (m) ids.add(m[1]);
+                                            const itemNoMatch = a.href.match(/itemNo=([0-9]+)/i);
+                                            const vendNoMatch = a.href.match(/lowerVendNo=([A-Z0-9]+)/i);
+                                            if (itemNoMatch) {
+                                                const itemNo = itemNoMatch[1];
+                                                const vendNo = vendNoMatch ? vendNoMatch[1] : "";
+                                                if (vendNo) {
+                                                    ids.add(`itemNo=${itemNo}&lowerVendNo=${vendNo}`);
+                                                } else {
+                                                    ids.add(`itemNo=${itemNo}`);
+                                                }
+                                            }
                                         });
                                         return Array.from(ids);
                                     }""")
@@ -1042,6 +1064,7 @@ async def run_pipeline(
                         SET prod_name = EXCLUDED.prod_name,
                             base_price = EXCLUDED.base_price,
                             img_url = EXCLUDED.img_url,
+                            origin_url = EXCLUDED.origin_url,
                             update_dt = CURRENT_TIMESTAMP
                     """, (
                         prod_id,

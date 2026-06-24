@@ -254,8 +254,11 @@ async def upload_image_to_cloudinary(session: aiohttp.ClientSession, url: str, f
 # --- 2.1 HuggingFace API 연동 임베딩 생성 유틸 ---
 
 # 로컬 CLIP 모델 캐시 (최초 1회 로드 후 재사용)
+import threading
+_LOCAL_CLIP_LOCK = threading.Lock()
 _LOCAL_CLIP_MODEL = None
 _LOCAL_CLIP_TOKENIZER = None
+_LOCAL_CLIP_PROCESSOR = None
 
 def _get_local_clip_text_embedding(text: str) -> list:
     """
@@ -263,41 +266,92 @@ def _get_local_clip_text_embedding(text: str) -> list:
     HF Inference API가 차단된 환경(로컬)에서 폴백으로 사용합니다.
     """
     global _LOCAL_CLIP_MODEL, _LOCAL_CLIP_TOKENIZER
-    try:
-        import torch
-        import torch.nn.functional as F
-        from transformers import CLIPTokenizer, CLIPModel
+    with _LOCAL_CLIP_LOCK:
+        try:
+            import torch
+            import torch.nn.functional as F
+            from transformers import CLIPTokenizer, CLIPModel
 
-        if _LOCAL_CLIP_MODEL is None:
-            logger.info("로컬 CLIP 모델 최초 로드 중 (openai/clip-vit-base-patch32)...")
-            _LOCAL_CLIP_TOKENIZER = CLIPTokenizer.from_pretrained("openai/clip-vit-base-patch32")
-            _LOCAL_CLIP_MODEL = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
-            _LOCAL_CLIP_MODEL.eval()
-            logger.info("로컬 CLIP 모델 로드 완료")
+            if _LOCAL_CLIP_MODEL is None or _LOCAL_CLIP_TOKENIZER is None:
+                logger.info("로컬 CLIP 모델 및 토크나이저 로드 중 (openai/clip-vit-base-patch32)...")
+                if _LOCAL_CLIP_TOKENIZER is None:
+                    _LOCAL_CLIP_TOKENIZER = CLIPTokenizer.from_pretrained("openai/clip-vit-base-patch32")
+                if _LOCAL_CLIP_MODEL is None:
+                    _LOCAL_CLIP_MODEL = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
+                    _LOCAL_CLIP_MODEL.eval()
+                logger.info("로컬 CLIP 모델 및 토크나이저 로드 완료")
 
-        inputs = _LOCAL_CLIP_TOKENIZER(
-            text, return_tensors="pt", padding=True,
-            truncation=True, max_length=77
-        )
-        with torch.no_grad():
-            result = _LOCAL_CLIP_MODEL.get_text_features(**inputs)
+            inputs = _LOCAL_CLIP_TOKENIZER(
+                text, return_tensors="pt", padding=True,
+                truncation=True, max_length=77
+            )
+            with torch.no_grad():
+                result = _LOCAL_CLIP_MODEL.get_text_features(**inputs)
 
-        # transformers 버전에 따라 텐서 또는 ModelOutput 반환 가능 → 안전하게 처리
-        if hasattr(result, 'pooler_output'):
-            # BaseModelOutputWithPooling 계열 객체인 경우
-            feat = result.pooler_output
-        elif hasattr(result, 'last_hidden_state'):
-            feat = result.last_hidden_state[:, 0, :]
-        else:
-            # 순수 텐서인 경우 (정상 케이스)
-            feat = result
+            # transformers 버전에 따라 텐서 또는 ModelOutput 반환 가능 → 안전하게 처리
+            if hasattr(result, 'pooler_output'):
+                # BaseModelOutputWithPooling 계열 객체인 경우
+                feat = result.pooler_output
+            elif hasattr(result, 'last_hidden_state'):
+                feat = result.last_hidden_state[:, 0, :]
+            else:
+                # 순수 텐서인 경우 (정상 케이스)
+                feat = result
 
-        # L2 정규화 (torch.nn.functional 사용, .norm() 메서드 의존 없음)
-        feat = F.normalize(feat, p=2, dim=-1)
-        return feat[0].tolist()
-    except Exception as e:
-        logger.warning(f"로컬 CLIP 텍스트 임베딩 실패: {e}")
+            # L2 정규화 (torch.nn.functional 사용, .norm() 메서드 의존 없음)
+            feat = F.normalize(feat, p=2, dim=-1)
+            return feat[0].tolist()
+        except Exception as e:
+            logger.warning(f"로컬 CLIP 텍스트 임베딩 실패: {e}")
+            return None
+
+
+def _get_local_clip_image_embedding(image_bytes: bytes) -> list:
+    """
+    transformers 라이브러리를 사용하여 로컬 CLIP 이미지 임베딩을 생성합니다.
+    Gradio API 호출 실패 또는 YOLO Crop 실패 시 폴백으로 사용합니다.
+    """
+    global _LOCAL_CLIP_MODEL, _LOCAL_CLIP_PROCESSOR
+    if not image_bytes:
         return None
+    with _LOCAL_CLIP_LOCK:
+        try:
+            import io
+            import torch
+            import torch.nn.functional as F
+            from PIL import Image
+            from transformers import CLIPProcessor, CLIPModel
+
+            # 모델 및 프로세서 최초 로드
+            if _LOCAL_CLIP_MODEL is None or _LOCAL_CLIP_PROCESSOR is None:
+                logger.info("로컬 CLIP 모델 및 프로세서 로드 중 (openai/clip-vit-base-patch32)...")
+                if _LOCAL_CLIP_MODEL is None:
+                    _LOCAL_CLIP_MODEL = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
+                    _LOCAL_CLIP_MODEL.eval()
+                if _LOCAL_CLIP_PROCESSOR is None:
+                    _LOCAL_CLIP_PROCESSOR = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+                logger.info("로컬 CLIP 이미지 모델/프로세서 로드 완료")
+
+            image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+            inputs = _LOCAL_CLIP_PROCESSOR(images=image, return_tensors="pt")
+            
+            with torch.no_grad():
+                result = _LOCAL_CLIP_MODEL.get_image_features(**inputs)
+
+            # transformers 버전에 따라 텐서 또는 ModelOutput 반환 가능 → 안전하게 처리
+            if hasattr(result, 'pooler_output'):
+                feat = result.pooler_output
+            elif hasattr(result, 'last_hidden_state'):
+                feat = result.last_hidden_state[:, 0, :]
+            else:
+                feat = result
+
+            # L2 정규화 (512차원 그대로 반환)
+            feat = F.normalize(feat, p=2, dim=-1)
+            return feat[0].tolist()
+        except Exception as e:
+            logger.warning(f"로컬 CLIP 이미지 임베딩 실패: {e}")
+            return None
 
 
 # Inference API 네트워크 차단 상태 플래그 (타임아웃 방지용)
@@ -343,7 +397,8 @@ async def get_clip_text_embedding(session: aiohttp.ClientSession, text: str, tok
             _HF_INFERENCE_API_FAILED = True
 
     # HF API 실패 시 → 로컬 transformers CLIP 모델로 폴백
-    local_vec = _get_local_clip_text_embedding(text)
+    # 동기 모델 로드/추론 함수를 이벤트 루프 블로킹 방지를 위해 to_thread로 감싸 실행
+    local_vec = await asyncio.to_thread(_get_local_clip_text_embedding, text)
     if local_vec:
         logger.info(f"로컬 CLIP 텍스트 임베딩 성공 (dim={len(local_vec)})")
         return _pad(local_vec)
@@ -358,6 +413,7 @@ async def get_yolo_clip_image_embedding(session: aiohttp.ClientSession, image_ur
     """
     HuggingFace Space의 Gradio API를 호출하여
     YOLOv11 Pre-Cropping 기반의 정확도 높은 512d Fashion-CLIP 이미지 임베딩을 받아옵니다.
+    Gradio API 호출 실패 또는 YOLO 크롭 실패 시 원본 이미지의 로컬 CLIP 임베딩을 폴백으로 사용합니다.
     """
     global _GRADIO_CLIENT
     hf_space_url = os.getenv("HF_SPACE_URL")
@@ -365,26 +421,40 @@ async def get_yolo_clip_image_embedding(session: aiohttp.ClientSession, image_ur
         logger.warning("HF_SPACE_URL 환경변수가 없어 이미지 임베딩을 추출할 수 없습니다.")
         return None
 
-    # 이미지 다운로드
+    # 1. 이미지 다운로드 (3회 재시도 적용)
+    image_bytes = None
     headers = {"User-Agent": "Mozilla/5.0"}
-    try:
-        _timeout = aiohttp.ClientTimeout(total=15)
-        async with session.get(image_url, headers=headers, timeout=_timeout) as response:
-            if response.status == 200:
-                image_bytes = await response.read()
-            else:
-                return None
-    except Exception as e:
-        logger.warning(f"임베딩용 이미지 다운로드 실패: {e}")
+    max_download_retries = 3
+    for attempt in range(max_download_retries):
+        try:
+            _timeout = aiohttp.ClientTimeout(total=15)
+            async with session.get(image_url, headers=headers, timeout=_timeout) as response:
+                if response.status == 200:
+                    image_bytes = await response.read()
+                    break
+                else:
+                    logger.warning(f"⚠️ 임베딩용 이미지 다운로드 실패 (HTTP {response.status}, 시도 {attempt+1}/{max_download_retries}): {image_url}")
+        except Exception as e:
+            logger.warning(f"⚠️ 임베딩용 이미지 다운로드 예외 발생 (시도 {attempt+1}/{max_download_retries}) [URL: {image_url}]: {e}")
+        
+        if attempt < max_download_retries - 1:
+            await asyncio.sleep(1.0)
+
+    # 이미지 다운로드 실패 시 즉시 None 반환 (폴백 불가능)
+    if not image_bytes:
+        logger.error(f"❌ 임베딩용 이미지 최종 다운로드 실패: {image_url}")
         return None
 
-    # 임시 파일 작성
+    # 2. HuggingFace Gradio Space API 호출 (2회 재시도 적용)
     import tempfile
     suffix = ".jpg"
     if image_bytes[:8] == b"\x89PNG\r\n\x1a\n":
         suffix = ".png"
     elif image_bytes[:4] == b"RIFF" and image_bytes[8:12] == b"WEBP":
         suffix = ".webp"
+
+    gradio_success = False
+    embedding = None
 
     try:
         from gradio_client import Client, handle_file
@@ -393,27 +463,66 @@ async def get_yolo_clip_image_embedding(session: aiohttp.ClientSession, image_ur
             tmp_path = tmp.name
 
         try:
-            async with _GRADIO_CLIENT_LOCK:
-                if _GRADIO_CLIENT is None:
-                    # httpx_kwargs 에 timeout 30초 명시하여 무한 블록을 방지합니다.
-                    _GRADIO_CLIENT = Client(hf_space_url, httpx_kwargs={"timeout": 30.0})
-            
-            def _predict():
-                return _GRADIO_CLIENT.predict(
-                    image=handle_file(tmp_path),
-                    api_name="/predict",
-                )
-            result = await asyncio.to_thread(_predict)
-            if isinstance(result, dict) and result.get("status") != "error":
-                embedding = result.get("embedding")
-                if embedding:
-                    return embedding
+            max_api_retries = 2
+            for attempt in range(max_api_retries):
+                try:
+                    # Client() 초기화가 HF Space 콜드 스타트 시 수분 걸리는 동기 블로킹 함수
+                    # → asyncio.to_thread로 감싸 + 타임아웃 60초 적용하여 이벤트 루프 점유 방지
+                    async with _GRADIO_CLIENT_LOCK:
+                        if _GRADIO_CLIENT is None:
+                            def _init_client():
+                                return Client(hf_space_url, httpx_kwargs={"timeout": 60.0})
+                            _GRADIO_CLIENT = await asyncio.wait_for(
+                                asyncio.to_thread(_init_client),
+                                timeout=65.0  # Client 초기화 전체 타임아웃
+                            )
+                        
+                        def _predict():
+                            return _GRADIO_CLIENT.predict(
+                                image=handle_file(tmp_path),
+                                api_name="/predict",
+                            )
+                        result = await asyncio.to_thread(_predict)
+                    if isinstance(result, dict) and result.get("status") != "error":
+                        embedding = result.get("embedding")
+                        if embedding:
+                            gradio_success = True
+                            break
+                        else:
+                            logger.warning(f"⚠️ Gradio API 응답에 embedding이 누락되었습니다 (YOLO 감지 실패 가능성, 시도 {attempt+1}/{max_api_retries})")
+                    else:
+                        msg = result.get("message") if isinstance(result, dict) else result
+                        logger.warning(f"⚠️ Gradio API 실패 응답 (시도 {attempt+1}/{max_api_retries}): {msg}")
+                except asyncio.TimeoutError:
+                    logger.warning(f"⚠️ Gradio Client 초기화 타임아웃 (시도 {attempt+1}/{max_api_retries}). HF Space 콜드 스타트 중 가능성.")
+                    # 다음 시도를 위해 클라이언트 리셋
+                    async with _GRADIO_CLIENT_LOCK:
+                        _GRADIO_CLIENT = None
+                except Exception as api_err:
+                    logger.warning(f"⚠️ Gradio API 호출 실패 (시도 {attempt+1}/{max_api_retries}): {api_err}")
+                
+                # 재시도 전 대기 (Cold Start 해제 유도)
+                if attempt < max_api_retries - 1:
+                    await asyncio.sleep(2.0)
         finally:
             if os.path.exists(tmp_path):
                 os.remove(tmp_path)
     except Exception as e:
-        logger.warning(f"HF Space YOLO-CLIP API 호출 오류: {e}")
-        
+        logger.warning(f"HF Space YOLO-CLIP API 클라이언트 연동 오류: {e}")
+
+    # 3. Gradio API 호출 성공 및 임베딩을 얻었으면 반환
+    if gradio_success and embedding:
+        return embedding
+
+    # 4. 실패 시 로컬 CLIP 이미지 임베딩 폴백 적용
+    # 동기 로컬 모델 추론 함수를 이벤트 루프 블로킹 방지를 위해 to_thread로 감싸 실행
+    logger.warning(f"💡 Gradio API 임베딩 생성 실패로 인해 로컬 CLIP 이미지 폴백을 실행합니다 (URL: {image_url})")
+    local_embedding = await asyncio.to_thread(_get_local_clip_image_embedding, image_bytes)
+    if local_embedding:
+        logger.info(f"✅ 로컬 CLIP 이미지 임베딩 폴백 생성 성공 (dim={len(local_embedding)})")
+        return local_embedding
+
+    logger.error("❌ 이미지 임베딩 모든 방법 실패. None 반환.")
     return None
 
 def clean_db_url(db_url: str) -> str:
@@ -464,6 +573,7 @@ def get_prod_db_connection():
         raise ValueError("PROD_DATABASE_URL 또는 DATABASE_URL 환경 변수가 필요합니다.")
     db_url = clean_db_url(raw_url)
     conn = connect_db_with_retry(db_url)
+    conn.set_client_encoding('UTF8')  # Windows 환경에서의 한글 깨짐 방지
     # 세션 타임존을 서울(KST)로 설정
     with conn.cursor() as cur:
         cur.execute("SET TIME ZONE 'Asia/Seoul';")
@@ -477,6 +587,7 @@ def get_dw_db_connection():
         raise ValueError("DW_DATABASE_URL 또는 DATABASE_URL 환경 변수가 필요합니다.")
     db_url = clean_db_url(raw_url)
     conn = connect_db_with_retry(db_url)
+    conn.set_client_encoding('UTF8')  # Windows 환경에서의 한글 깨짐 방지
     # 세션 타임존을 서울(KST)로 설정
     with conn.cursor() as cur:
         cur.execute("SET TIME ZONE 'Asia/Seoul';")

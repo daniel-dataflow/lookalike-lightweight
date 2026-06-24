@@ -254,6 +254,8 @@ async def process_product(product_id, gender, category, context):
                     else:
                         base_data['goodsImages'] = await extract_current_images(p_page)
                         base_data['scraped_at'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                        # origin_url 저장: 파이프라인에서 item.get('url')로 읽어 origin_url 컬럼에 적재
+                        base_data['url'] = url
                         filename = f"{BRAND_NAME}_{gender.lower()}_{category.lower()}_{clean_id}.json"
                         filepath = os.path.join(LOCAL_SAVE_DIR, filename)
                         
