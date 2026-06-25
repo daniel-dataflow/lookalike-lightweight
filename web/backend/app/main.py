@@ -77,16 +77,13 @@ class NeonLogHandler(logging.Handler):
 
             level_str = record.levelname
 
-            # Neon PostgreSQL에 삽입 및 24시간 만료 데이터 삭제
-            from .database import get_pg_cursor, get_engine
-            if get_engine() is not None:
-                with get_pg_cursor() as cur:
+            # Neon PostgreSQL DW DB에 로그 삽입 (24시간 주기 삭제는 백그라운드 태스크로 이관)
+            from .database import get_dw_cursor, dw_engine
+            if dw_engine is not None:
+                with get_dw_cursor() as cur:
                     cur.execute(
                         "INSERT INTO app_logs (level, service, message, error_type) VALUES (%s, %s, %s, %s);",
                         (level_str, svc_name, msg, err_type)
-                    )
-                    cur.execute(
-                        "DELETE FROM app_logs WHERE timestamp < NOW() - INTERVAL '24 hours';"
                     )
         except Exception as e:
             # 로깅 자체 예외는 재귀 호출 방지를 위해 무시
@@ -193,6 +190,10 @@ async def lifespan(app: FastAPI):
     hf_keepalive_task = asyncio.create_task(_hf_space_keepalive_loop())
     logger.info("🔥 HF Space Keep-Alive 태스크 시작 (9분 간격)")
 
+    # 24시간 주기 에러 로그 정리 백그라운드 태스크 기동
+    cleanup_task = asyncio.create_task(_log_cleanup_loop())
+    logger.info("🧹 에러 로그 정리 백그라운드 태스크 시작 (24시간 간격)")
+
     yield
 
     logger.info("앱 종료 - 데이터베이스 연결 해제")
@@ -200,7 +201,35 @@ async def lifespan(app: FastAPI):
     if warmup_task:
         warmup_task.cancel()
     hf_keepalive_task.cancel()
+    cleanup_task.cancel()
     close_all_databases()
+
+
+async def _log_cleanup_loop():
+    """
+    24시간 간격으로 24시간이 경과된 에러 로그를 정리하는 백그라운드 루프.
+    에러가 대량 발생해도 디비 호출 횟수를 최소화하여 컴퓨트 아워를 절약합니다.
+    """
+    # 최초 기동 시 30초 대기 후 최초 1회 정리 (서버 완전 기동 후)
+    await asyncio.sleep(30)
+    while True:
+        try:
+            logger.info("🧹 [Cleanup] 24시간 만료된 에러 로그 정리 작업을 시작합니다.")
+            from .database import get_dw_cursor
+            with get_dw_cursor() as cur:
+                cur.execute(
+                    "DELETE FROM app_logs WHERE timestamp < NOW() - INTERVAL '24 hours';"
+                )
+                deleted = cur.rowcount
+                logger.info(f"✅ [Cleanup] 24시간 만료 로그 {deleted}건 정리 완료")
+        except asyncio.CancelledError:
+            logger.info("🛑 [Cleanup] 로그 정리 태스크 종료")
+            break
+        except Exception as e:
+            logger.warning(f"⚠️ [Cleanup] 로그 정리 실패 (무시): {e}")
+
+        # 24시간 대기
+        await asyncio.sleep(24 * 60 * 60)
 
 
 async def _hf_space_keepalive_loop():
