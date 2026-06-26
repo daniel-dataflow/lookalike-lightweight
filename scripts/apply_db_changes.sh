@@ -207,20 +207,24 @@ HAS_THUMBNAIL_PATH=$($PG_CMD -U ${POSTGRES_USER} -d ${POSTGRES_DB} -tc \
 if [ "$HAS_THUMBNAIL_PATH" = "1" ]; then
     echo "   ✅ search_logs 확장 컬럼 이미 존재"
 else
-    echo "   ⚠️  search_logs 확장 컬럼 추가 중..."
+    echo "   ⚠️  search_logs 확장 컬럼 추가 및 이미지 크기 컬럼 정리 중..."
     $PG_CMD -U ${POSTGRES_USER} -d ${POSTGRES_DB} -c "
         ALTER TABLE search_logs
             ADD COLUMN IF NOT EXISTS thumbnail_path VARCHAR(512),
-            ADD COLUMN IF NOT EXISTS image_size INTEGER,
-            ADD COLUMN IF NOT EXISTS image_width INTEGER,
-            ADD COLUMN IF NOT EXISTS image_height INTEGER,
+            ADD COLUMN IF NOT EXISTS ip_address VARCHAR(45),
+            ADD COLUMN IF NOT EXISTS user_agent TEXT,
             ADD COLUMN IF NOT EXISTS search_status VARCHAR(20) DEFAULT 'completed',
             ADD COLUMN IF NOT EXISTS result_count INTEGER DEFAULT 0;
+
+        ALTER TABLE search_logs
+            DROP COLUMN IF EXISTS image_size,
+            DROP COLUMN IF EXISTS image_width,
+            DROP COLUMN IF EXISTS image_height;
 
         CREATE INDEX IF NOT EXISTS idx_search_logs_create_dt
             ON search_logs(create_dt DESC);
     "
-    echo "   ✅ search_logs 확장 컬럼 추가 완료"
+    echo "   ✅ search_logs 확장 및 정리 완료"
 fi
 
 # 4-2. search_results 테이블 생성
@@ -623,6 +627,18 @@ $PG_CMD -U ${POSTGRES_USER} -d ${POSTGRES_DB} -c "
 "
 echo "   ✅ 스테이징 테이블 생성 완료"
 
+# ---- 15. 관리자(OWNER) IP 등록 테이블 생성 ----
+echo ""
+echo "1️⃣5️⃣  관리자(OWNER) IP 등록 테이블 확인 및 생성..."
+$PG_CMD -U ${POSTGRES_USER} -d ${POSTGRES_DB} -c "
+    CREATE TABLE IF NOT EXISTS owner_ips (
+        ip_address VARCHAR(45) PRIMARY KEY,
+        memo VARCHAR(200) DEFAULT '',
+        create_dt TIMESTAMP DEFAULT NOW()
+    );
+"
+echo "   ✅ 관리자 IP 등록 테이블 생성 완료"
+
 echo ""
 echo "============================================"
 echo "  ✅ 모든 DB 변경사항 적용 완료!"
@@ -633,7 +649,7 @@ echo "    ✅ users 소셜 로그인 컬럼 (provider, provider_id, profile_imag
 echo "    ✅ users 테이블 name -> user_name 변경"
 echo "    ✅ inquiry_board 게시판 테이블 (posts → 마이그레이션)"
 echo "    ✅ comments 댓글 테이블"
-echo "    ✅ search_logs 확장 (thumbnail_path, image_size/width/height, search_status, search_result, result_count, gender)"
+echo "    ✅ search_logs 확장 (thumbnail_path, ip_address, user_agent, search_status, search_result, result_count, gender)"
 echo "    ✅ search_results 테이블 (비정규화 유지)"
 echo "    ✅ products 테이블 brand_name, gender, origin_url 컬럼 추가 및 타입 수정"
 echo "    ✅ products 테이블 origine_prod_id 컬럼 삭제"
@@ -644,5 +660,7 @@ echo "    ✅ social_id → provider_id 컬럼명 변경"
 echo "    ✅ recent_views, likes 테이블 생성"
 echo "    ✅ brand_sequences 테이블 생성"
 echo "    ✅ staging_products 및 staging_naver_prices 테이블 생성"
+echo "    ✅ owner_ips (관리자 IP 등록) 테이블 생성"
 echo "============================================"
+
 
