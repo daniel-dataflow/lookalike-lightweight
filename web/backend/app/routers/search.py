@@ -97,13 +97,17 @@ async def search_by_image(
 
         log_id = None
         try:
+            # 클라이언트 IP 및 User-Agent 추출 (지역 및 기기환경 식별용)
+            ip_address = request.client.host if request.client else None
+            user_agent = request.headers.get("user-agent")
+            
             with get_pg_cursor() as cur:
                 cur.execute(
                     """INSERT INTO search_logs (user_id, thumbnail_url, input_text, applied_category,
-                       gender, image_size, image_width, image_height, search_status, result_count)
-                       VALUES (%s,%s,%s,%s,%s,%s,%s,%s,'completed',%s) RETURNING log_id""",
+                       gender, ip_address, user_agent, search_status, result_count)
+                       VALUES (%s,%s,%s,%s,%s,%s,%s,'completed',%s) RETURNING log_id""",
                     (user_id, thumb_url, search_text, category_f, gender_f,
-                     file_size, img_w, img_h, len(results)),
+                     ip_address, user_agent, len(results)),
                 )
                 log_row = cur.fetchone()
                 if log_row:
@@ -308,14 +312,16 @@ async def search_by_text(request: Request, req: SearchByTextRequest):
             local_url=search_service.get_local_fallback_url(img_url)
         ))
 
-    # 검색 로그 저장 (텍스트 검색)
+    # 검색 로그 저장 (텍스트 검색 - 클라이언트 IP 및 기기환경 포함)
     try:
+        ip_address = request.client.host if request.client else None
+        user_agent = request.headers.get("user-agent")
         with get_pg_cursor() as cur:
             cur.execute(
                 """INSERT INTO search_logs (user_id, input_text, applied_category,
-                   gender, search_status, result_count)
-                   VALUES (%s,%s,%s,%s,'completed',%s) RETURNING log_id""",
-                (user_id, req.query, req.category, req.gender, len(results)),
+                   gender, ip_address, user_agent, search_status, result_count)
+                   VALUES (%s,%s,%s,%s,%s,%s,'completed',%s) RETURNING log_id""",
+                (user_id, req.query, req.category, req.gender, ip_address, user_agent, len(results)),
             )
             log_row = cur.fetchone()
             if log_row:

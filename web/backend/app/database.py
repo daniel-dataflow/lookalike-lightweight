@@ -281,7 +281,24 @@ def init_all_databases():
     init_postgres()
     _ensure_infra_metrics_table()
     _ensure_app_logs_table()
+    _ensure_owner_ips_table()
     logger.info("🚀 PostgreSQL 데이터베이스 연결 초기화 완료")
+
+
+def _ensure_owner_ips_table():
+    """owner_ips (관리자 IP 등록) 테이블이 없으면 자동 생성"""
+    try:
+        with get_prod_cursor() as cur:
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS owner_ips (
+                    ip_address VARCHAR(45) PRIMARY KEY,
+                    memo VARCHAR(200) DEFAULT '',
+                    create_dt TIMESTAMP DEFAULT NOW()
+                );
+            """)
+        logger.info("✅ owner_ips 테이블 확인/생성 완료")
+    except Exception as e:
+        logger.error(f"❌ owner_ips 테이블 생성 실패: {e}")
 
 
 def _ensure_infra_metrics_table():
