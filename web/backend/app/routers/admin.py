@@ -139,23 +139,20 @@ def _get_system_health() -> SystemHealthResponse:
     # Response JSON에서 projects.consumption_metrics.storage_bytes 혹은 logical_size_bytes 정보 수집
     import httpx
     
-    def get_neon_synthetic_size_mb(project_id: str, account_key_ref: str) -> float | None:
+    def get_neon_project_metrics(project_id: str, account_key_ref: str) -> dict:
+        """Neon API를 통해 project metadata를 조회하여 용량(MB), Compute 시간(CU-hours), Network 전송량(GB)을 한꺼번에 반환"""
+        default_res = {"size_mb": 0.0, "compute_hours": 0.0, "network_gb": 0.0}
         if not project_id:
-            return None
-        
-        # account_key_ref 는 "NEON_KEY_ACCOUNT_1" 또는 "NEON_KEY_ACCOUNT_2"
-        # 실제 계정 토큰값 추출
+            return default_res
+            
         token = getattr(settings, account_key_ref, None)
         if not token:
-            # 설정에서 조회 안되면 환경변수 직접 탐색
             token = os.environ.get(account_key_ref)
         if not token:
-            # Fallback (구조화되지 않은 상태면 settings.NEON_KEY_ACCOUNT_1 기본 사용)
             token = settings.NEON_KEY_ACCOUNT_1 or os.environ.get("NEON_KEY_ACCOUNT_1")
             
         if not token:
-            logger.warning(f"Neon API 토큰이 누락되어 project_id({project_id}) 용량 API 조회 불가")
-            return None
+            return default_res
             
         try:
             url = f"https://console.neon.tech/api/v2/projects/{project_id}"
@@ -163,18 +160,31 @@ def _get_system_health() -> SystemHealthResponse:
                 "Accept": "application/json",
                 "Authorization": f"Bearer {token}"
             }
-            # Neon API 통신 (타임아웃 3초)
             resp = httpx.get(url, headers=headers, timeout=3.0)
             if resp.status_code == 200:
                 p_data = resp.json().get("project", {})
-                # synthetic_storage_size 필드가 Neon 콘솔에 표시되는 실제 스토리지 용량 바이트 수치입니다.
-                storage_bytes = p_data.get("synthetic_storage_size")
                 
-                if storage_bytes is not None:
-                    return round(float(storage_bytes) / 1024 / 1024, 2)
+                # 용량 파싱 (bytes -> MB)
+                storage_bytes = p_data.get("synthetic_storage_size")
+                size_mb = round(float(storage_bytes) / 1024 / 1024, 2) if storage_bytes is not None else 0.0
+                
+                # Compute 시간 파싱 (seconds -> CU-hours)
+                # Neon 무료 플랜은 1 CU 기준이므로 compute_time_seconds / 3600.0가 CU-hours와 동일함
+                compute_seconds = p_data.get("compute_time_seconds") or 0.0
+                compute_hours = round(float(compute_seconds) / 3600.0, 2)
+                
+                # Network 전송량 파싱 (bytes -> GB)
+                transfer_bytes = p_data.get("data_transfer_bytes") or 0.0
+                network_gb = round(float(transfer_bytes) / (1024.0 * 1024.0 * 1024.0), 3)
+                
+                return {
+                    "size_mb": size_mb,
+                    "compute_hours": compute_hours,
+                    "network_gb": network_gb
+                }
         except Exception as e:
             logger.warning(f"Neon API 조회 실패 (project: {project_id}): {e}")
-        return None
+        return default_res
 
     # 각 데이터베이스 프로젝트에 매핑된 Neon DB 용량 API 및 DB 쿼리 병행 처리
     # 맵핑 사전 빌드
@@ -197,6 +207,16 @@ def _get_system_health() -> SystemHealthResponse:
         }
     }
 
+    # 소비 정보 기본값 초기화
+    db_dev_compute_hours = 0.0
+    db_dev_network_gb = 0.0
+    db_dev_dw_compute_hours = 0.0
+    db_dev_dw_network_gb = 0.0
+    db_prod_compute_hours = 0.0
+    db_prod_network_gb = 0.0
+    db_prod_dw_compute_hours = 0.0
+    db_prod_dw_network_gb = 0.0
+
     for name, url in db_urls_map.items():
         if not url:
             db_urls_neon_status[name] = "None"
@@ -206,20 +226,33 @@ def _get_system_health() -> SystemHealthResponse:
         is_neon = "neon.tech" in url
         db_urls_neon_status[name] = "Neon" if is_neon else "Other"
 
-        # 1차 시도: Neon 공식 API를 사용하여 Synthetic Storage 용량 조회
+        # 1차 시도: Neon 공식 API를 사용하여 용량 및 소비량 일괄 조회
         proj_info = neon_projects_info.get(name, {})
-        size_mb = get_neon_synthetic_size_mb(proj_info.get("project_id"), proj_info.get("api_key_ref"))
+        metrics = get_neon_project_metrics(proj_info.get("project_id"), proj_info.get("api_key_ref"))
         
-        if size_mb is not None:
-            # API 조회 성공
-            if name == "DEV_DATABASE_URL":
-                db_dev_size_mb = size_mb
-            elif name == "DEV_DW_DATABASE_URL":
-                db_dev_dw_size_mb = size_mb
-            elif name == "PROD_DATABASE_URL":
-                db_prod_size_mb = size_mb
-            elif name == "PROD_DW_DATABASE_URL":
-                db_prod_dw_size_mb = size_mb
+        size_mb = metrics["size_mb"]
+        comp_hours = metrics["compute_hours"]
+        net_gb = metrics["network_gb"]
+        
+        # API 조회 결과 매핑
+        if name == "DEV_DATABASE_URL":
+            db_dev_size_mb = size_mb
+            db_dev_compute_hours = comp_hours
+            db_dev_network_gb = net_gb
+        elif name == "DEV_DW_DATABASE_URL":
+            db_dev_dw_size_mb = size_mb
+            db_dev_dw_compute_hours = comp_hours
+            db_dev_dw_network_gb = net_gb
+        elif name == "PROD_DATABASE_URL":
+            db_prod_size_mb = size_mb
+            db_prod_compute_hours = comp_hours
+            db_prod_network_gb = net_gb
+        elif name == "PROD_DW_DATABASE_URL":
+            db_prod_dw_size_mb = size_mb
+            db_prod_dw_compute_hours = comp_hours
+            db_prod_dw_network_gb = net_gb
+            
+        if size_mb > 0.0:
             continue
 
         # 2차 시도 (API 실패 시 fallback): psycopg2 쿼리를 통해 logical pg_database_size 용량 측정
@@ -352,6 +385,14 @@ def _get_system_health() -> SystemHealthResponse:
         db_prod_dw_size_mb=db_prod_dw_size_mb,
         db_prod_total_size_mb=db_prod_total_size_mb,
         db_urls_neon_status=db_urls_neon_status,
+        db_dev_compute_hours=db_dev_compute_hours,
+        db_dev_network_gb=db_dev_network_gb,
+        db_dev_dw_compute_hours=db_dev_dw_compute_hours,
+        db_dev_dw_network_gb=db_dev_dw_network_gb,
+        db_prod_compute_hours=db_prod_compute_hours,
+        db_prod_network_gb=db_prod_network_gb,
+        db_prod_dw_compute_hours=db_prod_dw_compute_hours,
+        db_prod_dw_network_gb=db_prod_dw_network_gb,
         cloudinary_status=cloudinary_status,
         cloudinary_usage_bytes=cloudinary_usage_bytes,
         cloudinary_limit_bytes=25 * 1024 * 1024 * 1024, # 25 GB
