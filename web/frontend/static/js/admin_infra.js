@@ -402,54 +402,75 @@ async function fetchDbStatus() {
                 cloudinaryStatusEl.textContent = '오류';
             }
 
-            // 크레딧(Credit) 데이터 바인딩 (음수값 0으로 보정)
-            const credUsage = Math.max(0, data.cloudinary_credits_usage || 0.0);
-            const credLimit = data.cloudinary_credits_limit || 25.0;
+            // 1. Cloudinary 통합 크레딧 정밀 연산 및 바인딩
+            const usageBytes = Math.max(0, data.cloudinary_usage_bytes || 0);
+            const bwUsageBytes = Math.max(0, data.cloudinary_bandwidth_usage_bytes || 0);
+            const transformations = data.cloudinary_transformations_usage || 0;
+
+            const storage_gb = usageBytes / 1024 / 1024 / 1024;
+            const bandwidth_gb = bwUsageBytes / 1024 / 1024 / 1024;
+            const bandwidth_mb = bwUsageBytes / 1024 / 1024;
             
-            // 백엔드가 제공하는 비율 필드 대신, 사용량과 한도를 이용하여 직접 정확한 백분율(%)을 계산합니다.
-            const credPercent = credLimit > 0 ? (credUsage / credLimit) * 100 : 0.0;
+            // 크레딧 소모량 공식 적용 (소수점 3자리 정밀도 통일하여 연산 정합성 보장)
+            const storage_credit = parseFloat(storage_gb.toFixed(3));
+            const bandwidth_credit = parseFloat(bandwidth_gb.toFixed(3));
+            const trans_credit = parseFloat((transformations / 1000).toFixed(3));
+            
+            // 3대 자원 크레딧 합산
+            const totalCreditUsed = parseFloat((storage_credit + bandwidth_credit + trans_credit).toFixed(3));
+            const credLimit = 25.0;
+            const credPercent = Math.min(100, (totalCreditUsed / credLimit) * 100);
 
             let credColorClass = 'text-success';
-            if (credPercent >= 80) credColorClass = 'text-danger fw-bold';
-            else if (credPercent >= 50) credColorClass = 'text-warning fw-bold';
+            let barColorClass = 'progress-bar bg-success';
+            if (credPercent >= 80) {
+                credColorClass = 'text-danger fw-bold';
+                barColorClass = 'progress-bar bg-danger';
+            } else if (credPercent >= 50) {
+                credColorClass = 'text-warning fw-bold';
+                barColorClass = 'progress-bar bg-warning';
+            }
 
+            // Total Credit 사용량 텍스트 출력 (소수점 3자리로 상세 매칭)
             document.getElementById('cloudinaryCreditsUsage').innerHTML = 
-                `<span>${credUsage.toFixed(2)}</span><span class="text-muted" style="font-size: 0.72rem;"> / ${credLimit.toFixed(0)}</span> <span class="${credColorClass} ms-1" style="font-size: 0.75rem; font-weight: 600;">(${credPercent.toFixed(1)}%)</span>`;
+                `<span>${totalCreditUsed.toFixed(3)}</span><span class="text-muted" style="font-size: 0.72rem;"> / ${credLimit.toFixed(0)} Credit</span> <span class="${credColorClass} ms-1" style="font-size: 0.75rem; font-weight: 600;">(${credPercent.toFixed(1)}%)</span>`;
 
-            // GB 단위 변환 (usage_bytes / 1024^3) (음수값 0으로 보정)
-            const usageBytes = Math.max(0, data.cloudinary_usage_bytes || 0);
-            const usageGB = (usageBytes / 1024 / 1024 / 1024).toFixed(3);
-            document.getElementById('cloudinaryUsage').innerHTML = `<span>${usageGB} GB</span>`;
+            // 게이지 바 동적 반영
+            const progressEl = document.getElementById('cloudinaryCreditsProgress');
+            if (progressEl) {
+                progressEl.style.width = `${credPercent}%`;
+                progressEl.className = barColorClass;
+            }
 
-            // 대역폭(Bandwidth) 데이터 바인딩
-            const bwUsageBytes = Math.max(0, data.cloudinary_bandwidth_usage_bytes || 0);
-            const bwLimitBytes = data.cloudinary_bandwidth_limit_bytes || (25 * 1024 * 1024 * 1024);
-            const bwUsageGB = (bwUsageBytes / 1024 / 1024 / 1024).toFixed(3);
-            const bwLimitGB = (bwLimitBytes / 1024 / 1024 / 1024).toFixed(0);
+            // 2. 하위 개별 실사용량 지표 및 크레딧 소모량 바인딩 (-> 기가 단일화 및 텍스트 간소화로 잘림 해결)
+            document.getElementById('cloudinaryUsage').innerHTML = 
+                `<span>${storage_gb.toFixed(3)} GB</span> <span class="text-muted small ms-1" style="font-size: 0.72rem;">➔ ${storage_credit.toFixed(3)} Credit</span>`;
             
-            // 대역폭 사용률(%) 직접 계산
-            const bwPercent = bwLimitBytes > 0 ? (bwUsageBytes / bwLimitBytes) * 100 : 0.0;
-            
-            let bwColorClass = 'text-success';
-            if (bwPercent >= 80) bwColorClass = 'text-danger fw-bold';
-            else if (bwPercent >= 50) bwColorClass = 'text-warning fw-bold';
-
             const bwEl = document.getElementById('cloudinaryBandwidth');
             if (bwEl) {
                 bwEl.innerHTML = 
-                    `<span>${bwUsageGB}</span><span class="text-muted" style="font-size: 0.72rem;"> / ${bwLimitGB} GB</span> <span class="${bwColorClass} ms-1" style="font-size: 0.75rem; font-weight: 600;">(${bwPercent.toFixed(1)}%)</span>`;
+                    `<span>${bandwidth_gb.toFixed(3)} GB</span> <span class="text-muted text-nowrap" style="font-size: 0.72rem;">➔ ${bandwidth_credit.toFixed(3)} Credit</span>`;
             }
 
-            const resourcesCount = Math.max(0, data.cloudinary_resources_count || 0);
-            document.getElementById('cloudinaryResources').innerHTML = `<span>${resourcesCount.toLocaleString()}개</span>`;
+            const transEl = document.getElementById('cloudinaryTransformations');
+            if (transEl) {
+                transEl.innerHTML = 
+                    `<span>${transformations.toLocaleString()} 회</span> <span class="text-muted text-nowrap" style="font-size: 0.72rem;">➔ ${trans_credit.toFixed(3)} Credit</span>`;
+            }
 
-            // 남은 크레딧 계산 및 클래스 바인딩
-            const freeCredits = Math.max(0, credLimit - credUsage);
+            // 3. 최종 합산 사용량 출력 (중복 공식 제거하고 값만 심플하게 노출)
+            const formulaEl = document.getElementById('cloudinaryCreditsFormula');
+            if (formulaEl) {
+                formulaEl.textContent = `${totalCreditUsed.toFixed(3)} Credit`;
+            }
+
+            // 4. 남은 가용 크레딧 출력
+            const freeCredits = parseFloat((credLimit - totalCreditUsed).toFixed(3));
             const freePercent = 100 - credPercent;
 
             const freeEl = document.getElementById('cloudinaryCreditsFree');
             if (freeEl) {
-                freeEl.textContent = `${freeCredits.toFixed(2)} Credit 남음`;
+                freeEl.textContent = `${freeCredits.toFixed(3)} Credit 남음`;
                 if (freePercent < 10) {
                     freeEl.className = 'text-danger fw-bold small';
                 } else if (freePercent < 30) {

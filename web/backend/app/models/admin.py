@@ -106,6 +106,7 @@ class SystemHealthResponse(BaseModel):
     cloudinary_credits_limit: Optional[float] = 25.0 # 크레딧 제한 (25)
     cloudinary_credits_percent: Optional[float] = 0.0 # 크레딧 사용률 %
     cloudinary_resources_count: int = 0
+    cloudinary_transformations_usage: int = 0
     
     # HuggingFace Space 정보
     hf_status: str = "unknown"
