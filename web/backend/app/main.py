@@ -167,6 +167,10 @@ async def lifespan(app: FastAPI):
     collector_task = asyncio.create_task(start_metric_collector())
     logger.info("📊 인프라 메트릭 수집 태스크 시작")
 
+    # 시스템 헬스 모니터링 백그라운드 태스크 기동 (10분 주기)
+    from .routers.admin import start_system_health_tracker, stop_system_health_tracker
+    start_system_health_tracker()
+
     # 로컬 ML 모델 웜업 (Warm-up) 백그라운드 태스크 기동
     warmup_task = None
     if False: # settings.USE_LOCAL_ML:
@@ -202,6 +206,7 @@ async def lifespan(app: FastAPI):
         warmup_task.cancel()
     hf_keepalive_task.cancel()
     cleanup_task.cancel()
+    stop_system_health_tracker()
     close_all_databases()
 
 

@@ -194,7 +194,7 @@ async function fetchSystemHealth() {
         document.getElementById('cpuPercent').textContent = `${m.cpu_percent.toFixed(1)}%`;
         document.getElementById('cpuProgress').style.width = `${m.cpu_percent}%`;
         document.getElementById('cpuProgress').className = `progress-bar ${getProgressColor(m.cpu_percent)}`;
-        
+
         // CPU 코어 및 사양 정보 출력
         const cpuInfo = [];
         if (m.cpu_freq_current > 0) cpuInfo.push(`${(m.cpu_freq_current / 1000).toFixed(2)}GHz`);
@@ -204,7 +204,7 @@ async function fetchSystemHealth() {
         document.getElementById('cpuDetail').textContent = cpuInfo.join(' | ') || 'CPU 정보 없음';
 
         // 메모리 카드
-        const memUsedGB  = (m.memory_usage / 1024 / 1024 / 1024).toFixed(1);
+        const memUsedGB = (m.memory_usage / 1024 / 1024 / 1024).toFixed(1);
         const memTotalGB = (m.memory_limit / 1024 / 1024 / 1024).toFixed(1);
         document.getElementById('memoryPercent').textContent = `${m.memory_percent.toFixed(1)}%`;
         document.getElementById('memoryProgress').style.width = `${m.memory_percent}%`;
@@ -240,9 +240,9 @@ async function fetchSystemHealth() {
             document.getElementById('diskFree').textContent = `${diskFreeGB} GB`;
         } else {
             document.getElementById('diskPercent').textContent = 'N/A';
-            document.getElementById('diskDetail').textContent  = '측정 실패';
-            document.getElementById('diskTotal').textContent   = '-';
-            document.getElementById('diskFree').textContent    = '-';
+            document.getElementById('diskDetail').textContent = '측정 실패';
+            document.getElementById('diskTotal').textContent = '-';
+            document.getElementById('diskFree').textContent = '-';
         }
     } catch (e) {
         console.error('시스템 실시간 조회 실패:', e);
@@ -258,7 +258,7 @@ async function fetchDbStatus() {
         // PostgreSQL
         const pgOk = data.db_status === 'healthy';
         document.getElementById('pgConnections').textContent = data.db_active_connections || '-';
-        
+
         // Neon DB 세부 정보 바인딩
         const updateNeonBadge = (elemId, status) => {
             const el = document.getElementById(elemId);
@@ -292,7 +292,7 @@ async function fetchDbStatus() {
         setElText('neonDevDbSize', data.db_dev_size_mb ? `${data.db_dev_size_mb} MB` : '0.0 MB');
         setElText('neonDevDwDbSize', data.db_dev_dw_size_mb ? `${data.db_dev_dw_size_mb} MB` : '0.0 MB');
         setElText('neonDevTotalSize', data.db_dev_total_size_mb ? `${data.db_dev_total_size_mb} MB` : '0.0 MB');
-        
+
         setElText('neonProdDbSize', data.db_prod_size_mb ? `${data.db_prod_size_mb} MB` : '0.0 MB');
         setElText('neonProdDwDbSize', data.db_prod_dw_size_mb ? `${data.db_prod_dw_size_mb} MB` : '0.0 MB');
         setElText('neonProdTotalSize', data.db_prod_total_size_mb ? `${data.db_prod_total_size_mb} MB` : '0.0 MB');
@@ -302,54 +302,58 @@ async function fetchDbStatus() {
             const textEl = document.getElementById(textId);
             const barEl = document.getElementById(barId);
             if (!textEl || !barEl) return;
-            
-            textEl.textContent = `${value} / ${limit} ${unit}`;
-            
+
             // 퍼센트 계산
-            const pct = limit > 0 ? Math.min(100, (value / limit) * 100) : 0;
-            barEl.style.width = `${pct}%`;
-            
-            // 임계치 색상 변경 (80% 이상 warning, 100% 이상 danger)
+            const pct = limit > 0 ? (value / limit) * 100 : 0;
+            barEl.style.width = `${Math.min(100, pct)}%`;
+
+            let colorClass = 'text-success';
             if (pct >= 100) {
                 barEl.className = 'progress-bar bg-danger';
+                colorClass = 'text-danger fw-bold';
             } else if (pct >= 80) {
                 barEl.className = 'progress-bar bg-warning';
+                colorClass = 'text-warning fw-bold';
             } else {
                 barEl.className = 'progress-bar bg-success';
+                colorClass = 'text-success';
             }
+
+            // 단순 나열된 볼드를 지우고 비율(%)에 스타일 가중치를 적용하여 가독성을 높입니다.
+            textEl.innerHTML = `<span>${value}</span><span class="text-muted" style="font-size: 0.72rem;"> / ${limit} ${unit}</span> <span class="${colorClass} ms-1" style="font-size: 0.75rem; font-weight: 600;">(${pct.toFixed(1)}%)</span>`;
         };
 
         // DEV 환경 바인딩
         updateMetricBar('neonDevDbCompute', 'neonDevDbComputeBar', data.db_dev_compute_hours || 0.0, 100, 'CU-hrs');
         updateMetricBar('neonDevDbNetwork', 'neonDevDbNetworkBar', data.db_dev_network_gb || 0.0, 5, 'GB');
-        
+
         updateMetricBar('neonDevDwDbCompute', 'neonDevDwDbComputeBar', data.db_dev_dw_compute_hours || 0.0, 100, 'CU-hrs');
         updateMetricBar('neonDevDwDbNetwork', 'neonDevDwDbNetworkBar', data.db_dev_dw_network_gb || 0.0, 5, 'GB');
 
         // PROD 환경 바인딩
         updateMetricBar('neonProdDbCompute', 'neonProdDbComputeBar', data.db_prod_compute_hours || 0.0, 100, 'CU-hrs');
         updateMetricBar('neonProdDbNetwork', 'neonProdDbNetworkBar', data.db_prod_network_gb || 0.0, 5, 'GB');
-        
+
         updateMetricBar('neonProdDwDbCompute', 'neonProdDwDbComputeBar', data.db_prod_dw_compute_hours || 0.0, 100, 'CU-hrs');
         updateMetricBar('neonProdDwDbNetwork', 'neonProdDwDbNetworkBar', data.db_prod_dw_network_gb || 0.0, 5, 'GB');
 
         // APP_ENV에 따라서 DEV 또는 PROD 행만 노출
         const isLocalEnv = (data.environment && (data.environment.toLowerCase() === 'local' || data.environment.toLowerCase() === 'dev'));
-        
+
         // 리밋 도달 시 배너 경고 (각 개별 DB 프로젝트가 100% 이상 한도 도달했는지 체크)
-        const isLimitReached = isLocalEnv 
+        const isLimitReached = isLocalEnv
             ? (
-                (data.db_dev_compute_hours || 0.0) >= 100 || 
+                (data.db_dev_compute_hours || 0.0) >= 100 ||
                 (data.db_dev_network_gb || 0.0) >= 5 ||
-                (data.db_dev_dw_compute_hours || 0.0) >= 100 || 
+                (data.db_dev_dw_compute_hours || 0.0) >= 100 ||
                 (data.db_dev_dw_network_gb || 0.0) >= 5
-              )
+            )
             : (
-                (data.db_prod_compute_hours || 0.0) >= 100 || 
+                (data.db_prod_compute_hours || 0.0) >= 100 ||
                 (data.db_prod_network_gb || 0.0) >= 5 ||
-                (data.db_prod_dw_compute_hours || 0.0) >= 100 || 
+                (data.db_prod_dw_compute_hours || 0.0) >= 100 ||
                 (data.db_prod_dw_network_gb || 0.0) >= 5
-              );
+            );
         if (isLimitReached) {
             document.getElementById('pgStatus').className = 'badge bg-danger text-white';
             document.getElementById('pgStatus').textContent = '리밋 도달';
@@ -385,31 +389,60 @@ async function fetchDbStatus() {
         }
 
         // Cloudinary 상태 및 리소스 반영
-        const cloudOk = data.cloudinary_status === 'healthy';
         const cloudinaryStatusEl = document.getElementById('cloudinaryStatus');
         if (cloudinaryStatusEl) {
-            cloudinaryStatusEl.className = `badge bg-${cloudOk ? 'success' : 'danger'}`;
-            cloudinaryStatusEl.textContent = cloudOk ? '정상' : '오류';
-            
+            if (data.cloudinary_status === 'healthy') {
+                cloudinaryStatusEl.className = 'badge bg-success';
+                cloudinaryStatusEl.textContent = '정상';
+            } else if (data.cloudinary_status === 'rate_limited') {
+                cloudinaryStatusEl.className = 'badge bg-warning text-dark';
+                cloudinaryStatusEl.textContent = 'API 제한';
+            } else {
+                cloudinaryStatusEl.className = 'badge bg-danger';
+                cloudinaryStatusEl.textContent = '오류';
+            }
+
             // 크레딧(Credit) 데이터 바인딩 (음수값 0으로 보정)
             const credUsage = Math.max(0, data.cloudinary_credits_usage || 0.0);
             const credLimit = data.cloudinary_credits_limit || 25.0;
             const credPercent = Math.max(0, data.cloudinary_credits_percent || 0.0);
-            
-            document.getElementById('cloudinaryCreditsUsage').textContent = `${credUsage.toFixed(2)} / ${credLimit.toFixed(0)} (${credPercent.toFixed(1)}%)`;
-            
+
+            let credColorClass = 'text-success';
+            if (credPercent >= 80) credColorClass = 'text-danger fw-bold';
+            else if (credPercent >= 50) credColorClass = 'text-warning fw-bold';
+
+            document.getElementById('cloudinaryCreditsUsage').innerHTML = 
+                `<span>${credUsage.toFixed(2)}</span><span class="text-muted" style="font-size: 0.72rem;"> / ${credLimit.toFixed(0)}</span> <span class="${credColorClass} ms-1" style="font-size: 0.75rem; font-weight: 600;">(${credPercent.toFixed(1)}%)</span>`;
+
             // GB 단위 변환 (usage_bytes / 1024^3) (음수값 0으로 보정)
             const usageBytes = Math.max(0, data.cloudinary_usage_bytes || 0);
             const usageGB = (usageBytes / 1024 / 1024 / 1024).toFixed(3);
-            document.getElementById('cloudinaryUsage').textContent = `${usageGB} GB`;
+            document.getElementById('cloudinaryUsage').innerHTML = `<span>${usageGB} GB</span>`;
+
+            // 대역폭(Bandwidth) 데이터 바인딩
+            const bwUsageBytes = Math.max(0, data.cloudinary_bandwidth_usage_bytes || 0);
+            const bwLimitBytes = data.cloudinary_bandwidth_limit_bytes || (25 * 1024 * 1024 * 1024);
+            const bwUsageGB = (bwUsageBytes / 1024 / 1024 / 1024).toFixed(3);
+            const bwLimitGB = (bwLimitBytes / 1024 / 1024 / 1024).toFixed(0);
+            const bwPercent = Math.max(0, data.cloudinary_bandwidth_percent || 0.0);
             
+            let bwColorClass = 'text-success';
+            if (bwPercent >= 80) bwColorClass = 'text-danger fw-bold';
+            else if (bwPercent >= 50) bwColorClass = 'text-warning fw-bold';
+
+            const bwEl = document.getElementById('cloudinaryBandwidth');
+            if (bwEl) {
+                bwEl.innerHTML = 
+                    `<span>${bwUsageGB}</span><span class="text-muted" style="font-size: 0.72rem;"> / ${bwLimitGB} GB</span> <span class="${bwColorClass} ms-1" style="font-size: 0.75rem; font-weight: 600;">(${bwPercent.toFixed(1)}%)</span>`;
+            }
+
             const resourcesCount = Math.max(0, data.cloudinary_resources_count || 0);
-            document.getElementById('cloudinaryResources').textContent = `${resourcesCount.toLocaleString()}개`;
-            
+            document.getElementById('cloudinaryResources').innerHTML = `<span>${resourcesCount.toLocaleString()}개</span>`;
+
             // 남은 크레딧 계산 및 클래스 바인딩
             const freeCredits = Math.max(0, credLimit - credUsage);
             const freePercent = 100 - credPercent;
-            
+
             const freeEl = document.getElementById('cloudinaryCreditsFree');
             if (freeEl) {
                 freeEl.textContent = `${freeCredits.toFixed(2)} Credit 남음`;
@@ -434,20 +467,48 @@ async function fetchDbStatus() {
                 hfStatusEl.className = `badge bg-${hfOk ? 'success' : 'danger'}`;
                 hfStatusEl.textContent = hfOk ? '정상' : '오류';
             }
-            
+
             document.getElementById('hfModelStatus').textContent = data.hf_model_status || '-';
             document.getElementById('hfLatency').textContent = data.hf_latency_ms ? `${data.hf_latency_ms} ms` : '-';
-            
+
             // Git Storage 사용량 정보 반영 (HuggingFace 콘솔은 10진수 Decimal MB/GB 단위를 사용하므로 10^6 및 10^9 기준으로 계산)
             const hfUsedBytes = data.hf_used_storage_bytes || 0;
             const hfLimitBytes = data.hf_storage_limit_bytes || (1024 * 1024 * 1024);
             const hfUsedMB = (hfUsedBytes / 1000000).toFixed(1);
             const hfLimitGB = (hfLimitBytes / 1000000000).toFixed(0);
-            const hfHw = data.hf_hardware ? ` (${data.hf_hardware})` : '';
-            
+            const hfHw = data.hf_hardware ? ` ${data.hf_hardware}` : '';
+
+            const hfModelEl = document.getElementById('hfModel');
+            if (hfModelEl) {
+                hfModelEl.textContent = data.hf_hardware || '-';
+            }
+
+            const hfStageEl = document.getElementById('hfRuntimeStage');
+            if (hfStageEl) {
+                const stage = data.hf_runtime_stage || 'unknown';
+                hfStageEl.textContent = stage;
+                if (stage.toUpperCase() === 'RUNNING') {
+                    hfStageEl.className = 'text-success fw-bold text-nowrap';
+                } else if (stage.toUpperCase() === 'BUILDING') {
+                    hfStageEl.className = 'text-warning fw-bold text-nowrap';
+                } else {
+                    hfStageEl.className = 'text-danger fw-bold text-nowrap';
+                }
+            }
+
+            const hfResourceEl = document.getElementById('hfResourceUsage');
+            if (hfResourceEl) {
+                const cpu = data.hf_cpu_usage_pct !== undefined ? `${data.hf_cpu_usage_pct.toFixed(0)}%` : '-';
+                const ram_used = data.hf_mem_used_mb !== undefined ? `${(data.hf_mem_used_mb / 1024).toFixed(1)}` : '-';
+                const ram_total = data.hf_mem_total_gb !== undefined ? `${data.hf_mem_total_gb}GB` : '-';
+                hfResourceEl.innerHTML = 
+                    `<span class="text-muted" style="font-size: 0.72rem;">CPU:</span> <span class="text-dark me-2" style="font-size: 0.75rem; font-weight: 600;">${cpu}</span>` +
+                    `<span class="text-muted" style="font-size: 0.72rem;">| RAM:</span> <span class="text-dark" style="font-size: 0.75rem; font-weight: 600;">${ram_used}<span class="text-muted" style="font-size: 0.7rem; font-weight: normal;">/${ram_total}</span></span>`;
+            }
+
             const hfStorageEl = document.getElementById('hfStorageUsage');
             if (hfStorageEl) {
-                hfStorageEl.textContent = `${hfUsedMB} MB / ${hfLimitGB} GB${hfHw}`;
+                hfStorageEl.textContent = `${hfUsedMB} MB / ${hfLimitGB} GB`;
             }
         }
     } catch (e) {
@@ -484,10 +545,10 @@ async function fetchStats() {
         if (count > 0) {
             document.getElementById('avgCpu').innerText = (totalCpu / count).toFixed(1) + '%';
             document.getElementById('avgMem').innerText = (totalMem / count).toFixed(1) + '%';
-            document.getElementById('maxMemVal').innerText    = maxMem.toFixed(0) + ' MB';
+            document.getElementById('maxMemVal').innerText = maxMem.toFixed(0) + ' MB';
             document.getElementById('maxMemDetail').innerText = '사용 1위: ' + maxMemService;
             if (document.getElementById('maxCpuVal')) {
-                document.getElementById('maxCpuVal').innerText    = maxCpu.toFixed(1) + '%';
+                document.getElementById('maxCpuVal').innerText = maxCpu.toFixed(1) + '%';
                 document.getElementById('maxCpuDetail').innerText = '사용 1위: ' + maxCpuService;
             }
         }

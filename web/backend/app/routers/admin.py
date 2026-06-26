@@ -11,7 +11,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 from fastapi import APIRouter, HTTPException, Query
 
-from ..config.admin import SYSTEM_CACHE_TTL, DB_CACHE_TTL
+from ..config.admin import SYSTEM_CACHE_TTL, DB_CACHE_TTL, INFRA_CACHE_TTL
 from ..config import get_settings
 from ..database import get_pg_cursor, get_dw_cursor
 from ..models.admin import (
@@ -45,6 +45,54 @@ router = APIRouter(prefix="/api/admin", tags=["admin"])
 _dashboard_cache: Optional[dict] = None
 _dashboard_cache_time: float = 0
 _DASHBOARD_CACHE_TTL = DB_CACHE_TTL
+
+_system_health_cache: Optional[SystemHealthResponse] = None
+_system_health_bg_task: Optional[asyncio.Task] = None
+
+CACHE_FILE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "system_health_cache.json")
+
+def _save_cache_to_file(data: SystemHealthResponse):
+    try:
+        import json
+        with open(CACHE_FILE_PATH, "w", encoding="utf-8") as f:
+            json.dump(data.model_dump(), f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        logger.warning(f"시스템 헬스 파일 캐시 저장 실패: {e}")
+
+def _load_cache_from_file() -> Optional[SystemHealthResponse]:
+    if not os.path.exists(CACHE_FILE_PATH):
+        return None
+    try:
+        import json
+        with open(CACHE_FILE_PATH, "r", encoding="utf-8") as f:
+            d = json.load(f)
+            return SystemHealthResponse(**d)
+    except Exception as e:
+        logger.warning(f"시스템 헬스 파일 캐시 로드 실패: {e}")
+        return None
+
+
+def start_system_health_tracker():
+    """
+    FastAPI lifespan startup 시점에 직접 비동기 백그라운드 갱신 루프를 기동시킵니다.
+    스레드 풀 외부에서 안전하게 이벤트 루프에 태스크를 등록합니다.
+    """
+    global _system_health_bg_task
+    if _system_health_bg_task is None:
+        try:
+            loop = asyncio.get_running_loop()
+            _system_health_bg_task = loop.create_task(_update_system_health_loop())
+            logger.info("✅ 시스템 헬스 백그라운드 자동 갱신 워커 기동 완료 (10분 주기)")
+        except RuntimeError:
+            logger.warning("⚠️ asyncio 이벤트 루프가 가동 중이지 않아 백그라운드 태스크를 시작하지 못했습니다.")
+
+def stop_system_health_tracker():
+    """FastAPI lifespan shutdown 시점에 백그라운드 태스크를 안전하게 캔슬합니다."""
+    global _system_health_bg_task
+    if _system_health_bg_task:
+        _system_health_bg_task.cancel()
+        _system_health_bg_task = None
+        logger.info("🛑 시스템 헬스 백그라운드 자동 갱신 워커가 중지되었습니다.")
 
 
 # ──────────────────────────────────────
@@ -88,7 +136,71 @@ async def get_system_health_api():
     return _get_system_health()
 
 
+async def _update_system_health_loop():
+    """10분(600초)마다 백그라운드에서 외부 API 상태 정보를 갱신하는 루프"""
+    global _system_health_cache
+    while True:
+        try:
+            loop = asyncio.get_running_loop()
+            result = await loop.run_in_executor(None, _get_system_health_raw)
+            
+            # API 제한(Rate limit) 혹은 조회 에러가 발생한 경우, 캐시가 존재한다면 상태를 복원합니다.
+            # 단, 눈속임하지 않고 실제 수집된 상태('rate_limited' 또는 'error')는 명확히 유지합니다.
+            if result.cloudinary_status in ("rate_limited", "error"):
+                cached_stale = _system_health_cache or _load_cache_from_file()
+                if cached_stale:
+                    result.cloudinary_usage_bytes = cached_stale.cloudinary_usage_bytes
+                    result.cloudinary_bandwidth_usage_bytes = cached_stale.cloudinary_bandwidth_usage_bytes
+                    result.cloudinary_bandwidth_limit_bytes = cached_stale.cloudinary_bandwidth_limit_bytes
+                    result.cloudinary_bandwidth_percent = cached_stale.cloudinary_bandwidth_percent
+                    result.cloudinary_credits_usage = cached_stale.cloudinary_credits_usage
+                    result.cloudinary_credits_limit = cached_stale.cloudinary_credits_limit
+                    result.cloudinary_credits_percent = cached_stale.cloudinary_credits_percent
+                    result.cloudinary_resources_count = cached_stale.cloudinary_resources_count
+                    logger.info(f"⚠️ Cloudinary API 조회 실패({result.cloudinary_status})로 인해 이전 캐시 지표를 보존 표시합니다.")
+                
+            _system_health_cache = result
+            
+            # 수집된 최신 정보를 로컬 캐시 파일에 갱신 저장
+            _save_cache_to_file(result)
+                
+        except asyncio.CancelledError:
+            logger.info("🛑 시스템 헬스 백그라운드 자동 갱신 워커 루프 종료")
+            break
+        except Exception as e:
+            logger.error(f"백그라운드 시스템 상태 갱신 실패: {e}")
+        
+        # 10분(600초) 대기
+        await asyncio.sleep(600)
+
+
 def _get_system_health() -> SystemHealthResponse:
+    """
+    메모리 또는 로컬 파일의 캐시를 즉시 리턴하여 동기 API 호출로 인한 대기 시간을 0ms로 줄입니다.
+    외부 API 호출은 오직 lifespan에 기동되는 백그라운드 루프에서만 수행되므로,
+    Uvicorn 리로드 시에도 캐시 Stampede나 동기 딜레이가 전혀 발생하지 않습니다.
+    """
+    global _system_health_cache
+    
+    # 1. 메모리 캐시가 날아갔다면 우선 로컬 파일 캐시로부터의 복원 시도
+    if _system_health_cache is None:
+        _system_health_cache = _load_cache_from_file()
+        
+    # 2. 만약 최초 서버 구동 시점에 파일 캐시도 존재하지 않는 극단적 케이스의 경우,
+    #    사용자 대기 방지를 위해 기본 형태의 빈 응답 객체(unknown 상태)를 반환하고
+    #    백그라운드에서 바로 갱신되도록 유도합니다. (즉, 동기 호출로 블로킹하지 않음)
+    if _system_health_cache is None:
+        _system_health_cache = SystemHealthResponse(
+            server_status="healthy",
+            db_status="unknown",
+            cloudinary_status="unknown",
+            hf_status="unknown"
+        )
+
+    return _system_health_cache
+
+
+def _get_system_health_raw() -> SystemHealthResponse:
     settings = get_settings()
     
     # 1. PostgreSQL DB 정보 조회 (활성 연결)
@@ -298,6 +410,9 @@ def _get_system_health() -> SystemHealthResponse:
     # 2. Cloudinary 정보 조회
     cloudinary_status = "healthy"
     cloudinary_usage_bytes = 0
+    cloudinary_bandwidth_usage_bytes = 0
+    cloudinary_bandwidth_limit_bytes = 25 * 1024 * 1024 * 1024
+    cloudinary_bandwidth_percent = 0.0
     cloudinary_resources_count = 0
     cloudinary_credits_usage = 0.0
     cloudinary_credits_limit = 25.0
@@ -321,14 +436,24 @@ def _get_system_health() -> SystemHealthResponse:
         # usage["storage"]["usage"]는 바이트 단위 크기이므로 그대로 대입
         cloudinary_usage_bytes = usage.get("storage", {}).get("usage", 0)
         
+        # 대역폭(Bandwidth) 정보 획득
+        bandwidth_info = usage.get("bandwidth", {})
+        cloudinary_bandwidth_usage_bytes = bandwidth_info.get("usage", 0)
+        cloudinary_bandwidth_limit_bytes = bandwidth_info.get("limit", 25 * 1024 * 1024 * 1024)
+        cloudinary_bandwidth_percent = bandwidth_info.get("used_percent", 0.0)
+        
         # 크레딧(Credit) 사용량 정보 획득
         credits_info = usage.get("credits", {})
         cloudinary_credits_usage = credits_info.get("usage", 0.0)
         cloudinary_credits_limit = credits_info.get("limit", 25.0)
         cloudinary_credits_percent = credits_info.get("used_percent", 0.0)
     except Exception as e:
-        logger.warning(f"Cloudinary 상태 조회 실패: {e}")
-        cloudinary_status = "error"
+        logger.error(f"Cloudinary 상태 조회 실패: {e}", exc_info=True)
+        err_msg = str(e).lower()
+        if "rate limit" in err_msg or "420" in err_msg:
+            cloudinary_status = "rate_limited"
+        else:
+            cloudinary_status = "error"
 
     # 3. HuggingFace Space 정보 조회
     hf_status = "healthy"
@@ -336,6 +461,10 @@ def _get_system_health() -> SystemHealthResponse:
     hf_latency_ms = 0.0
     hf_used_storage_bytes = 0
     hf_hardware = ""
+    hf_runtime_stage = "unknown"
+    hf_cpu_usage_pct = 0.0
+    hf_mem_used_mb = 0.0
+    hf_mem_total_gb = 0.0
     try:
         import httpx
         hf_url = settings.HF_SPACE_URL
@@ -350,7 +479,6 @@ def _get_system_health() -> SystemHealthResponse:
                     hf_status = "sleeping"
             
             # HuggingFace API를 통해 Space 세부 정보를 조회합니다.
-            # URL 예: https://huggingface.co/api/spaces/daniel0708/lookalike-yolo
             # settings.HF_TOKEN이 존재하는 경우 사용합니다.
             if settings.HF_TOKEN and "daniel0708-lookalike-yolo" in hf_url:
                 try:
@@ -361,8 +489,26 @@ def _get_system_health() -> SystemHealthResponse:
                         api_data = api_resp.json()
                         hf_used_storage_bytes = api_data.get("usedStorage", 0)
                         hf_hardware = api_data.get("runtime", {}).get("hardware", {}).get("current", "")
+                        hf_runtime_stage = api_data.get("runtime", {}).get("stage", "unknown")
                 except Exception as api_err:
                     logger.warning(f"HuggingFace Space API 조회 에러: {api_err}")
+
+                # Server-Sent Events (SSE) 실시간 하드웨어 메트릭 수집 (CPU, RAM 사용량 및 전체 용량)
+                try:
+                    metrics_url = "https://huggingface.co/api/spaces/daniel0708/lookalike-yolo/metrics"
+                    metrics_headers = {"Authorization": f"Bearer {settings.HF_TOKEN}"}
+                    with httpx.stream("GET", metrics_url, headers=metrics_headers, timeout=1.5) as r:
+                        if r.status_code == 200:
+                            for line in r.iter_lines():
+                                if line.startswith("data: "):
+                                    import json
+                                    m_data = json.loads(line[6:])
+                                    hf_cpu_usage_pct = m_data.get("cpu_usage_pct", 0.0)
+                                    hf_mem_used_mb = round(m_data.get("memory_used_bytes", 0) / 1024 / 1024, 1)
+                                    hf_mem_total_gb = round(m_data.get("memory_total_bytes", 0) / 1024 / 1024 / 1024, 1)
+                                    break
+                except Exception as met_err:
+                    logger.warning(f"HuggingFace Space Metrics API 조회 에러: {met_err}")
         else:
             hf_status = "disabled"
             hf_model_status = "disabled"
@@ -396,6 +542,9 @@ def _get_system_health() -> SystemHealthResponse:
         cloudinary_status=cloudinary_status,
         cloudinary_usage_bytes=cloudinary_usage_bytes,
         cloudinary_limit_bytes=25 * 1024 * 1024 * 1024, # 25 GB
+        cloudinary_bandwidth_usage_bytes=cloudinary_bandwidth_usage_bytes,
+        cloudinary_bandwidth_limit_bytes=cloudinary_bandwidth_limit_bytes,
+        cloudinary_bandwidth_percent=cloudinary_bandwidth_percent,
         cloudinary_credits_usage=cloudinary_credits_usage,
         cloudinary_credits_limit=cloudinary_credits_limit,
         cloudinary_credits_percent=cloudinary_credits_percent,
@@ -405,6 +554,10 @@ def _get_system_health() -> SystemHealthResponse:
         hf_latency_ms=hf_latency_ms,
         hf_used_storage_bytes=hf_used_storage_bytes,
         hf_hardware=hf_hardware,
+        hf_runtime_stage=hf_runtime_stage,
+        hf_cpu_usage_pct=hf_cpu_usage_pct,
+        hf_mem_used_mb=hf_mem_used_mb,
+        hf_mem_total_gb=hf_mem_total_gb,
     )
 
 

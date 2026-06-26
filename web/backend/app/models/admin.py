@@ -99,6 +99,9 @@ class SystemHealthResponse(BaseModel):
     cloudinary_status: str = "unknown"
     cloudinary_usage_bytes: int = 0
     cloudinary_limit_bytes: int = 25 * 1024 * 1024 * 1024 # 무료 플랜 기본 25 GB
+    cloudinary_bandwidth_usage_bytes: int = 0
+    cloudinary_bandwidth_limit_bytes: int = 25 * 1024 * 1024 * 1024 # 무료 플랜 기본 25 GB
+    cloudinary_bandwidth_percent: Optional[float] = 0.0
     cloudinary_credits_usage: Optional[float] = 0.0 # 크레딧 기반 실제 사용량 (18.49 등)
     cloudinary_credits_limit: Optional[float] = 25.0 # 크레딧 제한 (25)
     cloudinary_credits_percent: Optional[float] = 0.0 # 크레딧 사용률 %
@@ -111,6 +114,10 @@ class SystemHealthResponse(BaseModel):
     hf_used_storage_bytes: Optional[int] = 0
     hf_storage_limit_bytes: Optional[int] = 1 * 1024 * 1024 * 1024 # 1 GB
     hf_hardware: Optional[str] = ""
+    hf_runtime_stage: Optional[str] = "unknown"
+    hf_cpu_usage_pct: Optional[float] = 0.0
+    hf_mem_used_mb: Optional[float] = 0.0
+    hf_mem_total_gb: Optional[float] = 0.0
 
 
 

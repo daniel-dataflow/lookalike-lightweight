@@ -407,39 +407,8 @@ class SearchService:
 
     @staticmethod
     def get_local_fallback_url(img_url: str) -> Optional[str]:
-        """Cloudinary URL 또는 원본 경로에서 로컬 Fallback URL (/raw/...) 생성"""
-        if not img_url:
-            return None
-            
-        if img_url.startswith("http"):
-            # Cloudinary URL에서 정보 추출 (products/brand/image/filename.webp)
-            try:
-                # 클라우디너리 URL에서 파일명 추출 (마지막 슬래시 이후)
-                filename = img_url.split("/")[-1].replace(".webp", ".jpg")
-                
-                # 파일명에서 브랜드 추출 (예: musinsa_men_top_abc.jpg)
-                if "_" in filename:
-                    brand = filename.split("_")[0]
-                    # 브랜드명 예외 처리
-                    if brand == "8세컨즈": brand = "8seconds"
-                    return f"/raw/{brand}/image/{filename}"
-                
-                return f"/raw/{filename}"
-            except Exception:
-                pass
-            return None
-        else:
-            # 이미 로컬 경로인 경우 (/raw/brand/image/file.jpg)
-            if img_url.startswith("/raw/"):
-                return img_url
-                
-            # 파일명만 있는 경우 (예: 8seconds_men_top_abc.jpg)
-            clean_path = img_url.lstrip("./").lstrip("/")
-            if "_" in clean_path:
-                brand = clean_path.split("_")[0]
-                return f"/raw/{brand}/image/{clean_path}"
-                
-            return f"/raw/{clean_path}"
+        """로컬 우회를 완전히 제거하고 실제 저장된 URL(Cloudinary)을 그대로 반환합니다."""
+        return img_url
 
     def _search_by_db(self, category, gender, limit: int) -> list:
         """Fallback: 카테고리/성별 기반 검색 + similarity score 할당"""

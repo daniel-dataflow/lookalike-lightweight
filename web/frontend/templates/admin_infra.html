@@ -125,7 +125,7 @@
 
 <!-- 데이터베이스 상태 -->
 <div class="row g-3 mb-4">
-    <div class="col-md-6 col-12">
+    <div class="col-12 col-xxl-6">
         <div class="card border-0 shadow-sm h-100">
             <div class="card-body">
                 <div class="d-flex justify-content-between align-items-center mb-3">
@@ -144,7 +144,7 @@
                                 <tr class="text-muted border-bottom" style="font-size: 0.75rem;">
                                     <th style="min-width: 90px;" class="text-nowrap">구분 (환경)</th>
                                     <th style="min-width: 100px;" class="text-nowrap">상태 (Neon)</th>
-                                    <th style="min-width: 80px;" class="text-end text-nowrap">용량 (0.5GB)</th>
+                                    <th style="min-width: 80px;" class="text-end text-nowrap">용량 (500MB)</th>
                                     <th style="min-width: 130px;" class="text-end text-nowrap">Compute (100 CU)</th>
                                     <th style="min-width: 110px;" class="text-end text-nowrap">Network (5GB)</th>
                                 </tr>
@@ -154,49 +154,61 @@
                                 {% if settings.APP_ENV in ['local', 'dev'] %}
                                 <tr id="neonDevRowGroup1" class="border-bottom-0">
                                     <td class="fw-bold text-success text-nowrap align-middle">개발 DB</td>
-                                    <td class="text-nowrap align-middle"><span class="badge badge-sm" id="neonDevDbBadge">-</span> DEV_DB</td>
-                                    <td class="text-end fw-bold text-dark text-nowrap align-middle" id="neonDevDbSize">-</td>
+                                    <td class="text-nowrap align-middle"><span class="badge badge-sm"
+                                            id="neonDevDbBadge">-</span> DEV_DB</td>
+                                    <td class="text-end text-muted text-nowrap align-middle" id="neonDevDbSize">-</td>
                                     <td class="text-end align-middle">
                                         <div class="d-flex flex-column align-items-end justify-content-center">
                                             <span class="fw-bold text-nowrap" id="neonDevDbCompute">-</span>
-                                            <div class="progress w-100 d-none d-md-flex" style="height: 4px; margin-top: 2px; background-color: #e9ecef;">
-                                                <div id="neonDevDbComputeBar" class="progress-bar bg-success" style="width: 0%"></div>
+                                            <div class="progress d-none d-md-flex"
+                                                style="width: 130px; height: 4px; margin-top: 2px; background-color: #e9ecef;">
+                                                <div id="neonDevDbComputeBar" class="progress-bar bg-success"
+                                                    style="width: 0%"></div>
                                             </div>
                                         </div>
                                     </td>
                                     <td class="text-end align-middle">
                                         <div class="d-flex flex-column align-items-end justify-content-center">
                                             <span class="fw-bold text-nowrap" id="neonDevDbNetwork">-</span>
-                                            <div class="progress w-100 d-none d-md-flex" style="height: 4px; margin-top: 2px; background-color: #e9ecef;">
-                                                <div id="neonDevDbNetworkBar" class="progress-bar bg-success" style="width: 0%"></div>
+                                            <div class="progress d-none d-md-flex"
+                                                style="width: 130px; height: 4px; margin-top: 2px; background-color: #e9ecef;">
+                                                <div id="neonDevDbNetworkBar" class="progress-bar bg-success"
+                                                    style="width: 0%"></div>
                                             </div>
                                         </div>
                                     </td>
                                 </tr>
                                 <tr id="neonDevRowGroup2">
                                     <td class="fw-bold text-success text-nowrap align-middle">로그&크롤링 DB</td>
-                                    <td class="text-nowrap align-middle"><span class="badge badge-sm" id="neonDevDwDbBadge">-</span> DEV_DW_DB</td>
-                                    <td class="text-end fw-bold text-dark text-nowrap align-middle" id="neonDevDwDbSize">-</td>
+                                    <td class="text-nowrap align-middle"><span class="badge badge-sm"
+                                            id="neonDevDwDbBadge">-</span> DEV_DW_DB</td>
+                                    <td class="text-end text-muted text-nowrap align-middle"
+                                        id="neonDevDwDbSize">-</td>
                                     <td class="text-end align-middle">
                                         <div class="d-flex flex-column align-items-end justify-content-center">
                                             <span class="fw-bold text-nowrap" id="neonDevDwDbCompute">-</span>
-                                            <div class="progress w-100 d-none d-md-flex" style="height: 4px; margin-top: 2px; background-color: #e9ecef;">
-                                                <div id="neonDevDwDbComputeBar" class="progress-bar bg-success" style="width: 0%"></div>
+                                            <div class="progress d-none d-md-flex"
+                                                style="width: 130px; height: 4px; margin-top: 2px; background-color: #e9ecef;">
+                                                <div id="neonDevDwDbComputeBar" class="progress-bar bg-success"
+                                                    style="width: 0%"></div>
                                             </div>
                                         </div>
                                     </td>
                                     <td class="text-end align-middle">
                                         <div class="d-flex flex-column align-items-end justify-content-center">
                                             <span class="fw-bold text-nowrap" id="neonDevDwDbNetwork">-</span>
-                                            <div class="progress w-100 d-none d-md-flex" style="height: 4px; margin-top: 2px; background-color: #e9ecef;">
-                                                <div id="neonDevDwDbNetworkBar" class="progress-bar bg-success" style="width: 0%"></div>
+                                            <div class="progress d-none d-md-flex"
+                                                style="width: 130px; height: 4px; margin-top: 2px; background-color: #e9ecef;">
+                                                <div id="neonDevDwDbNetworkBar" class="progress-bar bg-success"
+                                                    style="width: 0%"></div>
                                             </div>
                                         </div>
                                     </td>
                                 </tr>
                                 <tr id="neonDevRowGroup3" class="table-light border-top">
                                     <td colspan="2" class="text-muted fw-bold text-nowrap align-middle">DEV 합계</td>
-                                    <td class="text-end fw-bold text-success text-nowrap align-middle" id="neonDevTotalSize">-</td>
+                                    <td class="text-end fw-bold text-success text-nowrap align-middle"
+                                        id="neonDevTotalSize">-</td>
                                     <td class="text-end text-muted text-nowrap align-middle">-</td>
                                     <td class="text-end text-muted text-nowrap align-middle">-</td>
                                 </tr>
@@ -204,49 +216,61 @@
                                 <!-- PROD 환경 (APP_ENV가 prod 또는 production일 때만 노출) -->
                                 <tr id="neonProdRowGroup1" class="border-bottom-0">
                                     <td class="fw-bold text-primary text-nowrap align-middle">운영 DB</td>
-                                    <td class="text-nowrap align-middle"><span class="badge badge-sm" id="neonProdDbBadge">-</span> PROD_DB</td>
-                                    <td class="text-end fw-bold text-dark text-nowrap align-middle" id="neonProdDbSize">-</td>
+                                    <td class="text-nowrap align-middle"><span class="badge badge-sm"
+                                            id="neonProdDbBadge">-</span> PROD_DB</td>
+                                    <td class="text-end text-muted text-nowrap align-middle" id="neonProdDbSize">-</td>
                                     <td class="text-end align-middle">
                                         <div class="d-flex flex-column align-items-end justify-content-center">
                                             <span class="fw-bold text-nowrap" id="neonProdDbCompute">-</span>
-                                            <div class="progress w-100 d-none d-md-flex" style="height: 4px; margin-top: 2px; background-color: #e9ecef;">
-                                                <div id="neonProdDbComputeBar" class="progress-bar bg-success" style="width: 0%"></div>
+                                            <div class="progress d-none d-md-flex"
+                                                style="width: 130px; height: 4px; margin-top: 2px; background-color: #e9ecef;">
+                                                <div id="neonProdDbComputeBar" class="progress-bar bg-success"
+                                                    style="width: 0%"></div>
                                             </div>
                                         </div>
                                     </td>
                                     <td class="text-end align-middle">
                                         <div class="d-flex flex-column align-items-end justify-content-center">
                                             <span class="fw-bold text-nowrap" id="neonProdDbNetwork">-</span>
-                                            <div class="progress w-100 d-none d-md-flex" style="height: 4px; margin-top: 2px; background-color: #e9ecef;">
-                                                <div id="neonProdDbNetworkBar" class="progress-bar bg-success" style="width: 0%"></div>
+                                            <div class="progress d-none d-md-flex"
+                                                style="width: 130px; height: 4px; margin-top: 2px; background-color: #e9ecef;">
+                                                <div id="neonProdDbNetworkBar" class="progress-bar bg-success"
+                                                    style="width: 0%"></div>
                                             </div>
                                         </div>
                                     </td>
                                 </tr>
                                 <tr id="neonProdRowGroup2">
                                     <td class="fw-bold text-primary text-nowrap align-middle">로그&크롤링 DB</td>
-                                    <td class="text-nowrap align-middle"><span class="badge badge-sm" id="neonProdDwDbBadge">-</span> PROD_DW_DB</td>
-                                    <td class="text-end fw-bold text-dark text-nowrap align-middle" id="neonProdDwDbSize">-</td>
+                                    <td class="text-nowrap align-middle"><span class="badge badge-sm"
+                                            id="neonProdDwDbBadge">-</span> PROD_DW_DB</td>
+                                    <td class="text-end text-muted text-nowrap align-middle"
+                                        id="neonProdDwDbSize">-</td>
                                     <td class="text-end align-middle">
                                         <div class="d-flex flex-column align-items-end justify-content-center">
                                             <span class="fw-bold text-nowrap" id="neonProdDwDbCompute">-</span>
-                                            <div class="progress w-100 d-none d-md-flex" style="height: 4px; margin-top: 2px; background-color: #e9ecef;">
-                                                <div id="neonProdDwDbComputeBar" class="progress-bar bg-success" style="width: 0%"></div>
+                                            <div class="progress d-none d-md-flex"
+                                                style="width: 130px; height: 4px; margin-top: 2px; background-color: #e9ecef;">
+                                                <div id="neonProdDwDbComputeBar" class="progress-bar bg-success"
+                                                    style="width: 0%"></div>
                                             </div>
                                         </div>
                                     </td>
                                     <td class="text-end align-middle">
                                         <div class="d-flex flex-column align-items-end justify-content-center">
                                             <span class="fw-bold text-nowrap" id="neonProdDwDbNetwork">-</span>
-                                            <div class="progress w-100 d-none d-md-flex" style="height: 4px; margin-top: 2px; background-color: #e9ecef;">
-                                                <div id="neonProdDwDbNetworkBar" class="progress-bar bg-success" style="width: 0%"></div>
+                                            <div class="progress d-none d-md-flex"
+                                                style="width: 130px; height: 4px; margin-top: 2px; background-color: #e9ecef;">
+                                                <div id="neonProdDwDbNetworkBar" class="progress-bar bg-success"
+                                                    style="width: 0%"></div>
                                             </div>
                                         </div>
                                     </td>
                                 </tr>
                                 <tr id="neonProdRowGroup3" class="table-light border-top">
                                     <td colspan="2" class="text-muted fw-bold text-nowrap align-middle">PROD 합계</td>
-                                    <td class="text-end fw-bold text-primary text-nowrap align-middle" id="neonProdTotalSize">-</td>
+                                    <td class="text-end fw-bold text-primary text-nowrap align-middle"
+                                        id="neonProdTotalSize">-</td>
                                     <td class="text-end text-muted text-nowrap align-middle">-</td>
                                     <td class="text-end text-muted text-nowrap align-middle">-</td>
                                 </tr>
@@ -258,21 +282,25 @@
             </div>
         </div>
     </div>
-    <div class="col-md-3 col-12">
+    <div class="col-12 col-md-6 col-xxl-3">
         <div class="card border-0 shadow-sm h-100">
-            <div class="card-body">
+            <div class="card-body d-flex flex-column">
                 <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h6 class="mb-0 fw-bold"><i class="fas fa-cloud me-2 text-info"></i>Cloudinary 이미지</h6>
+                    <h6 class="mb-0 fw-bold"><i class="fas fa-cloud me-2 text-info"></i>Cloudinary 이미지 <small class="text-muted" style="font-size: 0.75rem;">(30일 기준)</small></h6>
                     <span id="cloudinaryStatus" class="badge bg-secondary">확인 중</span>
                 </div>
-                <div id="cloudinaryDetails">
+                <div id="cloudinaryDetails" class="flex-grow-1 d-flex flex-column" style="overflow-x: auto;">
                     <div class="d-flex justify-content-between align-items-center mb-2 gap-2">
-                        <span class="text-muted text-nowrap">Credit 사용량 (30일)</span>
-                        <span class="fw-bold text-dark text-nowrap" id="cloudinaryCreditsUsage">-</span>
+                        <span class="text-muted text-nowrap">Credit 사용량</span>
+                        <span class="text-nowrap" id="cloudinaryCreditsUsage">-</span>
                     </div>
                     <div class="d-flex justify-content-between align-items-center mb-2 gap-2">
                         <span class="text-muted text-nowrap">실제 저장 용량</span>
                         <span class="text-nowrap" id="cloudinaryUsage">-</span>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center mb-2 gap-2">
+                        <span class="text-muted text-nowrap">실시간 대역폭</span>
+                        <span class="text-nowrap" id="cloudinaryBandwidth">-</span>
                     </div>
                     <div class="d-flex justify-content-between align-items-center mb-2 gap-2">
                         <span class="text-muted text-nowrap">업로드 수</span>
@@ -286,18 +314,30 @@
             </div>
         </div>
     </div>
-    <div class="col-md-3 col-12">
+    <div class="col-12 col-md-6 col-xxl-3">
         <div class="card border-0 shadow-sm h-100">
-            <div class="card-body">
+            <div class="card-body d-flex flex-column">
                 <div class="d-flex justify-content-between align-items-center mb-3">
                     <h6 class="mb-0 fw-bold"><i class="fas fa-brain me-2 text-violet"
                             style="color: #8E44AD;"></i>HuggingFace Space</h6>
                     <span id="hfStatus" class="badge bg-secondary">확인 중</span>
                 </div>
-                <div id="hfDetails">
+                <div id="hfDetails" class="flex-grow-1 d-flex flex-column" style="overflow-x: auto;">
+                    <div class="d-flex justify-content-between align-items-center mb-2 gap-2">
+                        <span class="text-muted text-nowrap">사용 모델</span>
+                        <span class="text-nowrap" id="hfModel">-</span>
+                    </div>
                     <div class="d-flex justify-content-between align-items-center mb-2 gap-2">
                         <span class="text-muted text-nowrap">모델 API 상태</span>
                         <span class="text-nowrap" id="hfModelStatus">-</span>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center mb-2 gap-2">
+                        <span class="text-muted text-nowrap">런타임 상태</span>
+                        <span class="text-nowrap" id="hfRuntimeStage">-</span>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center mb-2 gap-2">
+                        <span class="text-muted text-nowrap">실시간 자원</span>
+                        <span class="text-nowrap" id="hfResourceUsage">-</span>
                     </div>
                     <div class="d-flex justify-content-between align-items-center mb-2 gap-2">
                         <span class="text-muted text-nowrap">호출 응답 속도</span>
