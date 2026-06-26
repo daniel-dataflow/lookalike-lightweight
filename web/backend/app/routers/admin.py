@@ -1584,7 +1584,7 @@ def _register_admin_ip(ip: str):
             if ip in ["127.0.0.1", "localhost", "::1"]:
                 memo = "Localhost (Auto)"
             else:
-                memo = "KT-iptime" if ip.startswith("220.116.") else "Auto-Registered"
+                memo = "Auto-Registered"
             with get_pg_cursor() as cur:
                 cur.execute("""
                     INSERT INTO owner_ips (ip_address, memo)
@@ -1652,17 +1652,6 @@ def _get_ip_geo(ip_address: str) -> dict:
             "isp": "Local Loopback",
             "lat": 37.5665,
             "lng": 126.9780
-        }
-    
-    # 관리자 KT IP 및 특정 대역 모사
-    if ip_address.startswith("220.116."):
-        return {
-            "country": "South Korea",
-            "city": "Gangbuk-gu",
-            "timezone": "Asia/Seoul",
-            "isp": "Korea Telecom",
-            "lat": 37.6396,
-            "lng": 127.0256
         }
     
     # 다양한 IP 분포 매핑
@@ -1977,9 +1966,7 @@ async def get_visitors_realtime(request: Request):
                 if ip and ip != "Unknown":
                     _register_admin_ip(ip)
                     
-            memo = "KT-iptime" if ip.startswith("220.116.") else ""
-            if is_owner and not memo:
-                memo = "OWNER-Session"
+            memo = "OWNER-Session" if is_owner else ""
                 
             realtime_logs.append({
                 "ip": ip,
@@ -2070,7 +2057,7 @@ async def get_visitors_geo(
             tz = geo["timezone"]
             
             # 카테고리별 누적 집계 헬퍼
-            def accumulate(target):
+            def accumulate(target, is_owner_pin):
                 target["countries"][c] = target["countries"].get(c, 0) + count
                 target["cities"][city] = target["cities"].get(city, 0) + count
                 target["isps"][isp] = target["isps"].get(isp, 0) + count
@@ -2081,17 +2068,18 @@ async def get_visitors_geo(
                     "isp": isp,
                     "lat": geo["lat"],
                     "lng": geo["lng"],
-                    "count": count
+                    "count": count,
+                    "is_owner": is_owner_pin
                 })
                 
             # 1. 전체 누적
-            accumulate(geo_data["all"])
+            accumulate(geo_data["all"], is_owner)
             
             # 2. 분기 누적
             if is_owner:
-                accumulate(geo_data["owner"])
+                accumulate(geo_data["owner"], True)
             else:
-                accumulate(geo_data["general"])
+                accumulate(geo_data["general"], False)
                 
         # Top 5 랭킹 정렬 변환
         def finalize_data(target):

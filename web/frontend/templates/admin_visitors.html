@@ -785,11 +785,7 @@
             // OWNER 배지 및 KT-iptime 여부
             let ipLabel = `<strong>${escapeHtml(s.ip)}</strong>`;
             if (s.is_owner) {
-                if (s.ip.startsWith("220.116.")) {
-                    ipLabel += ` <span class="badge bg-danger ms-1" style="font-size:0.7rem;">KT-iptime / OWNER</span>`;
-                } else {
-                    ipLabel += ` <span class="badge bg-warning text-dark ms-1" style="font-size:0.7rem;">OWNER</span>`;
-                }
+                ipLabel += ` <span class="badge bg-warning text-dark ms-1" style="font-size:0.7rem;">OWNER</span>`;
             }
 
             // 기기 아이콘 매핑
@@ -922,13 +918,8 @@
                 let ipLabel = `<strong>${escapeHtml(log.ip)}</strong>`;
                 let rowBg = "";
                 if (log.is_owner) {
-                    if (log.ip.startsWith("220.116.")) {
-                        ipLabel += ` <span class="badge bg-danger ms-1" style="font-size:0.65rem;">OWNER</span>`;
-                        rowBg = `style="background-color: rgba(220, 53, 69, 0.03);"`;
-                    } else {
-                        ipLabel += ` <span class="badge bg-warning text-dark ms-1" style="font-size:0.65rem;">OWNER</span>`;
-                        rowBg = `style="background-color: rgba(255, 193, 7, 0.03);"`;
-                    }
+                    ipLabel += ` <span class="badge bg-warning text-dark ms-1" style="font-size:0.65rem;">OWNER</span>`;
+                    rowBg = `style="background-color: rgba(255, 193, 7, 0.03);"`;
                 }
 
                 // 기기 아이콘 매핑
@@ -1057,7 +1048,7 @@
                 const dynamicRadius = baseRadius + Math.min(pin.count * 1.5, 30);
                 
                 // 마커 스타일 정의
-                let isOwnerIp = pin.ip.startsWith("220.116.") || (pin.isp === "Local Loopback");
+                let isOwnerIp = pin.is_owner || (pin.isp === "Local Loopback");
                 let color = isOwnerIp ? "#dc3545" : "#0d6efd";  // OWNER는 빨강, 유저는 파랑
 
                 const marker = L.circleMarker([pin.lat, pin.lng], {
