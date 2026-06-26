@@ -84,6 +84,16 @@ class SystemHealthResponse(BaseModel):
     db_prod_dw_size_mb: Optional[float] = 0.0
     db_prod_total_size_mb: Optional[float] = 0.0
     db_urls_neon_status: Dict[str, str] = {} # 각 DB URL이 Neon DB를 바라보고 있는지 여부 ("Neon" | "Other" | "Error")
+    
+    # Neon DB Compute / Network 소비 상세 필드
+    db_dev_compute_hours: Optional[float] = 0.0
+    db_dev_network_gb: Optional[float] = 0.0
+    db_dev_dw_compute_hours: Optional[float] = 0.0
+    db_dev_dw_network_gb: Optional[float] = 0.0
+    db_prod_compute_hours: Optional[float] = 0.0
+    db_prod_network_gb: Optional[float] = 0.0
+    db_prod_dw_compute_hours: Optional[float] = 0.0
+    db_prod_dw_network_gb: Optional[float] = 0.0
 
     # Cloudinary 이미지 저장소 정보
     cloudinary_status: str = "unknown"

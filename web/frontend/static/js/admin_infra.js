@@ -257,8 +257,6 @@ async function fetchDbStatus() {
 
         // PostgreSQL
         const pgOk = data.db_status === 'healthy';
-        document.getElementById('pgStatus').className = `badge bg-${pgOk ? 'success' : 'danger'}`;
-        document.getElementById('pgStatus').textContent = pgOk ? '정상' : '오류';
         document.getElementById('pgConnections').textContent = data.db_active_connections || '-';
         
         // Neon DB 세부 정보 바인딩
@@ -299,8 +297,67 @@ async function fetchDbStatus() {
         setElText('neonProdDwDbSize', data.db_prod_dw_size_mb ? `${data.db_prod_dw_size_mb} MB` : '0.0 MB');
         setElText('neonProdTotalSize', data.db_prod_total_size_mb ? `${data.db_prod_total_size_mb} MB` : '0.0 MB');
 
+        // Neon DB Compute / Network 바인딩 및 게이지 렌더러
+        const updateMetricBar = (textId, barId, value, limit, unit) => {
+            const textEl = document.getElementById(textId);
+            const barEl = document.getElementById(barId);
+            if (!textEl || !barEl) return;
+            
+            textEl.textContent = `${value} / ${limit} ${unit}`;
+            
+            // 퍼센트 계산
+            const pct = limit > 0 ? Math.min(100, (value / limit) * 100) : 0;
+            barEl.style.width = `${pct}%`;
+            
+            // 임계치 색상 변경 (80% 이상 warning, 100% 이상 danger)
+            if (pct >= 100) {
+                barEl.className = 'progress-bar bg-danger';
+            } else if (pct >= 80) {
+                barEl.className = 'progress-bar bg-warning';
+            } else {
+                barEl.className = 'progress-bar bg-success';
+            }
+        };
+
+        // DEV 환경 바인딩
+        updateMetricBar('neonDevDbCompute', 'neonDevDbComputeBar', data.db_dev_compute_hours || 0.0, 100, 'CU-hrs');
+        updateMetricBar('neonDevDbNetwork', 'neonDevDbNetworkBar', data.db_dev_network_gb || 0.0, 5, 'GB');
+        
+        updateMetricBar('neonDevDwDbCompute', 'neonDevDwDbComputeBar', data.db_dev_dw_compute_hours || 0.0, 100, 'CU-hrs');
+        updateMetricBar('neonDevDwDbNetwork', 'neonDevDwDbNetworkBar', data.db_dev_dw_network_gb || 0.0, 5, 'GB');
+
+        // PROD 환경 바인딩
+        updateMetricBar('neonProdDbCompute', 'neonProdDbComputeBar', data.db_prod_compute_hours || 0.0, 100, 'CU-hrs');
+        updateMetricBar('neonProdDbNetwork', 'neonProdDbNetworkBar', data.db_prod_network_gb || 0.0, 5, 'GB');
+        
+        updateMetricBar('neonProdDwDbCompute', 'neonProdDwDbComputeBar', data.db_prod_dw_compute_hours || 0.0, 100, 'CU-hrs');
+        updateMetricBar('neonProdDwDbNetwork', 'neonProdDwDbNetworkBar', data.db_prod_dw_network_gb || 0.0, 5, 'GB');
+
         // APP_ENV에 따라서 DEV 또는 PROD 행만 노출
         const isLocalEnv = (data.environment && (data.environment.toLowerCase() === 'local' || data.environment.toLowerCase() === 'dev'));
+        
+        // 리밋 도달 시 배너 경고 (각 개별 DB 프로젝트가 100% 이상 한도 도달했는지 체크)
+        const isLimitReached = isLocalEnv 
+            ? (
+                (data.db_dev_compute_hours || 0.0) >= 100 || 
+                (data.db_dev_network_gb || 0.0) >= 5 ||
+                (data.db_dev_dw_compute_hours || 0.0) >= 100 || 
+                (data.db_dev_dw_network_gb || 0.0) >= 5
+              )
+            : (
+                (data.db_prod_compute_hours || 0.0) >= 100 || 
+                (data.db_prod_network_gb || 0.0) >= 5 ||
+                (data.db_prod_dw_compute_hours || 0.0) >= 100 || 
+                (data.db_prod_dw_network_gb || 0.0) >= 5
+              );
+        if (isLimitReached) {
+            document.getElementById('pgStatus').className = 'badge bg-danger text-white';
+            document.getElementById('pgStatus').textContent = '리밋 도달';
+        } else {
+            document.getElementById('pgStatus').className = `badge bg-${pgOk ? 'success' : 'danger'}`;
+            document.getElementById('pgStatus').textContent = pgOk ? '정상' : '오류';
+        }
+
         const devElements = ['neonDevRowGroup1', 'neonDevRowGroup2', 'neonDevRowGroup3'];
         const prodElements = ['neonProdRowGroup1', 'neonProdRowGroup2', 'neonProdRowGroup3'];
 
