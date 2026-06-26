@@ -35,6 +35,7 @@ class ProductResponse(BaseModel):
     img_hdfs_path: Optional[str] = None
     img_url: Optional[str] = None             # Cloudinary 또는 원본 주소
     local_url: Optional[str] = None           # 로컬 Fallback 주소
+    origin_url: Optional[str] = None          # 공식몰 구매 링크 추가
     create_dt: Optional[datetime] = None
     update_dt: Optional[datetime] = None
 

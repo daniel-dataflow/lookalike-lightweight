@@ -144,7 +144,7 @@ async def get_product_detail(product_id: str):
     try:
         with get_pg_cursor() as cur:
             cur.execute("""SELECT product_id, model_code, prod_name, base_price,
-                           category_code, img_url, create_dt, update_dt
+                           category_code, img_url, origin_url, create_dt, update_dt
                            FROM products WHERE product_id = %s""", (product_id,))
             product_row = cur.fetchone()
             if not product_row:
