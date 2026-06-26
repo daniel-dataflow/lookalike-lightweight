@@ -78,7 +78,18 @@
 * **[MODIFY] [base.html, search_history.html 등 템플릿 파일들](file:///home/ubuntu/lookalike-lightweight/web/frontend/templates)**
   * 브라우저가 변경된 자바스크립트 소스를 강하게 캐싱하여 화면이 갱신되지 않는 문제를 강제 무효화하기 위해, 스크립트 로드 경로 뒤에 난수 기반 캐시 버스터(`?v={{ range(1, 999999) | random }}`) 파라미터를 추가했습니다.
 
+### F. 방문자 분석 대시보드 및 공식몰 연동
+* **[MODIFY] [admin.py](file:///home/ubuntu/lookalike-lightweight/web/backend/app/routers/admin.py)**
+  * IP 기반의 유저 기기(OS/Browser) 경량 분석 기능과 South Korea 가상 지오 해시 매핑(`_get_ip_geo`) 기능을 추가하고, 이중화 통계(전체/일반/관리자) 처리 및 KST 시간 직렬화 API를 탑재했습니다.
+* **[MODIFY] [pages.py](file:///home/ubuntu/lookalike-lightweight/web/backend/app/routers/pages.py)**
+  * `127.0.0.1`, `::1` 등 로컬 루프백 접속 제한 필터를 완전히 제거하여 로컬 환경에서도 관리자 IP 정보가 자동/수동 등록 및 식별되도록 개선했습니다.
+* **[MODIFY] [product.py](file:///home/ubuntu/lookalike-lightweight/web/backend/app/routers/product.py)**
+  * 상세조회 시 데이터 누락으로 인해 공식몰 가격 클릭 시 페이지가 새로고침만 되며 외부 페이지로 이동하지 않던 문제를 해결하기 위해 `origin_url` 필드를 복구했습니다.
+* **[MODIFY] [admin_visitors.html](file:///home/ubuntu/lookalike-lightweight/web/frontend/templates/admin_visitors.html)**
+  * 분석 기간의 `[직접 입력]`을 지원하기 위한 Date Picker 연동 및 동적 쿼리 전달 인터페이스를 추가하고, 컴포넌트 짤림 현상을 극복하기 위해 UI 레이아웃 CSS(155px 확장)를 정교화했습니다.
+
 ---
+
 
 ## 3. 3대 핵심 리뉴얼 아키텍처 요약 (Core Pillars)
 
@@ -259,10 +270,15 @@ web/backend/app/main.py
 | **Scripts** | `scripts/insert_DB/init_dw_db.py` | `NEW` | 분산 배치 처리를 위한 데이터웨어하우스 DB 구조화 자동 생성 스크립트 구축 |
 | **Scripts** | `scripts/supabase/` | `DELETE` | 루트의 supabase/migrations 와 꼬여있던 중복 레거시 마이그레이션 폴더 영구 삭제 |
 | **Scripts** | `scripts/start_all.sh 등 쉘` | `DELETE` | 로컬 DB 초기화용 중복 파일 및 로컬 컨테이너 제어 쉘 파일 6종 영구 삭제 |
+| **Backend** | `web/backend/app/routers/admin.py` | `MODIFY` | 이중화 방문자 세션 분석, 로컬 지오 해시 매핑, KST 시간대 직렬화 API 탑재 |
+| **Backend** | `web/backend/app/routers/pages.py` | `MODIFY` | 로컬 루프백 IP 제한 해제 및 자동 어드민 IP 등록 기능 고도화 |
+| **Backend** | `web/backend/app/routers/product.py` | `MODIFY` | 공식몰 아웃링크 이동 에러 해결을 위해 `origin_url` 맵핑 복구 |
+| **Frontend** | `web/frontend/templates/admin_visitors.html` | `MODIFY` | 기간 직접 입력 Date Picker 컴포넌트 추가 및 짤림 방지 UI 수정 |
+| **Docs** | `docs/renewal/admin_visitors_renewal.md` | `NEW` | 방문자 분석 대시보드 리뉴얼 아키텍처 및 상세 사양서 작성 |
 
 ---
 
-## 7. 리팩토링 및 최적화 이력 (1차 ~ 8차 고도화)
+## 7. 리팩토링 및 최적화 이력 (1차 ~ 9차 고도화)
 
 * **1차 리팩토링: Actions 기반 수집 분리 (2026-05-24)**
   * 렌더(Render) 무료 서버의 CPU/메모리 부하 경감을 위해 대규모 크롤링 연산을 깃허브 액션(GitHub Actions) 환경으로 이관했습니다.
@@ -293,3 +309,10 @@ web/backend/app/main.py
   * **네트워크 3중 재시도 로직**: 일시적 DNS 실패나 Gradio API 콜드 스타트 지연 등에 대응하기 위해 이미지 다운로드 **3회 재시도** 및 Gradio API **2회 호출 재시도**를 구현하여 에러율을 최소화했습니다.
   * **로컬 CLIP 모델 이미지 임베딩 폴백(Fallback)**: API 서버 장애나 YOLOv11 크롭 실패 시 `image_vector`가 `NULL`로 수집되는 현상을 막기 위해, 실패 발생 시 자동으로 로컬 캐시 모델(`openai/clip-vit-base-patch32`)을 가동하여 **원본 이미지 전체에 대해 로컬에서 직접 512차원 임베딩을 생성**해 적재하는 자동 방어막을 구축했습니다.
   * **브랜드 구성 최신화**: 기존의 무신사, 자라 브랜드를 수집 대상에서 제외하고, 에잇세컨즈, 탑텐, 유니클로, 스파오, 지오다노, 폴햄의 6대 브랜드 체제로 전면 리뉴얼했습니다. 어드민 페이지에 강제 정지, 캐시 무시, 강제 이관 등의 관리 제어 기능을 추가했습니다.
+* **9차 고도화: 방문자 분석 대시보드 리뉴얼 및 관리자 IP 식별 체계 개편 (2026-06-26)**
+  * **이중화 통계 격리**: 대시보드 내 방문 이력 조회 시 서비스 일반 유입 트래픽과 어드민(OWNER) 테스트 트래픽을 분류(전체/일반/관리자)하여 각각 격리된 통계를 실시간 제공합니다.
+  * **로컬 IP 필터 해제 및 하드코딩 제거**: 정적 통신망 IP(`220.116.*.*`) 하드코딩 조건을 전면 폐기하고 DB 조인 방식으로 통일했습니다. 또한 로컬 루프백(`127.0.0.1`, `::1`) 제한 필터를 해제하여 개발 접속 시에도 어드민으로 안전하게 기록 및 식별되도록 개선했습니다.
+  * **KST 및 시계열 날짜 정밀도 확보**: 로그 시간대 오프셋(+09:00)을 보장하여 날짜와 시각이 `YYYY-MM-DD HH:mm:ss` 전체 형식으로 직렬화되어 반환되도록 하였습니다.
+  * **기간 직접 지정 범위 조회**: `[직접 입력]` 옵션을 추가하여 Date Picker로 시작일/종료일 지정 조회가 가능하도록 하였으며, 셀렉트박스 글자 짤림 현상 방지를 위해 UI 넓이를 155px로 조절했습니다.
+  * **공식몰 아웃링크 복구**: 상품 상세조회에서 공식몰 가격 클릭 시 페이지가 무한 새로고침되던 현상을 `ProductResponse` 및 조회 SQL 내 `origin_url` 필드를 복구하여 정상 연결되도록 해결했습니다.
+  * **상세 가이드 연동**: 신규 상세 아키텍처 사양은 [admin_visitors_renewal.md](file:///d:/dev/lookalike-lightweight/docs/renewal/admin_visitors_renewal.md) 파일에 정리했습니다.

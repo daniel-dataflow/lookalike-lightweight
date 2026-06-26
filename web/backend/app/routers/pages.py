@@ -173,18 +173,21 @@ async def admin_logs(request: Request):
 
 
 @router.get("/admin/visitors", response_class=HTMLResponse)
-async def admin_visitors(request: Request, register_current_ip: bool = False):
+async def admin_visitors(request: Request, owner: bool = False):
     """방문자 분석 대시보드 페이지"""
     session = _get_admin_session(request)
     if not session or not session.get("is_admin"):
         return RedirectResponse(url="/admin/login", status_code=302)
         
-    # ?register_current_ip=true가 파라미터로 제공될 경우 접속자의 IP를 OWNER IP로 자동 등록
-    if register_current_ip and request.client:
+    # ?owner=true가 파라미터로 제공될 경우 접속자의 IP를 OWNER IP로 자동 등록
+    if owner and request.client:
         ip = request.client.host
-        if ip and ip not in ["127.0.0.1", "localhost", "::1"]:
+        if ip:
             try:
-                memo = "KT-iptime" if ip.startswith("220.116.") else "Parameter-Registered"
+                if ip in ["127.0.0.1", "localhost", "::1"]:
+                    memo = "Localhost (Parameter)"
+                else:
+                    memo = "Parameter-Registered"
                 with get_session(request.cookies.get("admin_session_token"), is_admin=True) as dummy: # DB 세션 획득용으로만 씀
                     pass
                 from ..database import get_pg_cursor
