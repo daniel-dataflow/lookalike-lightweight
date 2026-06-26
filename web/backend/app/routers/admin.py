@@ -36,6 +36,7 @@ def format_datetime_kst(dt) -> Optional[str]:
         dt = dt.astimezone(KST)
     return dt.isoformat()
 
+# 자동 리로드 트리거를 위한 주석 추가 (Cloudinary 이미지 변환 횟수 반영용)
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -146,9 +147,10 @@ async def _update_system_health_loop():
             
             # API 제한(Rate limit) 혹은 조회 에러가 발생한 경우, 캐시가 존재한다면 상태를 복원합니다.
             # 단, 눈속임하지 않고 실제 수집된 상태('rate_limited' 또는 'error')는 명확히 유지합니다.
-            if result.cloudinary_status in ("rate_limited", "error"):
-                cached_stale = _system_health_cache or _load_cache_from_file()
-                if cached_stale:
+            cached_stale = _system_health_cache or _load_cache_from_file()
+            if cached_stale:
+                # 1. Cloudinary 지표 복원
+                if result.cloudinary_status in ("rate_limited", "error"):
                     result.cloudinary_usage_bytes = cached_stale.cloudinary_usage_bytes
                     result.cloudinary_bandwidth_usage_bytes = cached_stale.cloudinary_bandwidth_usage_bytes
                     result.cloudinary_bandwidth_limit_bytes = cached_stale.cloudinary_bandwidth_limit_bytes
@@ -157,7 +159,21 @@ async def _update_system_health_loop():
                     result.cloudinary_credits_limit = cached_stale.cloudinary_credits_limit
                     result.cloudinary_credits_percent = cached_stale.cloudinary_credits_percent
                     result.cloudinary_resources_count = cached_stale.cloudinary_resources_count
+                    result.cloudinary_transformations_usage = cached_stale.cloudinary_transformations_usage
                     logger.info(f"⚠️ Cloudinary API 조회 실패({result.cloudinary_status})로 인해 이전 캐시 지표를 보존 표시합니다.")
+                
+                # 2. HuggingFace Space 지표 복원
+                if result.hf_status in ("error", "offline") or not result.hf_runtime_stage or result.hf_runtime_stage == "unknown":
+                    result.hf_status = cached_stale.hf_status
+                    result.hf_model_status = cached_stale.hf_model_status
+                    result.hf_latency_ms = cached_stale.hf_latency_ms
+                    result.hf_used_storage_bytes = cached_stale.hf_used_storage_bytes
+                    result.hf_storage_limit_bytes = cached_stale.hf_storage_limit_bytes
+                    result.hf_hardware = cached_stale.hf_hardware
+                    result.hf_runtime_stage = cached_stale.hf_runtime_stage
+                    result.hf_cpu_usage_pct = cached_stale.hf_cpu_usage_pct
+                    result.hf_mem_used_mb = cached_stale.hf_mem_used_mb
+                    result.hf_mem_total_gb = cached_stale.hf_mem_total_gb
                 
             _system_health_cache = result
             
@@ -417,6 +433,7 @@ def _get_system_health_raw() -> SystemHealthResponse:
     cloudinary_credits_usage = 0.0
     cloudinary_credits_limit = 25.0
     cloudinary_credits_percent = 0.0
+    cloudinary_transformations_usage = 0
     try:
         import cloudinary
         import cloudinary.api
@@ -447,6 +464,10 @@ def _get_system_health_raw() -> SystemHealthResponse:
         cloudinary_credits_usage = credits_info.get("usage", 0.0)
         cloudinary_credits_limit = credits_info.get("limit", 25.0)
         cloudinary_credits_percent = credits_info.get("used_percent", 0.0)
+
+        # 이미지 변환(Transformations) 정보 획득
+        transformations_info = usage.get("transformations", {})
+        cloudinary_transformations_usage = transformations_info.get("usage", 0)
     except Exception as e:
         logger.error(f"Cloudinary 상태 조회 실패: {e}", exc_info=True)
         err_msg = str(e).lower()
@@ -549,6 +570,7 @@ def _get_system_health_raw() -> SystemHealthResponse:
         cloudinary_credits_limit=cloudinary_credits_limit,
         cloudinary_credits_percent=cloudinary_credits_percent,
         cloudinary_resources_count=cloudinary_resources_count,
+        cloudinary_transformations_usage=cloudinary_transformations_usage,
         hf_status=hf_status,
         hf_model_status=hf_model_status,
         hf_latency_ms=hf_latency_ms,

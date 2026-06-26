@@ -290,24 +290,39 @@
                     <span id="cloudinaryStatus" class="badge bg-secondary">확인 중</span>
                 </div>
                 <div id="cloudinaryDetails" class="flex-grow-1 d-flex flex-column" style="overflow-x: auto;">
-                    <div class="d-flex justify-content-between align-items-center mb-2 gap-2">
-                        <span class="text-muted text-nowrap">Credit 사용량</span>
-                        <span class="text-nowrap" id="cloudinaryCreditsUsage">-</span>
+                    <!-- 통합 크레딧 사용량 대대장 배치 -->
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <span class="text-muted small text-nowrap">Total Credit 사용량</span>
+                            <span class="text-nowrap" id="cloudinaryCreditsUsage">-</span>
+                        </div>
+                        <div class="progress" style="height: 6px;">
+                            <div id="cloudinaryCreditsProgress" class="progress-bar bg-success" role="progressbar" style="width: 0%"></div>
+                        </div>
                     </div>
-                    <div class="d-flex justify-content-between align-items-center mb-2 gap-2">
-                        <span class="text-muted text-nowrap">실제 저장 용량</span>
-                        <span class="text-nowrap" id="cloudinaryUsage">-</span>
+                    
+                    <div class="pt-2 border-top">
+                        <div class="d-flex justify-content-between align-items-center mb-2 gap-2">
+                            <span class="text-muted text-nowrap">실제 저장 용량</span>
+                            <span class="text-nowrap" id="cloudinaryUsage">-</span>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center mb-2 gap-2">
+                            <span class="text-muted text-nowrap">실시간 대역폭</span>
+                            <span class="text-nowrap" id="cloudinaryBandwidth">-</span>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center mb-2 gap-2">
+                            <span class="text-muted text-nowrap">이미지 변환</span>
+                            <span class="text-nowrap" id="cloudinaryTransformations">-</span>
+                        </div>
                     </div>
-                    <div class="d-flex justify-content-between align-items-center mb-2 gap-2">
-                        <span class="text-muted text-nowrap">실시간 대역폭</span>
-                        <span class="text-nowrap" id="cloudinaryBandwidth">-</span>
-                    </div>
-                    <div class="d-flex justify-content-between align-items-center mb-2 gap-2">
-                        <span class="text-muted text-nowrap">업로드 수</span>
-                        <span class="text-nowrap" id="cloudinaryResources">-</span>
-                    </div>
+                    
                     <div class="d-flex justify-content-between pt-2 border-top align-items-center gap-2">
-                        <span class="text-muted small text-nowrap">남은 Credit</span>
+                        <span class="text-muted small text-nowrap">🧮 합산 사용량</span>
+                        <span class="fw-bold small text-nowrap text-primary" id="cloudinaryCreditsFormula">-</span>
+                    </div>
+                    
+                    <div class="d-flex justify-content-between pt-2 border-top align-items-center gap-2">
+                        <span class="text-muted small text-nowrap">남은 가용 Credit</span>
                         <span class="fw-bold small text-nowrap" id="cloudinaryCreditsFree">-</span>
                     </div>
                 </div>
