@@ -145,7 +145,7 @@
                                     <th style="min-width: 90px;" class="text-nowrap">구분 (환경)</th>
                                     <th style="min-width: 100px;" class="text-nowrap">상태 (Neon)</th>
                                     <th style="min-width: 80px;" class="text-end text-nowrap">용량 (500MB)</th>
-                                    <th style="min-width: 130px;" class="text-end text-nowrap">Compute (100 CU)</th>
+                                    <th style="min-width: 130px;" class="text-end text-nowrap">Compute (100 CU-hrs)</th>
                                     <th style="min-width: 110px;" class="text-end text-nowrap">Network (5GB)</th>
                                 </tr>
                             </thead>
@@ -182,8 +182,7 @@
                                     <td class="fw-bold text-success text-nowrap align-middle">로그&크롤링 DB</td>
                                     <td class="text-nowrap align-middle"><span class="badge badge-sm"
                                             id="neonDevDwDbBadge">-</span> DEV_DW_DB</td>
-                                    <td class="text-end text-muted text-nowrap align-middle"
-                                        id="neonDevDwDbSize">-</td>
+                                    <td class="text-end text-muted text-nowrap align-middle" id="neonDevDwDbSize">-</td>
                                     <td class="text-end align-middle">
                                         <div class="d-flex flex-column align-items-end justify-content-center">
                                             <span class="fw-bold text-nowrap" id="neonDevDwDbCompute">-</span>
@@ -244,8 +243,8 @@
                                     <td class="fw-bold text-primary text-nowrap align-middle">로그&크롤링 DB</td>
                                     <td class="text-nowrap align-middle"><span class="badge badge-sm"
                                             id="neonProdDwDbBadge">-</span> PROD_DW_DB</td>
-                                    <td class="text-end text-muted text-nowrap align-middle"
-                                        id="neonProdDwDbSize">-</td>
+                                    <td class="text-end text-muted text-nowrap align-middle" id="neonProdDwDbSize">-
+                                    </td>
                                     <td class="text-end align-middle">
                                         <div class="d-flex flex-column align-items-end justify-content-center">
                                             <span class="fw-bold text-nowrap" id="neonProdDwDbCompute">-</span>
@@ -286,7 +285,8 @@
         <div class="card border-0 shadow-sm h-100">
             <div class="card-body d-flex flex-column">
                 <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h6 class="mb-0 fw-bold"><i class="fas fa-cloud me-2 text-info"></i>Cloudinary 이미지 <small class="text-muted" style="font-size: 0.75rem;">(30일 기준)</small></h6>
+                    <h6 class="mb-0 fw-bold"><i class="fas fa-cloud me-2 text-info"></i>Cloudinary 이미지 <small
+                            class="text-muted" style="font-size: 0.75rem;">(30일 기준)</small></h6>
                     <span id="cloudinaryStatus" class="badge bg-secondary">확인 중</span>
                 </div>
                 <div id="cloudinaryDetails" class="flex-grow-1 d-flex flex-column" style="overflow-x: auto;">
