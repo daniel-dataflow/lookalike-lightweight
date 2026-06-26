@@ -405,7 +405,9 @@ async function fetchDbStatus() {
             // 크레딧(Credit) 데이터 바인딩 (음수값 0으로 보정)
             const credUsage = Math.max(0, data.cloudinary_credits_usage || 0.0);
             const credLimit = data.cloudinary_credits_limit || 25.0;
-            const credPercent = Math.max(0, data.cloudinary_credits_percent || 0.0);
+            
+            // 백엔드가 제공하는 비율 필드 대신, 사용량과 한도를 이용하여 직접 정확한 백분율(%)을 계산합니다.
+            const credPercent = credLimit > 0 ? (credUsage / credLimit) * 100 : 0.0;
 
             let credColorClass = 'text-success';
             if (credPercent >= 80) credColorClass = 'text-danger fw-bold';
@@ -424,7 +426,9 @@ async function fetchDbStatus() {
             const bwLimitBytes = data.cloudinary_bandwidth_limit_bytes || (25 * 1024 * 1024 * 1024);
             const bwUsageGB = (bwUsageBytes / 1024 / 1024 / 1024).toFixed(3);
             const bwLimitGB = (bwLimitBytes / 1024 / 1024 / 1024).toFixed(0);
-            const bwPercent = Math.max(0, data.cloudinary_bandwidth_percent || 0.0);
+            
+            // 대역폭 사용률(%) 직접 계산
+            const bwPercent = bwLimitBytes > 0 ? (bwUsageBytes / bwLimitBytes) * 100 : 0.0;
             
             let bwColorClass = 'text-success';
             if (bwPercent >= 80) bwColorClass = 'text-danger fw-bold';
