@@ -324,17 +324,17 @@ async function fetchDbStatus() {
         };
 
         // DEV 환경 바인딩
-        updateMetricBar('neonDevDbCompute', 'neonDevDbComputeBar', data.db_dev_compute_hours || 0.0, 100, 'CU-hrs');
+        updateMetricBar('neonDevDbCompute', 'neonDevDbComputeBar', data.db_dev_compute_hours || 0.0, 100, 'CU');
         updateMetricBar('neonDevDbNetwork', 'neonDevDbNetworkBar', data.db_dev_network_gb || 0.0, 5, 'GB');
 
-        updateMetricBar('neonDevDwDbCompute', 'neonDevDwDbComputeBar', data.db_dev_dw_compute_hours || 0.0, 100, 'CU-hrs');
+        updateMetricBar('neonDevDwDbCompute', 'neonDevDwDbComputeBar', data.db_dev_dw_compute_hours || 0.0, 100, 'CU');
         updateMetricBar('neonDevDwDbNetwork', 'neonDevDwDbNetworkBar', data.db_dev_dw_network_gb || 0.0, 5, 'GB');
 
         // PROD 환경 바인딩
-        updateMetricBar('neonProdDbCompute', 'neonProdDbComputeBar', data.db_prod_compute_hours || 0.0, 100, 'CU-hrs');
+        updateMetricBar('neonProdDbCompute', 'neonProdDbComputeBar', data.db_prod_compute_hours || 0.0, 100, 'CU');
         updateMetricBar('neonProdDbNetwork', 'neonProdDbNetworkBar', data.db_prod_network_gb || 0.0, 5, 'GB');
 
-        updateMetricBar('neonProdDwDbCompute', 'neonProdDwDbComputeBar', data.db_prod_dw_compute_hours || 0.0, 100, 'CU-hrs');
+        updateMetricBar('neonProdDwDbCompute', 'neonProdDwDbComputeBar', data.db_prod_dw_compute_hours || 0.0, 100, 'CU');
         updateMetricBar('neonProdDwDbNetwork', 'neonProdDwDbNetworkBar', data.db_prod_dw_network_gb || 0.0, 5, 'GB');
 
         // APP_ENV에 따라서 DEV 또는 PROD 행만 노출
