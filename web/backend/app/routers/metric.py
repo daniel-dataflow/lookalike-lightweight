@@ -88,34 +88,49 @@ async def get_metrics_stream():
         }
     """
     try:
+        from ..routers.admin import KST
+
         def _query():
             with get_dw_cursor() as cur:
+                # 최신 12개 메트릭을 조회한 후 차트 시간순 렌더링을 위해 다시 오름차순 정렬
                 cur.execute("""
-                    SELECT
-                        cpu_usage   AS cpu_percent,
-                        memory_usage AS memory_percent,
-                        TO_CHAR(timestamp, 'HH24:MI') AS time
-                    FROM infra_metrics
-                    ORDER BY timestamp ASC
-                    LIMIT 12;
+                    SELECT * FROM (
+                        SELECT
+                            cpu_usage   AS cpu_percent,
+                            memory_usage AS memory_percent,
+                            timestamp
+                        FROM infra_metrics
+                        ORDER BY timestamp DESC
+                        LIMIT 12
+                    ) sub
+                    ORDER BY timestamp ASC;
                 """)
                 return cur.fetchall()
 
         rows = await asyncio.to_thread(_query)
-        metrics = [
-            {
-                "time":           r["time"],
-                "timestamp":      r["time"],     # 기존 JS 차트가 timestamp 키 사용
+        metrics = []
+        for r in rows:
+            ts = r["timestamp"]
+            # datetime 객체를 타임존 보정 및 ISO 규격 문자열로 변환
+            if ts:
+                if ts.tzinfo is None:
+                    ts = ts.replace(tzinfo=KST)
+                ts_iso = ts.isoformat()
+                time_str = ts.strftime("%H:%M")
+            else:
+                ts_iso = ""
+                time_str = ""
+
+            metrics.append({
+                "time":           time_str,
+                "timestamp":      ts_iso,        # JS new Date() 가 안전하게 파싱 가능한 ISO 문자열 제공
                 "cpu_percent":    round(r["cpu_percent"] or 0, 2),
                 "memory_percent": round(r["memory_percent"] or 0, 2),
-                # 기존 JS updateTable() 이 service/container 키를 기대함
-                "service":    "FastAPI",
-                "container":  "fastapi",
-                # virtual_memory 전체 크기에 비율을 곱해 실질 메모리 bytes 값 모사
-                "memory_usage": int(psutil.virtual_memory().total * ((r["memory_percent"] or 0) / 100.0)),
-            }
-            for r in rows
-        ]
+                "service":        "FastAPI",
+                "container":      "fastapi",
+                "memory_usage":   int(psutil.virtual_memory().total * ((r["memory_percent"] or 0) / 100.0)),
+            })
+            
         return {"total": len(metrics), "metrics": metrics}
     except Exception as e:
         logger.error(f"메트릭 스트림 조회 실패: {e}")
