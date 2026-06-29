@@ -93,7 +93,7 @@ document.addEventListener('DOMContentLoaded', function () {
     // 초기화 클래스 제거
     document.documentElement.classList.remove('sidebar-collapsed-init');
 
-    if (isCollapsed) {
+    if (sidebar && mainContent && isCollapsed) {
         sidebar.classList.add('collapsed');
         mainContent.classList.add('expanded');
     }
@@ -185,7 +185,7 @@ async function adminLogin(e) {
 }
 
 // ── 어드민 로그인 비밀번호 보기/숨기기 토글 ──
-document.addEventListener('DOMContentLoaded', () => {
+(function () {
     const pwInput = document.getElementById('adminPassword');
     const pwToggle = document.getElementById('passwordToggle');
     const pwToggleIcon = document.getElementById('passwordToggleIcon');
@@ -203,7 +203,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
-});
+})();
 
 /* =========================================================================
    [admin_dashboard.js]
