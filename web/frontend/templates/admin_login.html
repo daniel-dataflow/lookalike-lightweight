@@ -27,10 +27,15 @@
 
         <form onsubmit="adminLogin(event)">
             <div class="mb-4">
-                <input type="text" id="adminUsername" class="form-control form-control-lg" placeholder="관리자 아이디"
+                <input type="text" id="adminUsername" class="form-control form-control-lg mb-3" placeholder="관리자 아이디"
                     autocomplete="username" required>
-                <input type="password" id="adminPassword" class="form-control form-control-lg" placeholder="관리자 비밀번호"
-                    autocomplete="current-password" required>
+                <div class="position-relative">
+                    <input type="password" id="adminPassword" class="form-control form-control-lg pe-5" placeholder="관리자 비밀번호"
+                        autocomplete="current-password" required>
+                    <span id="passwordToggle" class="position-absolute end-0 top-50 translate-middle-y me-3 text-muted" style="cursor: pointer; z-index: 10;">
+                        <i class="fas fa-eye" id="passwordToggleIcon"></i>
+                    </span>
+                </div>
             </div>
 
             <div id="adminAuthError" style="display:none;"

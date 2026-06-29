@@ -154,9 +154,22 @@ async function adminLogin(e) {
             // 인증 성공 후 인프라 대시보드로 이동
             location.href = '/admin/infra';
         } else {
-            const err = await resp.json();
-            document.getElementById('adminAuthErrorMsg').textContent =
-                err.detail || '인증에 실패했습니다.';
+            let errorMsg = '인증에 실패했습니다.';
+            try {
+                const err = await resp.json();
+                errorMsg = err.detail || errorMsg;
+            } catch (jsonErr) {
+                errorMsg = '서버에서 알 수 없는 오류가 발생했습니다. (500)';
+            }
+
+            // 날것의 영문 시스템 에러 문자열을 친절한 한글 가이드로 매핑
+            if (errorMsg === 'Internal Server Error') {
+                errorMsg = '데이터베이스 한도 초과 또는 서버 연결 실패로 인한 내부 에러가 발생했습니다.';
+            } else if (errorMsg === 'Unauthorized' || errorMsg === 'Unauthorized.') {
+                errorMsg = '어드민 권한이 없거나 아이디/비밀번호가 일치하지 않습니다.';
+            }
+
+            document.getElementById('adminAuthErrorMsg').textContent = errorMsg;
             errorEl.style.display = 'flex';
             document.getElementById('adminPassword').value = '';
             document.getElementById('adminPassword').focus();
@@ -170,6 +183,27 @@ async function adminLogin(e) {
         btnText.classList.remove('d-none');
     }
 }
+
+// ── 어드민 로그인 비밀번호 보기/숨기기 토글 ──
+document.addEventListener('DOMContentLoaded', () => {
+    const pwInput = document.getElementById('adminPassword');
+    const pwToggle = document.getElementById('passwordToggle');
+    const pwToggleIcon = document.getElementById('passwordToggleIcon');
+
+    if (pwInput && pwToggle && pwToggleIcon) {
+        pwToggle.addEventListener('click', () => {
+            if (pwInput.type === 'password') {
+                pwInput.type = 'text';
+                pwToggleIcon.classList.remove('fa-eye');
+                pwToggleIcon.classList.add('fa-eye-slash');
+            } else {
+                pwInput.type = 'password';
+                pwToggleIcon.classList.remove('fa-eye-slash');
+                pwToggleIcon.classList.add('fa-eye');
+            }
+        });
+    }
+});
 
 /* =========================================================================
    [admin_dashboard.js]

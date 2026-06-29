@@ -243,28 +243,47 @@ async def admin_login(req: AdminLoginRequest, response: Response):
     if req.username != settings.ADMIN_USERNAME or req.password != settings.ADMIN_PASSWORD:
         raise HTTPException(status_code=401, detail="관리자 아이디 또는 비밀번호가 일치하지 않습니다")
 
-    # 세션 생성 시 user_sessions.user_id FK 제약 조건을 만족하기 위해 admin 계정을 users 테이블에 보장
     try:
+        # 세션 생성 시 user_sessions.user_id FK 제약 조건을 만족하기 위해 admin 계정을 users 테이블에 보장
         with get_pg_cursor() as cur:
             cur.execute("""
                 INSERT INTO users (user_id, user_name, email, role, provider)
                 VALUES ('admin', '시스템 관리자', 'admin@lookalike.com', 'ADMIN', 'system')
                 ON CONFLICT (user_id) DO NOTHING
             """)
-    except Exception as e:
-        logger.error(f"어드민 계정 보장 실패: {e}")
 
-    user_data = {
-        "user_id": "admin",
-        "name": "시스템 관리자",
-        "email": "admin@lookalike.com",
-        "role": "ADMIN",
-        "provider": "system",
-        "profile_image": "",
-        "is_admin": True,
-    }
-    _create_admin_session(response, user_data)
-    return {"success": True, "message": "관리자 접속 성공"}
+        user_data = {
+            "user_id": "admin",
+            "name": "시스템 관리자",
+            "email": "admin@lookalike.com",
+            "role": "ADMIN",
+            "provider": "system",
+            "profile_image": "",
+            "is_admin": True,
+        }
+        _create_admin_session(response, user_data)
+        return {"success": True, "message": "관리자 접속 성공"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"어드민 로그인 처리 중 오류 발생: {e}")
+        err_msg = str(e).lower()
+        if "compute time quota" in err_msg or "quota" in err_msg or "exceeded" in err_msg:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Neon 데이터베이스의 월 무료 사용량 한도(Compute Quota)가 초과되어 로그인 세션을 생성할 수 없습니다. DB 할당량을 점검해 주세요."
+            )
+        elif "connection" in err_msg or "connect" in err_msg or "timeout" in err_msg:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="데이터베이스 연결에 실패했습니다. DB 네트워크 상태 또는 기동 여부를 확인해 주세요."
+            )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"로그인 처리 중 서버 내부 오류가 발생했습니다: {str(e)}"
+            )
 
 
 @router.post("/admin/logout")
