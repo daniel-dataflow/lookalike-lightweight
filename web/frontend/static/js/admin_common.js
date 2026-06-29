@@ -111,7 +111,7 @@ async function adminLogout() {
             credentials: 'same-origin',
         });
     } catch (e) { }
-    location.href = '/';
+    location.href = '/admin/login';
 }
 
 
@@ -140,7 +140,8 @@ async function adminLogin(e) {
     btn.disabled = true;
     spinner.classList.remove('d-none');
     btnText.classList.add('d-none');
-    errorEl.style.display = 'none';
+    errorEl.classList.add('d-none');
+    errorEl.classList.remove('d-flex');
 
     try {
         const resp = await fetch('/api/auth/admin/login', {
@@ -170,13 +171,15 @@ async function adminLogin(e) {
             }
 
             document.getElementById('adminAuthErrorMsg').textContent = errorMsg;
-            errorEl.style.display = 'flex';
+            errorEl.classList.remove('d-none');
+            errorEl.classList.add('d-flex');
             document.getElementById('adminPassword').value = '';
             document.getElementById('adminPassword').focus();
         }
     } catch (e) {
         document.getElementById('adminAuthErrorMsg').textContent = '서버 연결에 실패했습니다.';
-        errorEl.style.display = 'flex';
+        errorEl.classList.remove('d-none');
+        errorEl.classList.add('d-flex');
     } finally {
         btn.disabled = false;
         spinner.classList.add('d-none');
