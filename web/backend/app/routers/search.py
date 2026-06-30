@@ -85,6 +85,7 @@ async def search_by_image(
         results = await search_service.search_products(
             image_vector=image_vector,
             text_vector=text_vector,
+            search_text=search_text,
             category=category,
             gender=gender,
             limit=6,

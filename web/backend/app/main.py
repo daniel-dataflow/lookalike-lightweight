@@ -22,6 +22,7 @@ from .routers import auth_router, product_router, search_router, inquiry_router,
 from .routers.pages import router as pages_router
 from .routers.metric import router as metric_router, start_metric_collector
 from .routers.metric_realtime import router as metric_realtime_router
+from .routers.admin_error import router as admin_error_router
 
 # ──────────────────────────────────────
 # NeonLogHandler 구현 및 로깅 설정
@@ -360,6 +361,7 @@ app.include_router(metric_router)
 app.include_router(metric_realtime_router)
 app.include_router(log_router)
 app.include_router(wakeup_router)
+app.include_router(admin_error_router)
 
 
 

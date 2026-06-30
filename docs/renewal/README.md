@@ -275,10 +275,12 @@ web/backend/app/main.py
 | **Backend** | `web/backend/app/routers/product.py` | `MODIFY` | 공식몰 아웃링크 이동 에러 해결을 위해 `origin_url` 맵핑 복구 |
 | **Frontend** | `web/frontend/templates/admin_visitors.html` | `MODIFY` | 기간 직접 입력 Date Picker 컴포넌트 추가 및 짤림 방지 UI 수정 |
 | **Docs** | `docs/renewal/admin_visitors_renewal.md` | `NEW` | 방문자 분석 대시보드 리뉴얼 아키텍처 및 상세 사양서 작성 |
+| **Backend** | `web/backend/app/routers/admin_error.py` | `NEW` | 에러 상품 상세 조회, 벌크 조치 및 단일 상품 핀포인트 복구 API 라우터 신설 |
+| **Frontend** | `web/frontend/templates/admin_crawling.html` | `MODIFY` | "에러 상품 통제 & 복구" 탭 및 행별 핀포인트 재수집 단추와 벌크 액션 JS 핸들러 탑재 |
 
 ---
 
-## 7. 리팩토링 및 최적화 이력 (1차 ~ 9차 고도화)
+## 7. 리팩토링 및 최적화 이력 (1차 ~ 10차 고도화)
 
 * **1차 리팩토링: Actions 기반 수집 분리 (2026-05-24)**
   * 렌더(Render) 무료 서버의 CPU/메모리 부하 경감을 위해 대규모 크롤링 연산을 깃허브 액션(GitHub Actions) 환경으로 이관했습니다.
@@ -317,3 +319,8 @@ web/backend/app/main.py
   * **공식몰 아웃링크 복구**: 상품 상세조회에서 공식몰 가격 클릭 시 페이지가 무한 새로고침되던 현상을 `ProductResponse` 및 조회 SQL 내 `origin_url` 필드를 복구하여 정상 연결되도록 해결했습니다.
   * **Neon Compute/Network 리소스 한도 모니터링 & HuggingFace Space 실시간 자원 연동**: 어드민 인프라 페이지에서 Neon DB의 월별 누적 Compute 시간(CU-hours)과 네트워크 전송량(Network transfer)을 실시간으로 집계해 게이지바 및 사용률 텍스트로 표시하고, 개별 DB 프로젝트 단위의 한도(100 CU-hours, 5 GB)에 도달하거나 초과할 경우 '리밋 도달'이라는 붉은색 경고 뱃지가 실시간 활성화되도록 모니터링을 고도화했습니다. (용량은 총합계로 관리하지만 Compute/Network는 각각 개별 DB 단위 리밋이 존재하므로 합계 행에는 게이지바를 표시하지 않고 '-' 단순 텍스트 처리 및 각 DB 단위의 개별 임계치 초과 여부 감지 로직 적용. 또한 모바일 반응형 찌러짐 방지를 위해 progress bar 숨김 및 text-nowrap 레이아웃 보완 처리 완료). 추가로, AI 추론용 HuggingFace Space 가상 머신의 실시간 CPU 사용률(%), 실시간 RAM 사용량(MB/GB) 정보 수집용 SSE Metrics 파싱 API와 Space의 빌드/런타임 상태(RUNNING, BUILDING 등 stage)를 백엔드에서 동적으로 추가 연동하여 대시보드 UI에 실시간 바인딩 완료했습니다.
   * **상세 가이드 연동**: 신규 상세 아키텍처 사양은 [admin_visitors_renewal.md](file:///d:/dev/lookalike-lightweight/docs/renewal/admin_visitors_renewal.md) 파일에 정리했습니다.
+* **10차 고도화: 통합 에러 상품 통제 및 핀포인트 복구 대시보드 구축 (2026-06-30)**
+  * **4대 치명 에러 격리 배제**: 스위칭 이관 시 필수 메타 유실, 네이버 가격 전무, 임베딩 누락, 이미지 URL 깨짐이 발생한 불량 상품들을 자동 이관 대상에서 배제하여 Staging 테이블에 잔류하도록 처리했습니다.
+  * **핀포인트 1초 즉시 복구 API**: 에러 상품 목록에서 `[재수집]` 버튼을 누르면 실시간으로 네이버 쇼핑 openAPI 5대 최저가를 재수집하고 CLIP 임베딩을 보정하여 즉각 오류를 소거하는 백엔드 API를 신설했습니다.
+  * **벌크 복구 액션 및 UI 연동**: 에러 상품들을 다중 선택하여 일괄 강제 이관(`partial_switch`), 벌크 최저가 재수집(`re_crawl`), 임베딩 재생성(`re_embed`), 또는 스테이징 비우기(`delete_staging`)를 처리하는 통합 관리자 제어 탭을 구축했습니다.
+

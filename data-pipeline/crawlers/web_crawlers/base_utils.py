@@ -927,12 +927,10 @@ async def swap_staging_to_production(brand_name: str, force: bool = False) -> bo
                 WHERE brand_name = %s
             """, (brand_upper,))
         else:
-            # 자동 모드: create_dt 기준이 아닌 현재 staging 전체 데이터를 이관 대상으로 조회
-            # (이미 위에서 pipeline_runs 기준 24시간 검증을 완료했으므로)
             stage_cur.execute("""
                 SELECT product_id, model_code, prod_name, base_price, gender, category_code, img_url, origin_url, create_dt
                 FROM staging_products 
-                WHERE brand_name = %s
+                WHERE brand_name = %s AND create_dt <= CURRENT_TIMESTAMP - INTERVAL '24 hours'
             """, (brand_upper,))
             
         staging_rows = stage_cur.fetchall()
@@ -953,16 +951,75 @@ async def swap_staging_to_production(brand_name: str, force: bool = False) -> bo
         if not force and staging_count < MIN_THRESHOLD:
             raise ValueError(f"수집된 상품 수({staging_count}건)가 임계치({MIN_THRESHOLD}건) 미만입니다. 대기 수량 부족 또는 차단이 의심됩니다.")
 
-        # [검증 제약조건 2] 필수 필드 유실율 검사
-        null_names = sum(1 for r in staging_rows if not r[2])
-        null_categories = sum(1 for r in staging_rows if not r[5])
-        max_allowed_nulls = int(staging_count * 0.05)
-        if null_names > max_allowed_nulls:
-            raise ValueError(f"이름 유실 건수({null_names}건)가 허용 한도({max_allowed_nulls}건)를 초과했습니다.")
-        if null_categories > max_allowed_nulls:
-            raise ValueError(f"카테고리 유실 건수({null_categories}건)가 허용 한도({max_allowed_nulls}건)를 초과했습니다.")
+        # 에러 상품 수집용 셋
+        critical_error_product_ids = set()
 
-        logger.info("✅ 데이터 필드 검증 통과 (Validation Success)! 이미지 유효성 심층 테스트 및 Cloudinary 이관 진행...")
+        # 1) 필수 메타데이터 유실 검사 (METADATA_LOSS)
+        for r in staging_rows:
+            prod_id, model_code, prod_name, base_price, gender, cat_code, img_path, origin_url, create_dt = r
+            if not prod_name or not cat_code:
+                critical_error_product_ids.add(prod_id)
+                log_pipeline_error(
+                    run_id, 
+                    "METADATA_LOSS", 
+                    f"상품명 또는 카테고리가 누락되었습니다. (상품명: {prod_name}, 카테고리: {cat_code})", 
+                    product_id=prod_id, 
+                    source_url=img_path, 
+                    is_warning=False
+                )
+
+        # 2) 네이버 가격 정보(5개 전체 누락) 검사 (NAVER_PRICE_MISSING)
+        stage_cur.execute("""
+            SELECT product_id, COUNT(*) 
+            FROM staging_naver_prices 
+            WHERE UPPER(brand) = %s
+            GROUP BY product_id
+        """, (brand_upper,))
+        price_counts = {row[0]: row[1] for row in stage_cur.fetchall()}
+        
+        for r in staging_rows:
+            prod_id = r[0]
+            if price_counts.get(prod_id, 0) == 0:
+                critical_error_product_ids.add(prod_id)
+                log_pipeline_error(
+                    run_id, 
+                    "NAVER_PRICE_MISSING", 
+                    "네이버 최저가 비교 정보가 5개 모두 누락되었습니다.", 
+                    product_id=prod_id, 
+                    source_url=r[6], 
+                    is_warning=False
+                )
+
+        # 3) 임베딩 데이터 누락 검사 (EMBEDDING_MISSING)
+        stage_cur.execute("""
+            SELECT product_id, image_vector, text_vector 
+            FROM staging_product_embeddings
+            WHERE brand = %s
+        """, (brand_upper,))
+        embedding_map = {row[0]: (row[1], row[2]) for row in stage_cur.fetchall()}
+        
+        for r in staging_rows:
+            prod_id = r[0]
+            vec_pair = embedding_map.get(prod_id)
+            if not vec_pair or not vec_pair[0] or not vec_pair[1]:
+                critical_error_product_ids.add(prod_id)
+                log_pipeline_error(
+                    run_id, 
+                    "EMBEDDING_MISSING", 
+                    "이미지 또는 텍스트 임베딩 벡터가 유실되었습니다.", 
+                    product_id=prod_id, 
+                    source_url=r[6], 
+                    is_warning=False
+                )
+
+        # 자동 스위칭 시 치명 에러 발생 상품은 이관 목록에서 배제 처리
+        if not force and critical_error_product_ids:
+            filtered_rows = [r for r in staging_rows if r[0] not in critical_error_product_ids]
+            logger.info(f"🚨 총 {len(critical_error_product_ids)}개 상품이 정합성 위반(치명 에러)으로 인해 자동 스위칭에서 배제되어 Staging에 머뭅니다.")
+            staging_rows = filtered_rows
+            staging_count = len(staging_rows)
+
+        logger.info("✅ 1차 필드/가격/임베딩 검증 완료. 이미지 유효성 심층 테스트 및 Cloudinary 이관 진행...")
 
 
         # [검증 제약조건 3] 이미지 링크 작동성 비동기 검사 및 Cloudinary 폴더 이관
@@ -981,10 +1038,19 @@ async def swap_staging_to_production(brand_name: str, force: bool = False) -> bo
                     is_valid = await validate_image_url_async(session, img_path)
                     if not is_valid:
                         logger.warning(f"⚠️ 깨진 이미지 링크 감지: 상품 {prod_id} ({img_path})")
+                        log_pipeline_error(
+                            run_id, 
+                            "IMAGE_BROKEN", 
+                            f"이미지 URL이 작동하지 않거나 만료되었습니다. ({img_path})", 
+                            product_id=prod_id, 
+                            source_url=img_path, 
+                            is_warning=False
+                        )
                         if not force:
-                            raise ValueError(f"이미지 URL({img_path})이 작동하지 않거나 만료되었습니다.")
+                            # 자동 이관 시에는 updated_rows에 넣지 않고 배제(Staging 보존)
+                            return
 
-                # 2. Cloudinary staging/ 폴더에서 products/ 폴더로 이동 처리 (DEV/PROD 구분 유지)
+                # 2. Cloudinary staging/ 폴더에서 products/ 폴더로 이동 처리
                 old_pub_id = extract_public_id(img_path)
                 if old_pub_id and "staging/" in old_pub_id:
                     new_pub_id = old_pub_id.replace("staging/", "products/")
@@ -993,10 +1059,19 @@ async def swap_staging_to_production(brand_name: str, force: bool = False) -> bo
                     if moved_url:
                         prod_img_url = moved_url
                     else:
-                        # 이미지 이동 실패 시 pipeline_errors 테이블에 경고 로그 기록 (run_id 매칭)
-                        err_msg = f"Cloudinary 이미지 이동 실패 (Staging -> Products): {old_pub_id} (이미지가 Cloudinary에 존재하지 않거나 덮어쓰기 권한 에러)"
+                        err_msg = f"Cloudinary 이미지 이동 실패: {old_pub_id} (파일 부재 또는 권한 오류)"
                         logger.warning(f"⚠️ {err_msg}")
-                        log_pipeline_error(run_id, "CLOUDINARY_MOVE_WARN", err_msg, product_id=prod_id, source_url=img_path, is_warning=True)
+                        log_pipeline_error(
+                            run_id, 
+                            "IMAGE_BROKEN", 
+                            err_msg, 
+                            product_id=prod_id, 
+                            source_url=img_path, 
+                            is_warning=False
+                        )
+                        if not force:
+                            # 자동 이관 시에는 배제
+                            return
                 
                 updated_rows.append((
                     prod_id, model_code, brand_upper, prod_name, base_price, gender, cat_code, prod_img_url, origin_url, create_dt
@@ -1008,34 +1083,31 @@ async def swap_staging_to_production(brand_name: str, force: bool = False) -> bo
             
         logger.info(f"✨ 전체 {len(updated_rows)}개 상품 이미지 검증 및 Cloudinary 이관 완료.")
 
-        # Staging Naver Price 데이터 가져오기
-        if force:
-            stage_cur.execute("""
-                SELECT product_id, rank, naver_price, mall_name, mall_url, image_url, create_dt
-                FROM staging_naver_prices
-                WHERE UPPER(brand) = %s
-            """, (brand_upper,))
+        # 스위칭 대상 상품 ID 목록 추출 (에러 배제 필터가 반영된 최종 확정 리스트)
+        switching_product_ids = [row[0] for row in updated_rows]
+        
+        # Staging Naver Price 데이터 가져오기 (시간 제약 없이 스위칭 대상 상품에만 매핑)
+        if not switching_product_ids:
+            naver_rows = []
         else:
-            stage_cur.execute("""
+            ph = ",".join(["%s"] * len(switching_product_ids))
+            stage_cur.execute(f"""
                 SELECT product_id, rank, naver_price, mall_name, mall_url, image_url, create_dt
                 FROM staging_naver_prices
-                WHERE UPPER(brand) = %s AND create_dt <= CURRENT_TIMESTAMP - INTERVAL '24 hours'
-            """, (brand_upper,))
+                WHERE product_id IN ({ph})
+            """, tuple(switching_product_ids))
         naver_rows = stage_cur.fetchall()
 
-        # Staging Embeddings 데이터 가져오기 (DW DB에 기저장된 벡터)
-        if force:
-            stage_cur.execute("""
-                SELECT product_id, image_vector, text_vector, brand, category, gender, image_path, create_dt
-                FROM staging_product_embeddings
-                WHERE brand = %s
-            """, (brand_upper,))
+        # Staging Embeddings 데이터 가져오기 (시간 제약 없이 스위칭 대상 상품에만 매핑)
+        if not switching_product_ids:
+            embedding_rows = []
         else:
-            stage_cur.execute("""
+            ph = ",".join(["%s"] * len(switching_product_ids))
+            stage_cur.execute(f"""
                 SELECT product_id, image_vector, text_vector, brand, category, gender, image_path, create_dt
                 FROM staging_product_embeddings
-                WHERE brand = %s AND create_dt <= CURRENT_TIMESTAMP - INTERVAL '24 hours'
-            """, (brand_upper,))
+                WHERE product_id IN ({ph})
+            """, tuple(switching_product_ids))
         embedding_rows = stage_cur.fetchall()
 
         # -------------------------------------------------------------

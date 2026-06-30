@@ -134,9 +134,13 @@ async def terms_page(request: Request):
 async def privacy_page(request: Request):
     return templates.TemplateResponse(request=request, name="privacy.html", context={"request": request})
 
-@router.get("/team", response_class=HTMLResponse)
-async def team_page(request: Request):
-    return templates.TemplateResponse(request=request, name="team.html", context={"request": request})
+@router.get("/teams_history", response_class=HTMLResponse)
+async def teams_history_page(request: Request):
+    return templates.TemplateResponse(request=request, name="teams_history.html", context={"request": request})
+
+@router.get("/teams_renewal", response_class=HTMLResponse)
+async def teams_renewal_page(request: Request):
+    return templates.TemplateResponse(request=request, name="teams_renewal.html", context={"request": request})
 
 @router.get("/teams", response_class=HTMLResponse)
 async def teams_page(request: Request):
