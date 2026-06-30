@@ -4,6 +4,50 @@
 
 {% block content %}
 <link rel="stylesheet" href="/static/css/teams.css?v={{ range(1, 999999) | random }}">
+<style>
+/* ── MAIN TAB (상단 대형 메인 탭) ── */
+.main-tab-wrap { margin-bottom: 38px; }
+.main-tabs {
+  display: inline-flex; gap: 12px;
+  background: var(--surface, #f7f5f0); border: 2px solid var(--border, #e0dbd4);
+  border-radius: 50px; padding: 6px;
+}
+.main-tab {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 30px; border-radius: 40px; border: none;
+  background: transparent; cursor: pointer; font-size: 14.5px; font-weight: 700;
+  color: var(--muted, #888); font-family: 'Noto Sans KR', sans-serif;
+  transition: all .3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.main-tab small { display: block; font-size: 10.5px; font-weight: 400; margin-top: 2px; opacity: 0.8; }
+.main-tab-active {
+  background: #fff; color: var(--accent, #d4522a);
+  box-shadow: 0 4px 15px rgba(0,0,0,.1);
+}
+.main-panel { display: block; animation: panelIn .4s ease; }
+.main-panel-hidden { display: none !important; }
+
+/* ── SOLO PHASE CARD ── */
+.phase-card-solo {
+  border: 2px solid var(--accent, #d4522a);
+  background: linear-gradient(135deg, #fff8f4 0%, #fff 100%);
+  position: relative; overflow: hidden;
+}
+.phase-num-solo { color: var(--accent, #d4522a) !important; }
+.phase-solo-badge {
+  display: inline-block; margin-top: 12px;
+  font-size: 10px; font-weight: 800; letter-spacing: .15em; text-transform: uppercase;
+  background: var(--accent, #d4522a); color: #fff;
+  padding: 3px 10px; border-radius: 20px;
+}
+
+/* ── SOLO PHASE CARD WIDTH EXPANSION (2 columns) ── */
+@media (min-width: 992px) {
+  .phase-card-solo {
+    grid-column: span 2 !important;
+  }
+}
+</style>
 
 <div class="teams-wrapper">
   <div class="lk-particles" id="lkParticles"></div>
@@ -12,12 +56,11 @@
   <div id="lk-overview">
     <div class="lk-section">
       <div class="ov-top">
-
         <div class="rvl">
           <div class="ov-badge">AI 패션 검색 엔진 · 2026</div>
           <h1 class="lk-h2">패션 이미지 하나로<br><em>최저가</em>를 찾다</h1>
           <p class="lk-lead">
-            옷 한 장의 사진을 올리면 AI가 스타일을 분석하고, 유니클로·ZARA·탑텐 등
+            옷 한 장의 사진을 올리면 AI가 스타일을 분석하고, 유니클로·탑텐·SPAO 등
             SPA 브랜드에서 가장 유사한 상품의 <strong>최저가 5곳</strong>을 실시간 비교합니다.<br><br>
             '극실용주의(Extreme Pragmatism)'와 '듀프(Dupe) 소비'가 급성장하는 2026년,
             텍스트 검색으로 표현하기 어려운 <em>비주얼 느낌(Vibe)</em>을
@@ -37,7 +80,7 @@
             <div class="flow-step">
               <div class="flow-icon fi3">🔍</div>
               <h4>벡터 검색</h4>
-              <p>Elasticsearch<br>KNN 유사도</p>
+              <p>임베딩 유사도<br>최저가 매칭</p>
             </div>
             <div class="flow-step">
               <div class="flow-icon fi4">💰</div>
@@ -50,8 +93,7 @@
         <div class="rvr">
           <div class="insight-card">
             <h4>📌 기획 배경 — 탐색 비용 문제</h4>
-            <p>기존 네이버 렌즈는 패션 특화가 아니라 유사도 정확도가 낮고 가격 비교 기능도 없습니다. '그 느낌(Vibe)'을 텍스트로 표현하기 어렵다는 소비자 Pain Point를 AI 이미지
-              검색으로 해결합니다.</p>
+            <p>기존 네이버 렌즈는 패션 특화가 아니라 유사도 정확도가 낮고 가격 비교 기능도 없습니다. '그 느낌(Vibe)'을 텍스트로 표현하기 어렵다는 소비자 Pain Point를 AI 이미지 검색으로 해결합니다.</p>
           </div>
           <div class="insight-card" style="border-left-color:var(--blue);">
             <h4 style="color:var(--blue);">📊 시장 근거 — 듀프 소비 급성장</h4>
@@ -66,7 +108,7 @@
 
       <div class="stat-strip rv">
         <div class="stat-cell">
-          <div class="stat-num">5+</div>
+          <div class="stat-num">6+</div>
           <div class="stat-label">타겟 SPA 브랜드</div>
         </div>
         <div class="stat-cell">
@@ -85,797 +127,1181 @@
     </div>
   </div>
 
-  <!-- ══ SECTION 2: TECH STACK ══ -->
-  <div id="lk-techstack">
-    <div class="lk-section">
-      <div class="lk-eyebrow rv">Technology</div>
-      <h2 class="lk-h2 rv">시스템 아키텍처 <em>&amp; 기술 스택</em></h2>
-      <div class="lk-rule rv"></div>
+  <!-- ══ 대형 메인 탭 스위치 ══ -->
+  <div class="main-tab-wrap text-center">
+    <div class="main-tabs">
+      <button class="main-tab main-tab-active" data-main-tab="current">
+        <span>✦</span>
+        <div>
+          2026 경량 아키텍처
+          <small>현재 1인 운영 중</small>
+        </div>
+      </button>
+      <button class="main-tab" data-main-tab="legacy">
+        <span>📦</span>
+        <div>
+          레거시 분산 아키텍처
+          <small>팀 프로젝트 원본</small>
+        </div>
+      </button>
+    </div>
+  </div>
 
-      <div class="arch-wrap rv">
-        <div class="arch-label">▸ System Architecture Overview</div>
-        <div class="arch-diagram">
-          <div class="arch-row">
-            <div class="arch-node an-user">👤 사용자 / 프론트엔드<small>HTML5 · Bootstrap 5 · JavaScript</small></div>
-          </div>
-          <div class="arch-row">
-            <div class="arch-arr">↓</div>
-          </div>
-          <div class="arch-row">
-            <div class="arch-node an-api">🔌 FastAPI Backend<small>인증 · 상품검색 · 게시판 · 마이페이지</small></div>
-            <div class="arch-arr">⟷</div>
-            <div class="arch-node an-ml">🤖 ML FastAPI<small>YOLO-Seg · Fashion-CLIP · 임베딩 추론</small></div>
-          </div>
-          <div class="arch-row">
-            <div class="arch-arr">↓</div>
-            <div style="width:50px"></div>
-            <div class="arch-arr">↓</div>
-          </div>
-          <div class="arch-row">
-            <div class="arch-node an-db">🗃 PostgreSQL / MySQL<small>상품 Meta · 사용자 인증 · 가격 이력</small></div>
-            <div class="arch-node an-cache">⚡ Elasticsearch + Redis<small>벡터검색 · 캐시 · 세션 · Rate Limit</small></div>
-            <div class="arch-node an-db">🍃 MongoDB<small>크롤링 원본 · 로그 · AI 분석 결과</small></div>
-          </div>
-          <div class="arch-row">
-            <div class="arch-arr">↕</div>
-          </div>
-          <div class="arch-row">
-            <div class="arch-node an-pipe">⚙️ Apache Airflow<small>매일 새벽 2시 DAG 자동 실행</small></div>
-            <div class="arch-arr">→</div>
-            <div class="arch-node an-pipe">🔀 Apache Spark<small>전처리 · Hadoop HDFS ETL</small></div>
-            <div class="arch-arr">→</div>
-            <div class="arch-node an-pipe">📡 Kafka<small>실시간 로그 · 메트릭 스트리밍</small></div>
-          </div>
-        </div>
-      </div>
+  <!-- ────────────────────────────────────────────────────────── -->
+  <!-- ══ [탭 1] 2026 경량 아키텍처 뷰포트 ══ -->
+  <!-- ────────────────────────────────────────────────────────── -->
+  <div id="main-panel-current" class="main-panel">
 
-      <div class="tech-grid rv">
-        <div class="tech-group tg-db">
-          <div class="tg-pill">Database</div>
-          <div class="tech-tags">
-            <span class="tech-tag">PostgreSQL</span><span class="tech-tag">MySQL</span>
-            <span class="tech-tag">MongoDB</span><span class="tech-tag">Redis</span>
-            <span class="tech-tag">Elasticsearch</span>
+    <!-- ══ SECTION 2: TECH STACK (CURRENT) ══ -->
+    <div id="lk-techstack">
+      <div class="lk-section">
+        <div class="lk-eyebrow rv">Technology</div>
+        <h2 class="lk-h2 rv">시스템 아키텍처 <em>&amp; 기술 스택</em></h2>
+        <div class="lk-rule rv"></div>
+
+        <div class="arch-wrap rv">
+          <div class="arch-label">▸ Lightweight Architecture — Render Free Tier (512MB RAM)</div>
+          <div class="arch-diagram">
+            <div class="arch-row">
+              <div class="arch-node an-user">👤 사용자 / 프론트엔드<small>HTML5 · Bootstrap 5 · JavaScript</small></div>
+            </div>
+            <div class="arch-row"><div class="arch-arr">↓</div></div>
+            <div class="arch-row">
+              <div class="arch-node an-api">🔌 FastAPI (Render)<small>인증 · 상품검색 · 게시판 · 어드민</small></div>
+            </div>
+            <div class="arch-row">
+              <div class="arch-arr" style="margin-right: 40px;">↙</div>
+              <div class="arch-arr" style="margin-left: 40px;">↘</div>
+            </div>
+            <div class="arch-row">
+              <div class="arch-node an-db" style="flex: 1.5;">🗃 Neon PostgreSQL &amp; pgvector<small>상품 Meta · 사용자 세션 · HNSW 코사인 유사도 검색</small></div>
+              <div class="arch-node an-ml" style="flex: 1.5;">🤖 HuggingFace Space<small>YOLOv8 영역 검출 · Fashion-CLIP 임베딩 추론</small></div>
+            </div>
+            <div class="arch-row"><div class="arch-arr">↕</div></div>
+            <div class="arch-row">
+              <div class="arch-node an-pipe">☁️ Cloudinary CDN<small>이미지 스토리지 · 자동 변환 · 대역폭</small></div>
+              <div class="arch-arr">⟷</div>
+              <div class="arch-node an-pipe">⚙️ GitHub Actions<small>7일 주기 크롤링 배치 · Blue-Green Swap</small></div>
+            </div>
           </div>
         </div>
-        <div class="tech-group tg-dl">
-          <div class="tg-pill">AI / Deep Learning</div>
-          <div class="tech-tags">
-            <span class="tech-tag">YOLOv11-Seg</span><span class="tech-tag">Fashion-CLIP</span>
-            <span class="tech-tag">KeyBERT</span><span class="tech-tag">KoNLPy</span>
-            <span class="tech-tag">PyTorch</span><span class="tech-tag">D-FINE</span>
+
+        <div class="tech-grid rv">
+          <div class="tech-group tg-db">
+            <div class="tg-pill">Database</div>
+            <div class="tech-tags">
+              <span class="tech-tag">Neon PostgreSQL</span>
+              <span class="tech-tag">pgvector (HNSW)</span>
+            </div>
           </div>
-        </div>
-        <div class="tech-group tg-inf">
-          <div class="tg-pill">Infrastructure</div>
-          <div class="tech-tags">
-            <span class="tech-tag">AWS EC2</span><span class="tech-tag">Docker</span>
-            <span class="tech-tag">Kafka</span><span class="tech-tag">Hadoop HDFS</span>
-            <span class="tech-tag">GitHub CI/CD</span>
+          <div class="tech-group tg-dl">
+            <div class="tg-pill">AI / ML</div>
+            <div class="tech-tags">
+              <span class="tech-tag">YOLOv8 (HF Space)</span>
+              <span class="tech-tag">Fashion-CLIP</span>
+            </div>
           </div>
-        </div>
-        <div class="tech-group tg-web">
-          <div class="tg-pill">Web / Backend</div>
-          <div class="tech-tags">
-            <span class="tech-tag">FastAPI</span><span class="tech-tag">HTML5</span>
-            <span class="tech-tag">Bootstrap 5</span><span class="tech-tag">JavaScript</span>
-            <span class="tech-tag">Naver Shopping API</span>
+          <div class="tech-group tg-inf">
+            <div class="tg-pill">Infrastructure</div>
+            <div class="tech-tags">
+              <span class="tech-tag">Render (Free)</span><span class="tech-tag">HuggingFace Space</span>
+              <span class="tech-tag">GitHub Actions</span><span class="tech-tag">Cloudinary CDN</span>
+            </div>
           </div>
-        </div>
-        <div class="tech-group tg-pipe">
-          <div class="tg-pill">Data Pipeline</div>
-          <div class="tech-tags">
-            <span class="tech-tag">Apache Airflow</span><span class="tech-tag">Apache Spark</span>
-            <span class="tech-tag">Hadoop HDFS</span><span class="tech-tag">Selenium</span>
-            <span class="tech-tag">BeautifulSoup</span>
+          <div class="tech-group tg-web">
+            <div class="tg-pill">Web / Backend</div>
+            <div class="tech-tags">
+              <span class="tech-tag">FastAPI</span><span class="tech-tag">HTML5</span>
+              <span class="tech-tag">Bootstrap 5</span><span class="tech-tag">JavaScript</span>
+              <span class="tech-tag">Naver Shopping API</span>
+            </div>
           </div>
-        </div>
-        <div class="tech-group tg-env">
-          <div class="tg-pill">Monitoring &amp; Ops</div>
-          <div class="tech-tags">
-            <span class="tech-tag">Kafka Streaming</span><span class="tech-tag">Filebeat</span>
-            <span class="tech-tag">Auto-Recovery</span><span class="tech-tag">Slack Alert</span>
-            <span class="tech-tag">Elasticsearch ILM</span>
+          <div class="tech-group tg-pipe">
+            <div class="tg-pill">Data Pipeline</div>
+            <div class="tech-tags">
+              <span class="tech-tag">Python 비동기 크롤러</span>
+              <span class="tech-tag">Selenium · BeautifulSoup</span>
+              <span class="tech-tag">Blue-Green Swap</span>
+              <span class="tech-tag">4대 에러 격리 &amp; 핀포인트 복구 API</span>
+              <span class="tech-tag">psutil (링버퍼)</span>
+            </div>
+          </div>
+          <div class="tech-group tg-env">
+            <div class="tg-pill">Monitoring &amp; Ops</div>
+            <div class="tech-tags">
+              <span class="tech-tag">psutil (CPU/RAM)</span>
+              <span class="tech-tag">Ring Buffer (24h)</span>
+              <span class="tech-tag">cgroups 동적 감지</span>
+              <span class="tech-tag">Slack Alert</span>
+            </div>
           </div>
         </div>
       </div>
     </div>
-  </div>
 
-  <!-- ══ SECTION 3: TEAM ══ -->
-  <div id="lk-team">
-    <div class="lk-section">
-      <div class="lk-eyebrow rv">Team Members</div>
-      <h2 class="lk-h2 rv">팀원 소개</h2>
-      <p class="lk-lead rv">카드에 마우스를 올리면 각 팀원의 세부 역할과 주요 성과를 확인할 수 있습니다.</p>
-      <div class="lk-rule rv"></div>
-
-      <div class="team-grid">
-
-        <!-- 한대성 -->
-        <div class="team-card rv d1">
-          <div class="card-bar bar-lead"></div>
-          <div class="card-header">
-            <div class="card-avatar av-lead">한</div>
-            <div class="card-meta">
-              <div class="card-badge">Lead Data Engineer · Pipeline Architect · Team Lead</div>
-              <div class="card-name">한대성</div>
-              <div class="card-name-en">Han Dae-Seong</div>
+    <!-- ══ SECTION 3: TEAM & ACCOMPLISHMENTS (CURRENT) ══ -->
+    <div id="lk-team">
+      <div class="lk-section">
+        <div class="lk-eyebrow rv">Refactoring Lead</div>
+        <h2 class="lk-h2 rv">1인 경량화 최적화 성과</h2>
+        <p class="lk-lead rv">서버리스 및 Free Tier 한계 내에서 512MB RAM OOM 문제를 완벽하게 해결하고 아키텍처를 리팩토링한 주요 공적입니다.</p>
+        <div class="lk-rule rv"></div>
+        <div class="team-grid justify-content-center">
+          
+          <!-- 한대성 (1-Man Refactoring Lead) -->
+          <div class="team-card rv d1 phase-card-solo" style="max-width: 800px; width: 100%;">
+            <div class="card-bar bar-lead" style="background: var(--accent, #d4522a);"></div>
+            <div class="card-header">
+              <div class="card-avatar av-lead" style="background: var(--accent, #d4522a);">한</div>
+              <div class="card-meta">
+                <div class="card-badge">Single-Handed Refactoring Lead · Full-Stack Architect</div>
+                <div class="card-name">한대성</div>
+                <div class="card-name-en">Han Dae-Seong</div>
+              </div>
             </div>
-          </div>
-          <div class="card-summary">
-            전체 데이터 아키텍처를 설계하고 팀원들이 각 파트를 구현할 수 있도록
-            <strong>분산 처리 인프라·대용량 파이프라인 기반을 완성</strong>한 핵심 DE 리더입니다.
-            이기종 DB(RDBMS/NoSQL) 설계부터 대용량 데이터 로깅·모니터링 체계 효율화,
-            Airflow/Spark 클러스터 고도화까지 분산 시스템 전 영역의 아키텍처를 정립했습니다.
-          </div>
-          <div class="card-tags">
-            <span class="ctag">Data Architecture</span><span class="ctag">Docker/AWS Infra</span>
-            <span class="ctag">Kafka Streaming</span><span class="ctag">System Modeling</span>
-            <span class="ctag">CI/CD</span><span class="ctag">Auto Recovery</span>
-            <span class="ctag">Apache Airflow/Spark</span>
-          </div>
-          <div class="card-hint">✦ 마우스를 올려 세부 역할 확인</div>
-          <div class="card-detail">
-            <div class="card-detail-inner">
-
-              <div class="det-sec">
-                <div class="det-label">🏗️ 인프라 아키텍처 & CI/CD 설계</div>
-                <ul class="det-list">
-                  <li>14개 컨테이너 통합 환경 설계— AWS EC2 기반 Docker Compose 인프라를 구축하여 팀 내 개발·배포 사이클 표준화</li>
-                  <li><strong>GitHub Actions CI/CD</strong> — 빌드 최적화 및 지속적인 데이터 통합 자동화 파이프라인 구현으로 운영 효율 극대화</li>
-                  <li>이기종 데이터 모델링 — PostgreSQL(정형)과 MongoDB(로그)의 ERD 설계 및 데이터 모델링 단독 진행</li>
-                  <li>분산 처리 클러스터 고도화 — Airflow/Spark 기반 전처리 시스템을 최적화하여 대용량 이미지 정제 성능 개선</li>
-                </ul>
-              </div>
-
-              <div class="det-sec">
-                <div class="det-label">⚡ 데이터 파이프라인 최적화 (성능 200배 개선)</div>
-                <ul class="det-list">
-                  <li><strong>병목 현상 해결 (20s → 100ms)</strong> — 수집과 조회 시스템을 완전 분리하여 페이지 로딩 속도를 혁신적으로 단축</li>
-                  <li><strong>리소스 부하 절감 (91% → 30%)</strong> — Kafka 기반 실시간 스트리밍 및 Elasticsearch Bulk 인덱싱 최적화로 CPU 부하 극한
-                    효율화</li>
-                  <li><strong>이중 로깅 파이프라인</strong> — Filebeat와 Docker SDK를 활용한 Fallback 설계로 장애 시 메시지 유실
-                    완벽 차단</li>
-                  <li>데이터 정합성 100% 보장 — MD5 해시 기반 고유 ID 발급으로 이중 트래픽 수집 시 자동 중복 제거 구현</li>
-                </ul>
-              </div>
-
-              <div class="det-sec">
-                <div class="det-label">🛡️ 통합 모니터링 및 자가 치유(Auto-Recovery)</div>
-                <ul class="det-list">
-                  <li><strong>Auto-Recovery 아키텍처</strong> — 인프라 임계치 기반 <strong>장애 컨테이너 자동 재시작 기믹</strong> 독자 개발 및 안정 장치
-                    적용</li>
-                  <li><strong>실시간 헬스 대시보드</strong> — Elasticsearch와 통합된 FastAPI 백엔드를 구축하여 전 시스템 상태 실시간 가시화</li>
-                  <li>Slack 조기 경보망 — 슬라이딩 윈도우 기반 Circuit Breaker 로직을 적용하여 이상 징후 즉시 알림
-                    체계 구축</li>
-                  <li>비동기 리팩토링 — Python <code>asyncio.to_thread()</code>를 활용해 메트릭 동시 수집 성능 및 서버 응답성 개선
-                  </li>
-                </ul>
-              </div>
-
-              <div class="det-sec">
-                <div class="det-label">🖥️ 서비스 총괄 및 E2E 구현</div>
-                <ul class="det-list">
-                  <li>FastAPI 백엔드 API 설계 — 사용자 인증, 게시판, 상품 검색 및 어드민 페이지를 포함한 전체 서비스 로직 구현</li>
-                  <li>사용자 경험(UX) 기능 — 좋아요, 최근 본 상품, 검색 히스토리 등 사용자 맞춤형 기능 및 도메인 연동</li>
-                  <li>기술 산출물 총괄 — 인프라 아키텍처 설계서, 기능 정의서, 분석 설계서 등 문서화 주도</li>
-                </ul>
-              </div>
-
-              <div class="det-sec det-sec-next">
-                <div class="det-label">🚀 DE 고도화 진행 예정</div>
-                <ul class="det-list">
-                  <li><strong>Airflow 고도화</strong> — Custom Operator 작성 및 DAG 병렬화, 메타DB 최적화 및 로그 ES 연동</li>
-                  <li><strong>Spark 튜닝 실전 적용</strong> — Executor 메모리 최적화, 파티션 전략 및 Skew 데이터 처리(Salting) 경험 확보</li>
-                  <li><strong>데이터 레이크 설계</strong> — HDFS 기반 Raw/Processed/Feature 3계층 구조 및 파티셔닝 전략 문서화</li>
-                </ul>
-              </div>
-
-              <!--
-
-              <div class="det-sec">
-                <div class="det-label">🏗️ 전체 🗄 데이터 아키텍처 및 파이프라인 설계</div>
-                <ul class="det-list">
-                  <li>수집 → 정제(ETL) → 임베딩 → 검색 → 서빙의 전체 분산 데이터 흐름 아키텍처 총괄 및 마일스톤 주도</li>
-                  <li><strong>Airflow/Spark 분산 전처리 클러스터</strong>를 고도화하여 대용량 크롤링 이미지/메타 정제 성능 대폭 개선</li>
-                  <li>AWS EC2 기반에 Docker Compose 14 컨테이너 환경을 자체 설계·통합하여 팀 내 개발·배포 사이클 기반 마련</li>
-                  <li>실무 트래픽을 고려해 서비스 RDBMS(PostgreSQL) 메타 정형 데이터와 로그/원문용 NoSQL(MongoDB) 이기종 <strong>ERD 및 데이터 모델링 단독
-                      진행</strong></li>
-                  <li>GitHub Actions CI/CD 구축으로 빌드 최적화 및 지속적인 데이터 통합 자동화 파이프라인 구현</li>
-                </ul>
-              </div>
-
-              <div class="det-sec">
-                <div class="det-label">🔁 대용량 로깅/메트릭 🚀 데이터 파이프라인 구축</div>
-                <ul class="det-list">
-                  <li><strong>이중 로깅 파이프라인</strong> — Filebeat → Kafka 토픽 파티셔닝 → Elasticsearch (경로 A) 및 Docker
-                    SDK 직접 수집 (경로 B, Fallback) 설계로 장애 방어와 메시지 유실 완벽 차단</li>
-                  <li><strong>시계열 메트릭 파이프라인</strong> — Kafka 기반 실시간 리소스(CPU/Mem) 스트리밍 토픽을 구축하고, Elasticsearch Bulk 인덱싱
-                    주기를 최적화해 CPU 부하 91% → 30%대로 극한 효율화 달성</li>
-                  <li>MD5 해시 기준 고유 문서 ID 발급으로 이중 트래픽 수집 시에도 Elasticsearch 자동 중복 제거 100% 보장</li>
-                  <li>단순 API 조회 단계를 수집 시스템과 조회 시스템으로 완전 분리하여 시스템 호출 병목 완화 (20초 걸리던 페이지 로딩을 <strong>100ms</strong>대 달성)
-                  </li>
-                </ul>
-              </div>
-
-              <div class="det-sec">
-                <div class="det-label">📊 통합 모니터링 체계 & Backend 구현</div>
-                <ul class="det-list">
-                  <li>Elasticsearch와 통합된 FastAPI 백엔드 엔드포인트를 구축하여, 전체 컨테이너와 데이터 파이프라인 헬스를 대시보드에 실시간 제공</li>
-                  <li>슬라이딩 위도우 기반 에러율 급증 탐지 로직(Circuit Breaker 적용) 개발로 Slack 이상 징후 조기 경보망 구축</li>
-                  <li>인프라 임계치 기반 Auto-Recovery(Docker 재시작 자동화) 아키텍처 단독 개발 (쿨다운 등 안정기믹 포함)</li>
-                  <li>Python <code>asyncio.to_thread()</code>를 활용한 메트릭 비동기 동시 수집 백엔드 리팩토링 구현</li>
-                </ul>
-              </div>
-
-              <div class="det-sec">
-                <div class="det-label">🖥️ 백엔드 · 프론트엔드 · 산출물 총괄</div>
-                <ul class="det-list">
-                  <li>FastAPI 백엔드 API 설계·구현, 전체 서비스 페이지(로그인·게시판·마이페이지·상품검색·어드민) 구현</li>
-                  <li>사용자 좋아요·최근 본 상품·검색 히스토리 기능, 도메인 연동 및 E2E 서비스 완성</li>
-                  <li>역할 분담 계획서·기능정의서·분석설계서·인프라 아키텍처 문서 등 팀 산출물 총괄</li>
-                </ul>
-              </div>
-
-              <div class="det-sec det-sec-next">
-                <div class="det-label">🚀 DE 고도화 — 진행 예정</div>
-                <ul class="det-list">
-                  <li><strong>Airflow 고도화</strong> — Custom Operator 작성, DAG 병렬화·Pool 제어, SLA Miss 알람, 메타DB 최적화 및 로그 ES
-                    연동</li>
-                  <li><strong>데이터 품질 파이프라인</strong> — 수집 데이터 자동 검증 DAG, 볼륨·스키마 변화 감지 알람, 파이프라인 SLA 대시보드</li>
-                  <li><strong>Spark 튜닝 직접 경험</strong> — Executor 메모리/코어 최적화, 파티션 전략, Skew 데이터 처리(salting)</li>
-                  <li><strong>데이터 레이크 재설계</strong> — Raw / Processed / Feature 3계층 HDFS 구조, 날짜·브랜드·카테고리 파티셔닝 전략 문서화</li>
-                  <li><strong>운영 모니터링 시스템 독립 오픈소스화</strong> — Kafka+ES 이중 파이프라인을 범용 컨테이너 모니터링 솔루션으로 분리·공개</li>
-                </ul>
-              </div>
-
-            -->
-
+            <div class="card-summary">
+              기존의 고비용 분산 인프라(AWS EC2 xlarge 및 14개 컨테이너)를 **월 운영비 0원(Free Tier)의 극한 효율 서버리스 환경**으로 1인 재구축 완료했습니다. Render 무료 티어의 512MB 램 제약을 극복하기 위해 YOLO 및 Fashion-CLIP 추론 모델을 원격 Hugging Face Space API로 완벽하게 이관(OOM 차단)하였으며, Elasticsearch/Redis/MongoDB 등 3종 데이터베이스 인프라를 **Neon DB (pgvector HNSW)** 하나로 기적처럼 일원화하여 성능과 비용 두 마리 토끼를 모두 잡았습니다.
             </div>
-          </div>
-        </div>
-
-        <!-- 박주언 -->
-        <div class="team-card rv d2">
-          <div class="card-bar bar-de"></div>
-          <div class="card-header">
-            <div class="card-avatar av-de">박</div>
-            <div class="card-meta">
-              <div class="card-badge">Data Engineer · ETL · Crawling</div>
-              <div class="card-name">박주언</div>
-              <div class="card-name-en">Park Ju-Eon</div>
+            <div class="card-tags">
+              <span class="ctag" style="border-color:var(--accent); color:var(--accent);">Serverless Free-Tier (비용 100% 절감)</span>
+              <span class="ctag">pgvector HNSW 벡터 검색 통합</span>
+              <span class="ctag">HuggingFace Space YOLO/CLIP API 이관</span>
+              <span class="ctag">cgroups/psutil 경량 모니터링 직접 구현</span>
+              <span class="ctag">Render 512MB RAM OOM 방어</span>
+              <span class="ctag">Redis 배제 및 DB 기반 세션 전환</span>
             </div>
-          </div>
-          <div class="card-summary">
-            브랜드별 쇼핑몰 크롤러를 직접 개발해
-            <strong>각 브랜드의 데이터 수집·적재 초기 모델을 테스트하고 구축</strong>했습니다.
-            TOPTEN·ZARA 크롤러 개발, Spark 전처리 프로그램 작성, Naver 쇼핑 API 연동,
-            ERD·DB 설계까지 ETL 파이프라인의 실질적 구현을 책임진 데이터 엔지니어입니다.
-          </div>
-          <div class="card-tags">
-            <span class="ctag">Apache Spark</span>
-            <span class="ctag">Web Crawling</span><span class="ctag">ETL Pipeline</span>
-            <span class="ctag">ERD 설계</span><span class="ctag">Naver API</span>
-          </div>
-          <div class="card-hint">✦ 마우스를 올려 세부 역할 확인</div>
-          <div class="card-detail">
-            <div class="card-detail-inner">
-              <div class="det-sec">
-                <div class="det-label">🕷️ 브랜드별 크롤러 개발 · 초기 수집 모델 구축</div>
-                <ul class="det-list">
-                  <li>TOPTEN · ZARA 공식몰 크롤러를 브랜드별로 독립 개발 — 각 사이트 구조를 분석해 상품명·이미지·가격·상세 정보 수집 로직 설계</li>
-                  <li>브랜드마다 다른 HTML 구조·JS 렌더링 방식에 맞춰 Selenium / BeautifulSoup 전략을 선택적으로 적용</li>
-                  <li>초기 수집 모델을 테스트하며 데이터 누락·중복·포맷 불일치 문제를 반복 보완, 안정적인 수집 기준 수립</li>
-                  <li>쇼핑몰 카테고리 구조 정리 및 상품 메타데이터 필드 표준화 — 팀 전체 공통 스키마 기준 마련</li>
-                  <li>Naver 쇼핑 API 연동으로 키워드별 최저가 5개 자동 수집, MongoDB 캐시로 중복 호출 방지</li>
-                </ul>
-              </div>
-              <div class="det-sec">
-                <div class="det-label">⚙️ Spark 전처리 · 데이터 적재 파이프라인</div>
-                <ul class="det-list">
-                  <li>Apache Spark 전처리 프로그램 개발 — 병렬 정제·중복 제거·이미지 다운로드 후 Parquet 포맷 변환</li>
-                  <li>Hadoop HDFS 파티션 적재 및 관리, 데이터 볼륨 증가에도 안정적으로 동작하는 구조 설계</li>
-                  <li>Docker 환경 구성 테스트 및 팀원 환경 세팅 지원</li>
-                </ul>
-              </div>
-              <div class="det-sec">
-                <div class="det-label">🗄️ DB 설계 · 문서 · 발표</div>
-                <ul class="det-list">
-                  <li>테이블 정의서 · ERD · DDL Script 작성 — 팀 전체 DB 설계의 기준 문서 담당</li>
-                  <li>Architecture 정의서 및 프로젝트 기획서 작성</li>
-                  <li>최종 발표 자료 제작 및 프로젝트 결과 발표 주도</li>
-                </ul>
+            <div class="card-hint">✦ 마우스를 올려 리팩토링 성과 세부 내역 확인</div>
+            <div class="card-detail">
+              <div class="card-detail-inner">
+                <div class="det-sec">
+                  <div class="det-label" style="color: var(--accent, #d4522a);">🧠 Render Free Tier (512MB RAM) 메모리 최적화</div>
+                  <ul class="det-list">
+                    <li><strong>OOM(Out Of Memory) 원천 차단</strong> — 대형 로컬 AI 모델(Fashion-CLIP, YOLOv8) 로딩을 제어하는 <code>USE_LOCAL_ML</code> 토글 스위치 설계 및 Gradio API 기반 HF Space 비동기 호출 구현으로 512MB RAM 환경 완벽 이식.</li>
+                    <li><strong>가비지 컬렉션 및 메모리 해제 강화</strong> — 추론이 비활성화되거나 불필요한 라이브러리 임포트를 차단하여 메모리 누수 방지 기믹 완성.</li>
+                  </ul>
+                </div>
+                <div class="det-sec">
+                  <div class="det-label" style="color: var(--accent, #d4522a);">⚡ 데이터베이스 및 데이터 파이프라인 극적 단일화</div>
+                  <ul class="det-list">
+                    <li><strong>pgvector HNSW 도입</strong> — 기존 Elasticsearch, Redis, MongoDB의 복잡한 이종 분산 데이터베이스 클러스터를 걷어내고, Neon PostgreSQL의 <code>pgvector</code> 확장 모듈의 HNSW 코사인 유사도 검색 인덱스 하나로 벡터 검색 흐름을 통합 구축하여 레이턴시 단축.</li>
+                    <li><strong>DB 기반 세션 관리로 Redis 대체</strong> — 세션 정보 관리를 Redis 인메모리 스토리지 대신 Neon DB의 <code>user_sessions</code> 테이블로 통합 전환하여 데이터베이스 서빙 및 라이프사이클 비용 효율화.</li>
+                  </ul>
+                </div>
+                <div class="det-sec">
+                  <div class="det-label" style="color: var(--accent, #d4522a);">⚙️ 경량 배치 &amp; 비동기 파이프라인 리팩토링</div>
+                  <ul class="det-list">
+                    <li><strong>GitHub Actions Cron 크롤러</strong> — Apache Airflow, Spark, Kafka 클러스터를 전면 배제하고, Python 비동기 스크립트 기반 경량 크롤러로 대폭 다이어트하여 7일 주기 배치를 자동 트리거화.</li>
+                    <li><strong>Blue-Green Swap 무중단 데이터 교체</strong> — 수집 후 24시간 격리 데이터베이스 검증 및 pgvector 인덱스 교체 기믹을 활용하여 1인 무중단 서비스 운영 기틀 정립.</li>
+                    <li><strong>에러 상품 격리 및 핀포인트 복구 대시보드 구축</strong> — 필수 메타 유실, 가격 전무, 임베딩 누락, 이미지 깨짐 등 4대 치명 오류가 감지된 상품을 자동 이관 대상에서 배제하여 Staging에 격리 유지하고, 관리자 에러 통제 탭에서 단일 핀포인트 실시간 [재수집] API(최저가 쇼핑 검색 5개 즉시 갱신 및 CLIP 연산) 및 벌크 복구 조치 바인딩을 신설하여 파이프라인의 안정성을 비약적으로 향상시킴.</li>
+                  </ul>
+                </div>
+                <div class="det-sec">
+                  <div class="det-label" style="color: var(--accent, #d4522a);">📊 1인 임베디드 모니터링 시스템 구축</div>
+                  <ul class="det-list">
+                    <li><strong>cgroups &amp; psutil 통합 자원 감지</strong> — 복잡한 메트릭 파이프라인 대신 FastAPI 라이프사이클 데몬에 임베디드 링버퍼(24h) 자원 감지기를 탑재하여 CPU/RAM 상태 상시 모니터링 및 Slack 자동 알림 경보망 구현.</li>
+                  </ul>
+                </div>
               </div>
             </div>
           </div>
         </div>
-
-        <!-- 이주형 -->
-        <div class="team-card rv d3">
-          <div class="card-bar bar-ml"></div>
-          <div class="card-header">
-            <div class="card-avatar av-ml">이</div>
-            <div class="card-meta">
-              <div class="card-badge">ML Engineer · Crawler · MLOps</div>
-              <div class="card-name">이주형</div>
-              <div class="card-name-en">Lee Ju-Hyeong</div>
-            </div>
-          </div>
-          <div class="card-summary">
-            객체 탐지·임베딩·벡터 검색 모델을 비교 연구해 <strong>AI 모델 스택을 선정</strong>하고,
-            무신사·ZARA 크롤러를 설계하며 데이터 수집의 핵심 파트를 담당했습니다.
-            특히 <strong>VLM 모델 선정·학습</strong>과 <strong>텍스트 기반 검색 모듈</strong>을 핵심적으로 주도했으며,
-            Airflow DAG와 ML 파이프라인을 최종 연결해 End-to-End 자동화를 완성한 엔지니어입니다.
-          </div>
-          <div class="card-tags">
-            <span class="ctag">Apache Airflow</span><span class="ctag">YOLOv11</span>
-            <span class="ctag">VLM · LLaVA</span><span class="ctag">Embedding</span>
-            <span class="ctag">Crawler 설계</span><span class="ctag">ML Pipeline</span>
-          </div>
-          <div class="card-hint">✦ 마우스를 올려 세부 역할 확인</div>
-          <div class="card-detail">
-            <div class="card-detail-inner">
-              <div class="det-sec">
-                <div class="det-label">🤖 AI 모델 리서치 · 스택 선정</div>
-                <ul class="det-list">
-                  <li>객체 탐지·임베딩·고속 벡터 검색 분야 논문 및 모델 전반을 조사·비교해 프로젝트 AI 스택(YOLOv11, Fashion-CLIP, Elasticsearch KNN) 최종
-                    선정 주도</li>
-                  <li>YOLOv11 분류 모델 파인튜닝 실험 — 카테고리별 탐지 성능 비교 및 최적 가중치 선택</li>
-                  <li>임베딩 모델 비교 실험 (Fashion-CLIP vs ResNet vs ViT) — 패션 도메인 유사도 정확도 기준으로 Fashion-CLIP 채택 근거 마련</li>
-                </ul>
-              </div>
-              <div class="det-sec">
-                <div class="det-label">🧠 VLM 선정 · 학습 · 텍스트 검색 모듈 구축</div>
-                <ul class="det-list">
-                  <li>텍스트 기반 검색을 위한 VLM 모델 후보군 조사 — LLaVA · InstructBLIP · MiniGPT 비교 후 LLaVA 선정</li>
-                  <li>LLaVA 기반 VLM 프롬프트 설계 및 학습 실험 — 상품 이미지에서 자연어 설명 생성 품질 검증</li>
-                  <li>VLM 생성 텍스트 → SBERT 임베딩 연결 파이프라인 설계 — 텍스트 기반 검색 모듈의 핵심 흐름 구축</li>
-                  <li>이미지 검색(Fashion-CLIP)과 텍스트 검색(SBERT) 두 경로의 Late Fusion 전략 설계에 기여</li>
-                </ul>
-              </div>
-              <div class="det-sec">
-                <div class="det-label">🕷️ 크롤러 설계 · ML 파이프라인 자동화</div>
-                <ul class="det-list">
-                  <li>무신사 · ZARA 크롤러 설계 및 개발, MongoDB 저장·이미지 다운로드 로직 구현</li>
-                  <li>Scraping 방식 전환으로 대용량 이미지 저장 용량 이슈 해결</li>
-                  <li>데이터 수집 → 전처리 → 임베딩 → DB 적재 통합 ML 파이프라인 구축</li>
-                  <li>Airflow DAG와 ML 파이프라인 최종 연결 — End-to-End 자동화 완성</li>
-                  <li>라이브러리 가이드 · 데이터 명세서 작성으로 팀 온보딩 지원</li>
-                </ul>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- 정수아 -->
-        <div class="team-card rv d4">
-          <div class="card-bar bar-ai"></div>
-          <div class="card-header">
-            <div class="card-avatar av-ai">정</div>
-            <div class="card-meta">
-              <div class="card-badge">AI Researcher · Model · Vector Search</div>
-              <div class="card-name">정수아</div>
-              <div class="card-name-en">Jung Su-A</div>
-            </div>
-          </div>
-          <div class="card-summary">
-            서비스 전체의 <strong>디자인 방향성과 UX 흐름</strong>을 정의하고,
-            이미지·텍스트 유사도 검색의 <strong>핵심 AI 코어</strong>를 개발했습니다.
-            YOLOv11 파인튜닝, Fashion-CLIP·SBERT 임베딩 구현부터
-            검색 정확도를 높이기 위한 하이퍼파라미터 튜닝, ML 전용 FastAPI 백엔드 구축까지
-            검색 품질 전반을 책임진 AI 연구자입니다.
-          </div>
-          <div class="card-tags">
-            <span class="ctag">YOLOv11 파인튜닝</span><span class="ctag">Fashion-CLIP</span>
-            <span class="ctag">Vector Search</span><span class="ctag">Model Pipeline</span>
-            <span class="ctag">UX 설계</span>
-          </div>
-          <div class="card-hint">✦ 마우스를 올려 세부 역할 확인</div>
-          <div class="card-detail">
-            <div class="card-detail-inner">
-              <div class="det-sec">
-                <div class="det-label">🎨 서비스 디자인 방향성 · UX 설계</div>
-                <ul class="det-list">
-                  <li>서비스 전체 디자인 방향성 정의 — 색상 체계·레이아웃·인터랙션 가이드 수립으로 UI 일관성 확보</li>
-                  <li>사용자 시나리오 기반 화면 설계서 및 UX 흐름 정의 — 이미지 업로드부터 결과 확인까지 전 과정 설계</li>
-                  <li>서비스 흐름도·유스케이스 명세서 작성으로 팀 전체 개발 방향 공유</li>
-                </ul>
-              </div>
-              <div class="det-sec">
-                <div class="det-label">🧠 검색 AI 코어 개발 · 정확도 튜닝</div>
-                <ul class="det-list">
-                  <li>YOLOv11 파인튜닝 — 에포크·학습률·앵커 박스 등 하이퍼파라미터를 반복 실험해 카테고리별 탐지 정확도 최적화</li>
-                  <li>이미지 전처리·객체 탐지 후처리 파이프라인 구현 — 배경 제거 품질이 임베딩 정확도에 미치는 영향 분석 및 개선</li>
-                  <li>Fashion-CLIP 임베딩 모델 구현 및 유사도 임계값·검색 결과 수 튜닝으로 검색 품질 반복 개선</li>
-                  <li>SBERT 텍스트 임베딩 파이프라인 구현 — VLM 생성 텍스트의 임베딩 품질 검증 및 후처리 로직 설계</li>
-                  <li>Late Fusion(이미지 70% · 텍스트 30%) 가중치 실험 — 비율별 검색 정확도를 비교해 최적 융합 비율 도출</li>
-                </ul>
-              </div>
-              <div class="det-sec">
-                <div class="det-label">🔍 ML 백엔드 · 벡터 검색 구현</div>
-                <ul class="det-list">
-                  <li>검색 전용 FastAPI 백엔드 서버 구축 — 이미지·텍스트·복합 입력 3가지 검색 경로를 단일 API로 통합</li>
-                  <li>Elasticsearch 벡터 DB 적재 코드 작성 — KNN 인덱스 설정, 샤드·리플리카 구성, 매핑 최적화</li>
-                  <li>이미지 유사도 검색 로직 설계·구현 및 Airflow 모델 파이프라인 자동화 개발</li>
-                  <li>ARM 리눅스 환경 구성 및 모델 실행 최적화 — GPU 메모리 관리·배치 크기 조정으로 추론 속도 개선</li>
-                </ul>
-              </div>
-            </div>
-          </div>
-        </div>
-
       </div>
     </div>
-  </div>
 
-  <!-- ══ SECTION 4: PIPELINE ══ -->
-  <div id="lk-pipeline">
-    <div class="lk-section">
-      <div class="lk-eyebrow rv">Pipeline</div>
-      <h2 class="lk-h2 rv">시스템 <em>파이프라인</em></h2>
-      <div class="lk-rule rv"></div>
+    <!-- ══ SECTION 4: PIPELINE (CURRENT) ══ -->
+    <div id="lk-pipeline-current-wrapper">
+      <div class="lk-section">
+        <div class="lk-eyebrow rv">Data Pipeline</div>
+        <h2 class="lk-h2 rv">시스템 <em>파이프라인</em></h2>
+        <div class="lk-rule rv"></div>
 
-      <!-- 탭 버튼 -->
-      <div class="pipe-tabs rv">
-        <button class="pipe-tab active" data-tab="data">
-          <span class="tab-icon">🗄️</span>
-          <span class="tab-text">데이터 수집 파이프라인<small>Airflow · Spark · Crawling</small></span>
-        </button>
-        <button class="pipe-tab" data-tab="service">
-          <span class="tab-icon">⚡</span>
-          <span class="tab-text">서비스 파이프라인<small>사용자 요청 → 검색 결과</small></span>
-        </button>
-        <button class="pipe-tab" data-tab="ops">
-          <span class="tab-icon">🛡️</span>
-          <span class="tab-text">운영 파이프라인<small>실시간 모니터링 · 알람 · 자동복구</small></span>
-        </button>
-      </div>
+        <!-- 탭 버튼 (teams3 원본 클래스 복원) -->
+        <div class="pipe-tabs rv">
+          <button class="pipe-tab active" data-tab="data-light">
+            <span class="tab-icon">⚙️</span>
+            <span class="tab-text">수집 파이프라인<small>GitHub Actions · Blue-Green Swap</small></span>
+          </button>
+          <button class="pipe-tab" data-tab="service-light">
+            <span class="tab-icon">⚡</span>
+            <span class="tab-text">서비스 파이프라인<small>사용자 요청 → 검색 결과</small></span>
+          </button>
+          <button class="pipe-tab" data-tab="ops-light">
+            <span class="tab-icon">🛡️</span>
+            <span class="tab-text">운영 파이프라인<small>psutil · 링버퍼 · cgroups 감지</small></span>
+          </button>
+        </div>
 
-      <!-- 데이터 수집 파이프라인 -->
-      <div class="pipe-panel" id="tab-data">
-        <div class="pipe-list">
-          <div class="pipe-step">
-            <div class="pipe-dot" style="--dc:#d4522a">1</div>
-            <div class="pipe-body">
-              <h4>Airflow DAG 실행 — 매일 새벽 2시 자동 트리거</h4>
-              <p>스케줄러가 DAG를 자동 실행해 크롤링 → 전처리 → 임베딩 전 과정을 무인 자동화로 처리합니다.</p>
+        <!-- 경량 수집 파이프라인 (teams3 원본 디자인) -->
+        <div class="pipe-panel" id="tab-data-light">
+          <div class="pipe-list">
+            <div class="pipe-step">
+              <div class="pipe-dot" style="--dc:#d4522a">1</div>
+              <div class="pipe-body">
+                <h4>GitHub Actions 배치 크롤링 — 7일 주기 자동 트리거</h4>
+                <p>Render 무료 서버의 RAM 512MB 한계를 고려해 크롤링 연산을 GitHub Actions 환경으로 분리했습니다. Render 서버 부하 없이 독립 VM에서 6개 브랜드 수집이 실행됩니다.</p>
+              </div>
             </div>
-          </div>
-          <div class="pipe-step">
-            <div class="pipe-dot" style="--dc:#d4522a">2</div>
-            <div class="pipe-body">
-              <h4>크롤링 — 유니클로 · ZARA · 탑텐 · 무신사 스탠다드 · 8-seconds</h4>
-              <p>상품명·이미지·가격·상세 정보를 수집해 Hadoop에 원본 저장합니다. 탑텐은 상세 정보가 이미지이므로 OCR로 텍스트를 추출합니다.</p>
+            <div class="pipe-step">
+              <div class="pipe-dot" style="--dc:#d4522a">2</div>
+              <div class="pipe-body">
+                <h4>크롤링 — 에잇세컨즈 · 탑텐 · 유니클로 · 스파오 · 지오다노 · 폴햄</h4>
+                <p>상품명·이미지·가격·상세 정보를 수집해 <strong>Neon DB</strong>의 <code>staging_products</code> 테이블에 1차 격리 저장합니다. 수집과 동시에 Cloudinary <code>staging/{brand}</code> 폴더에 이미지를 업로드합니다.</p>
+              </div>
             </div>
-          </div>
-          <div class="pipe-step">
-            <div class="pipe-dot" style="--dc:#d4522a">3</div>
-            <div class="pipe-body">
-              <h4>Spark 전처리 — Hadoop Parquet 변환</h4>
-              <p>병렬 처리로 데이터 정제·중복 제거·이미지 다운로드 후 Parquet 포맷으로 변환해 분석 효율을 높입니다.</p>
+            <div class="pipe-step">
+              <div class="pipe-dot" style="--dc:#d4522a">3</div>
+              <div class="pipe-body">
+                <h4>임베딩 사전 추출 → DW DB 보관</h4>
+                <p>수집 직후 HuggingFace Space의 YOLOv8 추론 서버에서 배경을 제거(Pre-Crop)하고, Fashion-CLIP 이미지 임베딩(512d)을 추출해 Neon DB <code>product_embeddings</code> 테이블에 사전 적재합니다.</p>
+              </div>
             </div>
-          </div>
-          <div class="pipe-step">
-            <div class="pipe-dot" style="--dc:#d4522a">4</div>
-            <div class="pipe-body">
-              <h4>PostgreSQL · MongoDB 분리 적재</h4>
-              <p>정형 상품 데이터는 PostgreSQL(JSONB · 시계열 파티셔닝), 크롤링 원본·로그·AI 분석 결과는 MongoDB에 저장합니다.</p>
-            </div>
-          </div>
-          <div class="pipe-step">
-            <div class="pipe-dot" style="--dc:#d4522a">5</div>
-            <div class="pipe-body">
-              <h4>Naver 쇼핑 API — 최저가 5개 수집</h4>
-              <p>상품명으로 Naver API를 조회해 오름차순 최저가 5개 판매처를 수집합니다. MongoDB 캐시로 중복 API 호출을 방지합니다.</p>
-            </div>
-          </div>
-          <div class="pipe-step">
-            <div class="pipe-dot" style="--dc:#d4522a">6</div>
-            <div class="pipe-body">
-              <h4>임베딩 생성 → Elasticsearch 벡터 DB 이중 적재</h4>
-              <p>크롤링으로 수집된 상품 이미지를 두 경로로 병렬 처리합니다.</p>
-              <div class="pipe-branch-wrap">
-                <div class="pipe-branch branch-a">
-                  <div class="branch-label">📷 이미지 임베딩 경로</div>
-                  <div class="branch-flow">
-                    <div class="branch-node">YOLOv11<small>객체 탐지 · 카테고리 분류</small></div>
-                    <div class="branch-arrow">↓</div>
-                    <div class="branch-node">Fashion-CLIP<small>이미지 → 벡터 변환</small></div>
-                    <div class="branch-arrow">↓</div>
-                    <div class="branch-node es-node">Elasticsearch<small>이미지 벡터 인덱스 저장</small></div>
-                  </div>
-                </div>
-                <div class="pipe-branch branch-b">
-                  <div class="branch-label">📝 텍스트 임베딩 경로</div>
-                  <div class="branch-flow">
-                    <div class="branch-node">VLM<small>이미지 → 상품 설명 텍스트 생성</small></div>
-                    <div class="branch-arrow">↓</div>
-                    <div class="branch-node">SBERT<small>텍스트 → 벡터 변환</small></div>
-                    <div class="branch-arrow">↓</div>
-                    <div class="branch-node es-node">Elasticsearch<small>텍스트 벡터 인덱스 저장</small></div>
-                  </div>
-                </div>
+            <div class="pipe-step">
+              <div class="pipe-dot" style="--dc:#d4522a">4</div>
+              <div class="pipe-body">
+                <h4>24시간 격리 대기 → 에러 검증 및 Blue-Green Swap</h4>
+                <p>수집 데이터에 대해 24시간 격리 유예를 거치며 정합성을 전수 검사합니다. 필수 메타 유실, 가격 전무, 임베딩 누락, 이미지 깨짐 등 <strong>4대 치명 에러가 감지된 상품들은 자동으로 스위칭 대상에서 제외(격리 배제)</strong>되어 Staging에 대기 보존됩니다. 정상 상품들만 운영 DB로 무중단 Swap(Blue-Green 기믹)되며, 격리된 에러 상품은 운영자가 어드민 "에러 상품 통제" 탭에서 <strong>실시간 핀포인트 재수집 및 임베딩 재생성</strong> 조치를 즉시 실행할 수 있습니다.</p>
               </div>
             </div>
           </div>
         </div>
-      </div>
 
-      <!-- 서비스 파이프라인 -->
-      <div class="pipe-panel hidden" id="tab-service">
-        <div class="pipe-list">
-          <div class="pipe-step">
-            <div class="pipe-dot" style="--dc:#2563a8">1</div>
-            <div class="pipe-body">
-              <h4>사용자 입력 — 이미지 / 텍스트 / 이미지+텍스트</h4>
-              <p>메인 페이지에서 착용 사진·상품 이미지를 업로드하거나, 텍스트 키워드를 입력하거나, 두 가지를 함께 입력할 수 있습니다. 입력 유형에 따라 아래 세 가지 검색 경로 중 하나로
-                분기됩니다.</p>
-            </div>
-          </div>
-
-          <div class="pipe-step">
-            <div class="pipe-dot" style="--dc:#2563a8">2</div>
-            <div class="pipe-body">
-              <h4>유사도 검색 — 입력 유형에 따른 3가지 분기</h4>
-              <div class="pipe-branch-wrap">
-
-                <div class="pipe-branch branch-img">
-                  <div class="branch-label">📷 이미지만 입력</div>
-                  <div class="branch-flow">
-                    <div class="branch-node">Fashion-CLIP<small>이미지 → 벡터 임베딩</small></div>
-                    <div class="branch-arrow">↓</div>
-                    <div class="branch-node es-node">Elasticsearch<small>이미지 벡터 유사도 계산 → 상위 6개 반환</small></div>
-                  </div>
-                </div>
-
-                <div class="pipe-branch branch-txt">
-                  <div class="branch-label">📝 텍스트만 입력</div>
-                  <div class="branch-flow">
-                    <div class="branch-node">SBERT<small>텍스트 → 벡터 임베딩</small></div>
-                    <div class="branch-arrow">↓</div>
-                    <div class="branch-node es-node">Elasticsearch<small>텍스트 벡터 유사도 계산 → 상위 6개 반환</small></div>
-                  </div>
-                </div>
-
-                <div class="pipe-branch branch-both">
-                  <div class="branch-label">🔀 이미지 + 텍스트 입력</div>
-                  <div class="branch-flow">
-                    <div class="branch-node">Fashion-CLIP + SBERT<small>이미지 벡터 · 텍스트 벡터 각각 생성</small></div>
-                    <div class="branch-arrow">↓</div>
-                    <div class="branch-node fusion-node">Late Fusion<small>이미지 70% · 텍스트 30% 가중 결합</small></div>
-                    <div class="branch-arrow">↓</div>
-                    <div class="branch-node es-node">Elasticsearch<small>결합 벡터 유사도 계산 → 상위 6개 반환</small></div>
-                  </div>
-                </div>
-
+        <!-- 경량 서비스 파이프라인 (teams3 원본 디자인) -->
+        <div class="pipe-panel hidden" id="tab-service-light">
+          <div class="pipe-list">
+            <div class="pipe-step">
+              <div class="pipe-dot" style="--dc:#2563a8">1</div>
+              <div class="pipe-body">
+                <h4>사용자 입력 — 이미지 / 텍스트 / 이미지+텍스트</h4>
+                <p>메인 페이지에서 착용 사진·상품 이미지를 업로드하거나, 텍스트 키워드를 입력하거나, 두 가지를 함께 입력할 수 있습니다. 입력 유형에 따라 아래 세 가지 검색 경로 중 하나로 분기됩니다.</p>
               </div>
             </div>
-          </div>
-
-          <div class="pipe-step">
-            <div class="pipe-dot" style="--dc:#2563a8">3</div>
-            <div class="pipe-body">
-              <h4>상품 상세 정보 및 최저가 조회 → 결과 반환</h4>
-              <p>유사 상품 6개가 확정되면 PostgreSQL에서 상품 상세 정보(상품명·브랜드·공식가)를 가져오고, Naver 쇼핑 API로 외부 쇼핑몰 최저가 5개를 조회합니다. 최종 결과를 검색
-                결과 페이지에 표시하며, 사용자는 마이페이지에 저장하거나 검색 히스토리로 관리할 수 있습니다.</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- 운영 파이프라인 -->
-      <div class="pipe-panel hidden" id="tab-ops">
-        <div class="pipe-list">
-
-          <!-- STEP 1: 이중 수집 -->
-          <div class="pipe-step">
-            <div class="pipe-dot" style="--dc:#2d8a5e">1</div>
-            <div class="pipe-body">
-              <h4>로그 & 메트릭 이중 수집 — 14개 Docker 컨테이너 대상</h4>
-              <p>7개 서비스 그룹(Airflow·Spark·Hadoop·Kafka·DB·Elasticsearch·FastAPI)에서 발생하는 로그와 CPU/메모리 메트릭을 이중 경로로 안정적으로
-                수집합니다.</p>
-              <div class="pipe-branch-wrap">
-                <div class="pipe-branch branch-a">
-                  <div class="branch-label">📋 로그 수집 경로</div>
-                  <div class="branch-flow">
-                    <div class="branch-node">Filebeat 8.x<small>컨테이너 로그 파일 tail → 노이즈 필터링</small></div>
-                    <div class="branch-arrow">↓</div>
-                    <div class="branch-node fusion-node">Kafka<small>토픽: container-logs · gzip 압축 · 버퍼링</small></div>
-                    <div class="branch-arrow">↓</div>
-                    <div class="branch-node">KafkaLogConsumer<small>50건 or 10초마다 ES Bulk 인덱싱</small></div>
-                    <div class="branch-arrow">↓</div>
-                    <div class="branch-node es-node">Elasticsearch<small>container-logs 인덱스 · ILM 7일 자동삭제</small></div>
-                  </div>
-                </div>
-                <div class="pipe-branch branch-b">
-                  <div class="branch-label">📊 메트릭 수집 경로 (15초 주기)</div>
-                  <div class="branch-flow">
-                    <div class="branch-node">MetricCollector<small>Docker Socket API → CPU/메모리 수집</small></div>
-                    <div class="branch-arrow">↓</div>
-                    <div class="branch-node fusion-node">Kafka<small>토픽: system-metrics · Fail-Safe 패턴</small></div>
-                    <div class="branch-arrow">↓</div>
-                    <div class="branch-node">KafkaMetricConsumer<small>10건 or 2초마다 ES Bulk 인덱싱</small></div>
-                    <div class="branch-arrow">↓</div>
-                    <div class="branch-node es-node">Elasticsearch<small>container-metrics 인덱스 · 시계열 보존</small></div>
-                  </div>
-                </div>
-              </div>
-              <div class="ops-note">
-                <span class="ops-note-badge">Fallback</span>
-                Kafka 장애 시 <strong>Docker SDK 직접 수집(LogCollector)</strong>이 자동 활성화되어 로그 유실을 방지합니다. MD5 해시 기반 문서 ID로 이중
-                수집 시에도 Elasticsearch가 자동 중복 제거합니다.
-              </div>
-            </div>
-          </div>
-
-          <!-- STEP 2: 실시간 대시보드 -->
-          <div class="pipe-step">
-            <div class="pipe-dot" style="--dc:#2d8a5e">2</div>
-            <div class="pipe-body">
-              <h4>실시간 어드민 대시보드 — 30초 자동 갱신</h4>
-              <p>Elasticsearch에 저장된 데이터를 FastAPI REST API로 조회하여 인프라 상태와 로그를 실시간으로 시각화합니다. 초기 로딩을 최소화하기 위해 통합 API와 2단계
-                점진적 로딩을 적용했습니다.</p>
-              <div class="pipe-branch-wrap">
-                <div class="pipe-branch branch-img">
-                  <div class="branch-label">🖥️ 인프라 모니터링</div>
-                  <div class="branch-flow">
-                    <div class="branch-node">/api/metrics/stream · stats<small>ES → CPU/메모리 시계열 차트</small></div>
-                    <div class="branch-arrow">↓</div>
-                    <div class="branch-node">/api/admin/infra/dashboard<small>시스템 리소스 + DB 상태 통합 1회 왕복</small></div>
-                    <div class="branch-arrow">↓</div>
-                    <div class="branch-node">/api/admin/docker/containers<small>14개 컨테이너 실행 상태 (캐시 워밍)</small></div>
-                  </div>
-                </div>
-                <div class="pipe-branch branch-txt">
-                  <div class="branch-label">📋 로그 모니터링</div>
-                  <div class="branch-flow">
-                    <div class="branch-node">/api/logs/dashboard<small>stats + trend + top-errors + 서비스 건강도 통합</small>
+            <div class="pipe-step">
+              <div class="pipe-dot" style="--dc:#2563a8">2</div>
+              <div class="pipe-body">
+                <h4>유사도 검색 — 입력 유형에 따른 3가지 분기</h4>
+                <div class="pipe-branch-wrap">
+                  <div class="pipe-branch branch-img">
+                    <div class="branch-label">📷 이미지만 입력</div>
+                    <div class="branch-flow">
+                      <div class="branch-node">HF Space (YOLOv8)<small>배경 제거 → 객체 크롭</small></div>
+                      <div class="branch-arrow">↓</div>
+                      <div class="branch-node">Fashion-CLIP<small>이미지 → 512차원 벡터</small></div>
+                      <div class="branch-arrow">↓</div>
+                      <div class="branch-node es-node">pgvector (HNSW)<small>이미지 벡터 유사도 → 상위 6개</small></div>
                     </div>
-                    <div class="branch-arrow">↓</div>
-                    <div class="branch-node">/api/logs/stream<small>실시간 로그 필터링 (서비스 / 레벨 / 키워드)</small></div>
-                    <div class="branch-arrow">↓</div>
-                    <div class="branch-node">/api/logs/pipeline-status<small>Kafka · Docker SDK · ES 파이프라인 활성 상태</small>
+                  </div>
+                  <div class="pipe-branch branch-txt">
+                    <div class="branch-label">📝 텍스트만 입력</div>
+                    <div class="branch-flow">
+                      <div class="branch-node">HF CLIP Text-Encoder<small>CLIP 텍스트 임베딩 (512d) + Zero-padding (768d)</small></div>
+                      <div class="branch-arrow">↓</div>
+                      <div class="branch-node es-node">pgvector (HNSW)<small>텍스트 벡터 유사도 → 상위 6개</small></div>
+                    </div>
+                  </div>
+                  <div class="pipe-branch branch-both">
+                    <div class="branch-label">🔀 이미지 + 텍스트</div>
+                    <div class="branch-flow">
+                      <div class="branch-node">Fashion-CLIP + CLIP Text<small>이미지(512d)·텍스트(512d + 0-pad) 임베딩 생성</small></div>
+                      <div class="branch-arrow">↓</div>
+                      <div class="branch-node">pgvector HNSW 개별 검색<small>각각 18개 후보군 코사인 스코어 스캔</small></div>
+                      <div class="branch-arrow">↓</div>
+                      <div class="branch-node fusion-node">Late Fusion (RRF)<small>RRF 가중 결합 (이미지 70% · 텍스트 30%) → 상위 6개</small></div>
                     </div>
                   </div>
                 </div>
-                <div class="pipe-branch branch-both">
-                  <div class="branch-label">🗄️ DB 상태 모니터링</div>
-                  <div class="branch-flow">
-                    <div class="branch-node">PostgreSQL<small>pg_stat_activity (활성 연결) · pg_database_size</small></div>
-                    <div class="branch-arrow">↓</div>
-                    <div class="branch-node">Redis · MongoDB<small>INFO/DBSIZE · dbStats (메모리·키수·컬렉션)</small></div>
-                    <div class="branch-arrow">↓</div>
-                    <div class="branch-node es-node">asyncio.gather() 병렬 조회<small>직렬 ~300ms → 병렬 ~100ms</small></div>
+              </div>
+            </div>
+            <div class="pipe-step">
+              <div class="pipe-dot" style="--dc:#2563a8">3</div>
+              <div class="pipe-body">
+                <h4>상품 상세 조회 · 최저가 반환</h4>
+                <p>Neon PostgreSQL에서 상품 상세 정보를 조회하고 Naver 쇼핑 API로 최저가 5개를 실시간 수집합니다. 검색 로그는 <code>search_logs</code> 테이블에 KST 기준으로 적재되어 어드민 방문자 분석 대시보드에서 확인 가능합니다.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 경량 운영 파이프라인 (teams3 원본 디자인) -->
+        <div class="pipe-panel hidden" id="tab-ops-light">
+          <div class="pipe-list">
+            <div class="pipe-step">
+              <div class="pipe-dot" style="--dc:#2d8a5e">1</div>
+              <div class="pipe-body">
+                <h4>실시간 리소스 수집 — psutil + cgroups 동적 감지 (10초 주기)</h4>
+                <p>Docker·Kafka·Elasticsearch 등 헤비 스택을 완전 제거하고 Python 내장 <code>psutil</code>로 CPU·RAM·Disk를 직접 측정합니다.</p>
+                <div class="pipe-branch-wrap" style="grid-template-columns:1fr 1fr;">
+                  <div class="pipe-branch branch-a">
+                    <div class="branch-label">📊 실시간 메트릭 (10초)</div>
+                    <div class="branch-flow">
+                      <div class="branch-node">psutil 즉시 측정<small>CPU % · RAM 가용량 · Disk 실사용량</small></div>
+                      <div class="branch-arrow">↓</div>
+                      <div class="branch-node fusion-node">cgroups 동적 감지<small>Render 컨테이너 vCPU 한계·메모리 상한 역산</small></div>
+                      <div class="branch-arrow">↓</div>
+                      <div class="branch-node">GET /api/metrics/realtime<small>어드민 대시보드 10초 자동 갱신</small></div>
+                    </div>
+                  </div>
+                  <div class="pipe-branch branch-b">
+                    <div class="branch-label">🗄️ 시계열 링버퍼 (5분)</div>
+                    <div class="branch-flow">
+                      <div class="branch-node">백그라운드 크론<small>5분 주기 psutil 스냅샷 → Neon DB INSERT</small></div>
+                      <div class="branch-arrow">↓</div>
+                      <div class="branch-node fusion-node">링버퍼 자동 청소<small>1시간 초과 레코드 자동 DELETE</small></div>
+                      <div class="branch-arrow">↓</div>
+                      <div class="branch-node es-node">시계열 차트<small>infra_metrics 테이블 → 추이 시각화</small></div>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
-          </div>
-
-          <!-- STEP 3: 슬랙 알람 -->
-          <div class="pipe-step">
-            <div class="pipe-dot" style="--dc:#2d8a5e">3</div>
-            <div class="pipe-body">
-              <h4>Slack 알람 — CRITICAL/ERROR 발생 시 즉시 알림</h4>
-              <p>LogCollector가 파싱한 로그 레벨이 임계치를 초과하면 SlackNotifier가 Webhook으로 즉시 알림을 전송합니다. 중복 알람 방지를 위한 쿨다운·레이트 리미팅·서킷
-                브레이커를 내장했습니다.</p>
-              <div class="pipe-branch-wrap" style="grid-template-columns:1fr 1fr;">
-                <div class="pipe-branch branch-img">
-                  <div class="branch-label">⚡ 즉시 알림 조건</div>
-                  <div class="branch-flow">
-                    <div class="branch-node">CRITICAL / ERROR 로그 감지<small>쿨다운 60초 · HTTP 정상 요청 오분류 방지</small></div>
-                    <div class="branch-arrow">↓</div>
-                    <div class="branch-node fusion-node">Slack Webhook 전송<small>서비스명 · 레벨 · 메시지 · 타임스탬프</small></div>
+            <div class="pipe-step">
+              <div class="pipe-dot" style="--dc:#2d8a5e">2</div>
+              <div class="pipe-body">
+                <h4>로그 모니터링 — NeonLogHandler 링버퍼 (24시간)</h4>
+                <p>Filebeat·Kafka·Elasticsearch를 제거하고 Python 표준 <code>logging</code> 라이브러리를 오버라이드해 <strong>WARN 이상</strong> 로그만 Neon DB에 직접 적재합니다.</p>
+                <div class="pipe-branch-wrap" style="grid-template-columns:1fr 1fr;">
+                  <div class="pipe-branch branch-img">
+                    <div class="branch-label">📋 로그 수집 흐름</div>
+                    <div class="branch-flow">
+                      <div class="branch-node">글로벌 예외 핸들러<small>미처리 500 에러 → logger.error() 강제 포착</small></div>
+                      <div class="branch-arrow">↓</div>
+                      <div class="branch-node">NeonLogHandler<small>재귀 루프 방지 · 서비스 자동 매핑</small></div>
+                      <div class="branch-arrow">↓</div>
+                      <div class="branch-node es-node">app_logs 테이블<small>TIMESTAMPTZ · 24h 초과 자동 DELETE</small></div>
+                    </div>
                   </div>
-                </div>
-                <div class="pipe-branch branch-txt">
-                  <div class="branch-label">📈 에러 급증 감지</div>
-                  <div class="branch-flow">
-                    <div class="branch-node">슬라이딩 윈도우 집계<small>10분간 15건 초과 시 요약 알림</small></div>
-                    <div class="branch-arrow">↓</div>
-                    <div class="branch-node fusion-node">알림 쿨다운 5분<small>레이트 리미팅 · 서킷 브레이커 내장</small></div>
-                  </div>
-                </div>
-              </div>
-              <div class="ops-note">
-                <span class="ops-note-badge">설정</span>
-                알림 레벨(CRITICAL/ERROR/WARN) · 활성 시간대(KST) · 제외 서비스를 어드민 UI에서 토글로 제어합니다.
-              </div>
-            </div>
-          </div>
-
-          <!-- STEP 4: 자동 복구 -->
-          <div class="pipe-step">
-            <div class="pipe-dot" style="--dc:#2d8a5e">4</div>
-            <div class="pipe-body">
-              <h4>자동 복구 (Auto-Recovery) — 장애 컨테이너 자동 재시작</h4>
-              <p>서비스별 에러 카운트가 임계치를 넘으면 AutoRecovery가 Docker Socket API로 해당 컨테이너를 재시작합니다. 무한 재시작을 막는 4단계 안전장치를 내장했습니다.
-              </p>
-              <div class="pipe-branch-wrap" style="grid-template-columns:1fr 1fr;">
-                <div class="pipe-branch branch-img">
-                  <div class="branch-label">🔄 자동 복구 흐름</div>
-                  <div class="branch-flow">
-                    <div class="branch-node">ERROR/CRITICAL 에러 카운트<small>슬라이딩 윈도우 5분 · 임계치 10건</small></div>
-                    <div class="branch-arrow">↓</div>
-                    <div class="branch-node fusion-node">안전 장치 통과 확인<small>시간당 최대 3회 · 쿨다운 2분</small></div>
-                    <div class="branch-arrow">↓</div>
-                    <div class="branch-node es-node">Docker container.restart()<small>성공/실패 모두 Slack 알림 전송</small></div>
-                  </div>
-                </div>
-                <div class="pipe-branch branch-txt">
-                  <div class="branch-label">📊 로그 관리 기능</div>
-                  <div class="branch-flow">
-                    <div class="branch-node">Purge (로그 초기화)<small>DELETE /api/logs/purge → ES match_all 삭제</small></div>
-                    <div class="branch-arrow">↓</div>
-                    <div class="branch-node fusion-node">좀비 로그 차단<small>PURGE_TIMESTAMP 이전 재수집 로그 즉시 파기</small></div>
-                    <div class="branch-arrow">↓</div>
-                    <div class="branch-node es-node">로그 다운로드 / 클립보드 복사<small>필터링 로그 .txt 내보내기 · 모달 복사</small></div>
+                  <div class="pipe-branch branch-txt">
+                    <div class="branch-label">🖥️ 외부 서비스 모니터링</div>
+                    <div class="branch-flow">
+                      <div class="branch-node">Neon PostgreSQL<small>DEV/PROD DB 이중 용량 실시간 조회</small></div>
+                      <div class="branch-arrow">↓</div>
+                      <div class="branch-node">Cloudinary<small>미디어 총량 · 크레딧 사용률 · 음수 보정</small></div>
+                      <div class="branch-arrow">↓</div>
+                      <div class="branch-node fusion-node">HuggingFace Space<small>모델 API Latency · Git Storage 사용량</small></div>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
+            <div class="pipe-step">
+              <div class="pipe-dot" style="--dc:#2d8a5e">3</div>
+              <div class="pipe-body">
+                <h4>방문자 분석 — IP 기반 행동 패턴 추적</h4>
+                <p>검색 쿼리·이미지 업로드·직접 유입 경로를 <code>search_logs</code>에 KST 기준으로 실시간 적재합니다. 경량 User-Agent 파서로 OS/브라우저를 식별하고 Leaflet.js 맵으로 지역 분포를 시각화합니다.</p>
+                <div class="ops-note">
+                  <span class="ops-note-badge">격리</span>
+                  OWNER IP 대조 필터로 관리자 트래픽을 격리 — 실사용자 통계와 관리자 접속 이력을 대시보드에서 완전히 분리 표기합니다.
+                </div>
+              </div>
+            </div>
           </div>
-
         </div>
       </div>
     </div>
+
+    <!-- ══ SECTION 5: PHASES (CURRENT) ══ -->
+    <div id="lk-phases">
+      <div class="lk-section">
+        <div class="lk-eyebrow rv">Development Journey</div>
+        <h2 class="lk-h2 rv">개발 여정</h2>
+        <div class="lk-rule rv"></div>
+        <div class="phases-grid rv">
+          <div class="phase-card">
+            <div class="phase-num">01</div>
+            <div class="phase-title">기획 &amp; 설계</div>
+            <ul class="phase-items">
+              <li>주제 선정 및 타겟 소비자 조사</li>
+              <li>관련 논문 및 모델 리서치</li>
+              <li>기능 정의서 · 아키텍처 설계</li>
+              <li>화면 설계서 · 유스케이스 명세서</li>
+              <li>테이블 정의서 · ERD 설계</li>
+            </ul>
+          </div>
+          <div class="phase-card">
+            <div class="phase-num">02</div>
+            <div class="phase-title">환경 구축 &amp; 데이터</div>
+            <ul class="phase-items">
+              <li>AWS · Docker 인프라 환경 구성</li>
+              <li>크롤러 개발 (무신사·ZARA·탑텐)</li>
+              <li>Airflow DAG · Spark 파이프라인</li>
+              <li>Hadoop · PostgreSQL · MongoDB</li>
+              <li>Naver API 연동 최저가 수집</li>
+            </ul>
+          </div>
+          <div class="phase-card">
+            <div class="phase-num">03</div>
+            <div class="phase-title">AI 모델 개발</div>
+            <ul class="phase-items">
+              <li>YOLOv11 객체 탐지 파인튜닝</li>
+              <li>Fashion-CLIP 임베딩 구축</li>
+              <li>VLM (LLaVA) 프롬프트 설계</li>
+              <li>Elasticsearch 벡터 DB 적재</li>
+              <li>ML Pipeline 자동화 연결</li>
+            </ul>
+          </div>
+          <div class="phase-card">
+            <div class="phase-num">04</div>
+            <div class="phase-title">서비스 완성 &amp; 운영</div>
+            <ul class="phase-items">
+              <li>프론트엔드 전 페이지 완성</li>
+              <li>실시간 인프라·로그 모니터링</li>
+              <li>Slack 에러 알람 자동화</li>
+              <li>CI/CD 자동 배포 시스템</li>
+              <li>통합 테스트 · 최종 발표</li>
+            </ul>
+          </div>
+          <div class="phase-card phase-card-solo">
+            <div class="phase-num phase-num-solo">05</div>
+            <div class="phase-title">1인 경량화 리팩토링</div>
+            <ul class="phase-items">
+              <li>AWS → Render 무료 서버 이전</li>
+              <li>Kafka·Hadoop·Spark·Redis·MongoDB 제거</li>
+              <li>Neon PostgreSQL 단일 DB 체계 재설계</li>
+              <li>GitHub Actions 배치 크롤링 분리</li>
+              <li>Blue-Green Swap 검증 파이프라인</li>
+              <li>HuggingFace Space ML 추론 서버 분리</li>
+              <li>psutil + cgroups 경량 모니터링 구축</li>
+              <li>방문자 분석 대시보드 · Leaflet.js 지도</li>
+            </ul>
+            <div class="phase-solo-badge">Solo Refactoring</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
   </div>
 
-  <!-- ══ SECTION 5: PHASES ══ -->
-  <div id="lk-phases">
-    <div class="lk-section">
-      <div class="lk-eyebrow rv">Development Journey</div>
-      <h2 class="lk-h2 rv">개발 여정</h2>
-      <div class="lk-rule rv"></div>
-      <div class="phases-grid rv">
-        <div class="phase-card">
-          <div class="phase-num">01</div>
-          <div class="phase-title">기획 &amp; 설계</div>
-          <ul class="phase-items">
-            <li>주제 선정 및 타겟 소비자 조사</li>
-            <li>관련 논문 및 모델 리서치</li>
-            <li>기능 정의서 · 아키텍처 설계</li>
-            <li>화면 설계서 · 유스케이스 명세서</li>
-            <li>테이블 정의서 · ERD 설계</li>
-          </ul>
+
+  <!-- ────────────────────────────────────────────────────────── -->
+  <!-- ══ [탭 2] 레거시 분산 아키텍처 뷰포트 ══ -->
+  <!-- ────────────────────────────────────────────────────────── -->
+  <div id="main-panel-legacy" class="main-panel main-panel-hidden">
+
+    <!-- ══ SECTION 2: TECH STACK (LEGACY) ══ -->
+    <div id="lk-techstack-legacy">
+      <div class="lk-section">
+        <div class="lk-eyebrow rv">Technology</div>
+        <h2 class="lk-h2 rv">시스템 아키텍처 <em>&amp; 기술 스택</em></h2>
+        <div class="lk-rule rv"></div>
+
+        <div class="arch-wrap rv">
+          <div class="arch-label">▸ Legacy Distributed Architecture — AWS EC2 g4dn.xlarge · 14 Containers</div>
+          <div class="arch-diagram">
+            <div class="arch-row">
+              <div class="arch-node an-user">👤 사용자 / 프론트엔드<small>HTML5 · Bootstrap 5 · JavaScript</small></div>
+            </div>
+            <div class="arch-row"><div class="arch-arr">↓</div></div>
+            <div class="arch-row">
+              <div class="arch-node an-api">🔌 FastAPI Backend<small>인증 · 상품검색 · 게시판 · 마이페이지</small></div>
+              <div class="arch-arr">⟷</div>
+              <div class="arch-node an-ml">🤖 ML FastAPI<small>YOLO-Seg · Fashion-CLIP · 임베딩 추론</small></div>
+            </div>
+            <div class="arch-row">
+              <div class="arch-arr">↓</div>
+              <div style="width:50px"></div>
+              <div class="arch-arr">↓</div>
+            </div>
+            <div class="arch-row">
+              <div class="arch-node an-db">🗃 PostgreSQL / MySQL<small>상품 Meta · 사용자 인증 · 가격 이력</small></div>
+              <div class="arch-node an-cache">⚡ Elasticsearch + Redis<small>벡터검색 · 캐시 · 세션 · Rate Limit</small></div>
+              <div class="arch-node an-db">🍃 MongoDB<small>크롤링 원본 · 로그 · AI 분석 결과</small></div>
+            </div>
+            <div class="arch-row"><div class="arch-arr">↕</div></div>
+            <div class="arch-row">
+              <div class="arch-node an-pipe">⚙️ Apache Airflow<small>매일 새벽 2시 DAG 자동 실행</small></div>
+              <div class="arch-arr">→</div>
+              <div class="arch-node an-pipe">🔀 Apache Spark<small>전처리 · Hadoop HDFS ETL</small></div>
+              <div class="arch-arr">→</div>
+              <div class="arch-node an-pipe">📡 Kafka<small>실시간 로그 · 메트릭 스트리밍</small></div>
+            </div>
+          </div>
         </div>
-        <div class="phase-card">
-          <div class="phase-num">02</div>
-          <div class="phase-title">환경 구축 &amp; 데이터</div>
-          <ul class="phase-items">
-            <li>AWS · Docker 인프라 환경 구성</li>
-            <li>크롤러 개발 (무신사·ZARA·탑텐)</li>
-            <li>Airflow DAG · Spark 파이프라인</li>
-            <li>Hadoop · PostgreSQL · MongoDB</li>
-            <li>Naver API 연동 최저가 수집</li>
-          </ul>
-        </div>
-        <div class="phase-card">
-          <div class="phase-num">03</div>
-          <div class="phase-title">AI 모델 개발</div>
-          <ul class="phase-items">
-            <li>YOLO-Seg 객체 탐지 파인튜닝</li>
-            <li>Fashion-CLIP 임베딩 구축</li>
-            <li>VLM (LLaVA) 프롬프트 설계</li>
-            <li>Elasticsearch 벡터 DB 적재</li>
-            <li>ML Pipeline 자동화 연결</li>
-          </ul>
-        </div>
-        <div class="phase-card">
-          <div class="phase-num">04</div>
-          <div class="phase-title">서비스 완성 &amp; 운영</div>
-          <ul class="phase-items">
-            <li>프론트엔드 전 페이지 완성</li>
-            <li>실시간 인프라·로그 모니터링</li>
-            <li>Slack 에러 알람 자동화</li>
-            <li>CI/CD 자동 배포 시스템</li>
-            <li>통합 테스트 · 최종 발표</li>
-          </ul>
+
+        <div class="tech-grid rv">
+          <div class="tech-group tg-db">
+            <div class="tg-pill">Database</div>
+            <div class="tech-tags">
+              <span class="tech-tag">PostgreSQL</span><span class="tech-tag">MySQL</span>
+              <span class="tech-tag">MongoDB</span><span class="tech-tag">Redis</span>
+              <span class="tech-tag">Elasticsearch</span>
+            </div>
+          </div>
+          <div class="tech-group tg-dl">
+            <div class="tg-pill">AI / Deep Learning</div>
+            <div class="tech-tags">
+              <span class="tech-tag">YOLOv11-Seg</span><span class="tech-tag">Fashion-CLIP</span>
+              <span class="tech-tag">KeyBERT</span><span class="tech-tag">KoNLPy</span>
+              <span class="tech-tag">PyTorch</span><span class="tech-tag">D-FINE</span>
+            </div>
+          </div>
+          <div class="tech-group tg-inf">
+            <div class="tg-pill">Infrastructure</div>
+            <div class="tech-tags">
+              <span class="tech-tag">AWS EC2</span><span class="tech-tag">Docker</span>
+              <span class="tech-tag">Kafka</span><span class="tech-tag">Hadoop HDFS</span>
+              <span class="tech-tag">GitHub CI/CD</span>
+            </div>
+          </div>
+          <div class="tech-group tg-web">
+            <div class="tg-pill">Web / Backend</div>
+            <div class="tech-tags">
+              <span class="tech-tag">FastAPI</span><span class="tech-tag">HTML5</span>
+              <span class="tech-tag">Bootstrap 5</span><span class="tech-tag">JavaScript</span>
+              <span class="tech-tag">Naver Shopping API</span>
+            </div>
+          </div>
+          <div class="tech-group tg-pipe">
+            <div class="tg-pill">Data Pipeline</div>
+            <div class="tech-tags">
+              <span class="tech-tag">Apache Airflow</span><span class="tech-tag">Apache Spark</span>
+              <span class="tech-tag">Hadoop HDFS</span><span class="tech-tag">Selenium</span>
+              <span class="tech-tag">BeautifulSoup</span>
+            </div>
+          </div>
+          <div class="tech-group tg-env">
+            <div class="tg-pill">Monitoring &amp; Ops</div>
+            <div class="tech-tags">
+              <span class="tech-tag">Kafka Streaming</span><span class="tech-tag">Filebeat</span>
+              <span class="tech-tag">Auto-Recovery</span><span class="tech-tag">Slack Alert</span>
+              <span class="tech-tag">Elasticsearch ILM</span>
+            </div>
+          </div>
         </div>
       </div>
     </div>
+
+    <!-- ══ SECTION 3: TEAM (LEGACY) ══ -->
+    <div id="lk-team-legacy">
+      <div class="lk-section">
+        <div class="lk-eyebrow rv">Team Members</div>
+        <h2 class="lk-h2 rv">팀원 소개</h2>
+        <p class="lk-lead rv">카드에 마우스를 올리면 각 팀원의 세부 역할과 주요 성과를 확인할 수 있습니다.</p>
+        <div class="lk-rule rv"></div>
+        <div class="team-grid">
+          
+          <!-- 한대성 -->
+          <div class="team-card rv d1">
+            <div class="card-bar bar-lead"></div>
+            <div class="card-header">
+              <div class="card-avatar av-lead">한</div>
+              <div class="card-meta">
+                <div class="card-badge">Lead Data Engineer · Pipeline Architect · Team Lead</div>
+                <div class="card-name">한대성</div>
+                <div class="card-name-en">Han Dae-Seong</div>
+              </div>
+            </div>
+            <div class="card-summary">
+              전체 데이터 아키텍처를 설계하고 팀원들이 각 파트를 구현할 수 있도록
+              <strong>분산 처리 인프라·대용량 파이프라인 기반을 완성</strong>한 핵심 DE 리더입니다.
+              이기종 DB(RDBMS/NoSQL) 설계부터 대용량 데이터 로깅·모니터링 체계 효율화,
+              Airflow/Spark 클러스터 고도화까지 분산 시스템 전 영역의 아키텍처를 정립했습니다.
+            </div>
+            <div class="card-tags">
+              <span class="ctag">Data Architecture</span><span class="ctag">Docker/AWS Infra</span>
+              <span class="ctag">Kafka Streaming</span><span class="ctag">System Modeling</span>
+              <span class="ctag">CI/CD</span><span class="ctag">Auto Recovery</span>
+              <span class="ctag">Apache Airflow/Spark</span>
+            </div>
+            <div class="card-hint">✦ 마우스를 올려 세부 역할 확인</div>
+            <div class="card-detail">
+              <div class="card-detail-inner">
+                <div class="det-sec">
+                  <div class="det-label">🏗️ 인프라 아키텍처 &amp; CI/CD 설계</div>
+                  <ul class="det-list">
+                    <li>14개 컨테이너 통합 환경 설계— AWS EC2 기반 Docker Compose 인프라를 구축하여 팀 내 개발·배포 사이클 표준화</li>
+                    <li><strong>GitHub Actions CI/CD</strong> — 빌드 최적화 및 지속적인 데이터 통합 자동화 파이프라인 구현으로 운영 효율 극대화</li>
+                    <li>이기종 데이터 모델링 — PostgreSQL(정형)과 MongoDB(로그)의 ERD 설계 및 데이터 모델링 단독 진행</li>
+                    <li>분산 처리 클러스터 고도화 — Airflow/Spark 기반 전처리 시스템을 최적화하여 대용량 이미지 정제 성능 개선</li>
+                  </ul>
+                </div>
+                <div class="det-sec">
+                  <div class="det-label">⚡ 데이터 파이프라인 최적화 (성능 200배 개선)</div>
+                  <ul class="det-list">
+                    <li><strong>병목 현상 해결 (20s → 100ms)</strong> — 수집과 조회 시스템을 완전 분리하여 페이지 로딩 속도를 혁신적으로 단축</li>
+                    <li><strong>리소스 부하 절감 (91% → 30%)</strong> — Kafka 기반 실시간 스트리밍 및 Elasticsearch Bulk 인덱싱 최적화로 CPU 부하 극한 효율화</li>
+                    <li><strong>이중 로깅 파이프라인</strong> — Filebeat와 Docker SDK를 활용한 Fallback 설계로 장애 시 메시지 유실 완벽 차단</li>
+                    <li>데이터 정합성 100% 보장 — MD5 해시 기반 고유 ID 발급으로 이중 트래픽 수집 시에도 자동 중복 제거 구현</li>
+                  </ul>
+                </div>
+                <div class="det-sec">
+                  <div class="det-label">🛡️ 통합 모니터링 및 자가 치유(Auto-Recovery)</div>
+                  <ul class="det-list">
+                    <li><strong>Auto-Recovery 아키텍처</strong> — 인프라 임계치 기반 <strong>장애 컨테이너 자동 재시작 기믹</strong> 독자 개발 및 안정 장치 적용</li>
+                    <li><strong>실시간 헬스 대시보드</strong> — Elasticsearch와 통합된 FastAPI 백엔드를 구축하여 전 시스템 상태 실시간 가시화</li>
+                    <li>Slack 조기 경보망 — 슬라이딩 윈도우 기반 Circuit Breaker 로직을 적용하여 이상 징후 즉시 알림 체계 구축</li>
+                    <li>비동기 리팩토링 — Python <code>asyncio.to_thread()</code>를 활용해 메트릭 동시 수집 성능 및 서버 응답성 개선</li>
+                  </ul>
+                </div>
+                <div class="det-sec">
+                  <div class="det-label">🖥️ 서비스 총괄 및 E2E 구현</div>
+                  <ul class="det-list">
+                    <li>FastAPI 백엔드 API 설계 — 사용자 인증, 게시판, 상품 검색 및 어드민 페이지를 포함한 전체 서비스 로직 구현</li>
+                    <li>사용자 경험(UX) 기능 — 좋아요, 최근 본 상품, 검색 히스토리 등 사용자 맞춤형 기능 및 도메인 연동</li>
+                    <li>기술 산출물 총괄 — 인프라 아키텍처 설계서, 기능 정의서, 분석 설계서 등 문서화 주도</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 박주언 -->
+          <div class="team-card rv d2">
+            <div class="card-bar bar-de"></div>
+            <div class="card-header">
+              <div class="card-avatar av-de">박</div>
+              <div class="card-meta">
+                <div class="card-badge">Data Engineer · ETL · Crawling</div>
+                <div class="card-name">박주언</div>
+                <div class="card-name-en">Park Ju-Eon</div>
+              </div>
+            </div>
+            <div class="card-summary">
+              브랜드별 쇼핑몰 크롤러를 직접 개발해
+              <strong>각 브랜드의 데이터 수집·적재 초기 모델을 테스트하고 구축</strong>했습니다.
+              TOPTEN·ZARA 크롤러 개발, Spark 전처리 프로그램 작성, Naver 쇼핑 API 연동,
+              ERD·DB 설계까지 ETL 파이프라인의 실질적 구현을 책임진 데이터 엔지니어입니다.
+            </div>
+            <div class="card-tags">
+              <span class="ctag">Apache Spark</span>
+              <span class="ctag">Web Crawling</span><span class="ctag">ETL Pipeline</span>
+              <span class="ctag">ERD 설계</span><span class="ctag">Naver API</span>
+            </div>
+            <div class="card-hint">✦ 마우스를 올려 세부 역할 확인</div>
+            <div class="card-detail">
+              <div class="card-detail-inner">
+                <div class="det-sec">
+                  <div class="det-label">🕷️ 브랜드별 크롤러 개발 · 초기 수집 모델 구축</div>
+                  <ul class="det-list">
+                    <li>TOPTEN · ZARA 공식몰 크롤러를 브랜드별로 독립 개발 — 각 사이트 구조를 분석해 상품명·이미지·가격·상세 정보 수집 로직 설계</li>
+                    <li>브랜드마다 다른 HTML 구조·JS 렌더링 방식에 맞춰 Selenium / BeautifulSoup 전략을 선택적으로 적용</li>
+                    <li>초기 수집 모델을 테스트하며 데이터 누락·중복·포맷 불일치 문제를 반복 보완, 안정적인 수집 기준 수립</li>
+                    <li>쇼핑몰 카테고리 구조 정리 및 상품 메타데이터 필드 표준화 — 팀 전체 공통 스키마 기준 마련</li>
+                    <li>Naver 쇼핑 API 연동으로 키워드별 최저가 5개 자동 수집, MongoDB 캐시로 중복 호출 방지</li>
+                  </ul>
+                </div>
+                <div class="det-sec">
+                  <div class="det-label">⚙️ Spark 전처리 · 데이터 적재 파이프라인</div>
+                  <ul class="det-list">
+                    <li>Apache Spark 전처리 프로그램 개발 — 병렬 정제·중복 제거·이미지 다운로드 후 Parquet 포맷 변환</li>
+                    <li>Hadoop HDFS 파티션 적재 및 관리, 데이터 볼륨 증가에도 안정적으로 동작하는 구조 설계</li>
+                    <li>Docker 환경 구성 테스트 및 팀원 환경 세팅 지원</li>
+                  </ul>
+                </div>
+                <div class="det-sec">
+                  <div class="det-label">🗄️ DB 설계 · 문서 · 발표</div>
+                  <ul class="det-list">
+                    <li>테이블 정의서 · ERD · DDL Script 작성 — 팀 전체 DB 설계의 기준 문서 담당</li>
+                    <li>Architecture 정의서 및 프로젝트 기획서 작성</li>
+                    <li>최종 발표 자료 제작 및 프로젝트 결과 발표 주도</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 이주형 -->
+          <div class="team-card rv d3">
+            <div class="card-bar bar-ml"></div>
+            <div class="card-header">
+              <div class="card-avatar av-ml">이</div>
+              <div class="card-meta">
+                <div class="card-badge">ML Engineer · Crawler · MLOps</div>
+                <div class="card-name">이주형</div>
+                <div class="card-name-en">Lee Ju-Hyeong</div>
+              </div>
+            </div>
+            <div class="card-summary">
+              객체 탐지·임베딩·벡터 검색 모델을 비교 연구해 <strong>AI 모델 스택을 선정</strong>하고,
+              무신사·ZARA 크롤러를 설계하며 데이터 수집의 핵심 파트를 담당했습니다.
+              특히 <strong>VLM 모델 선정·학습</strong>과 <strong>텍스트 기반 검색 모듈</strong>을 핵심적으로 주도했으며,
+              Airflow DAG와 ML 파이프라인을 최종 연결해 End-to-End 자동화를 완성한 엔지니어입니다.
+            </div>
+            <div class="card-tags">
+              <span class="ctag">Apache Airflow</span><span class="ctag">YOLOv11</span>
+              <span class="ctag">VLM · LLaVA</span><span class="ctag">Embedding</span>
+              <span class="ctag">Crawler 설계</span><span class="ctag">ML Pipeline</span>
+            </div>
+            <div class="card-hint">✦ 마우스를 올려 세부 역할 확인</div>
+            <div class="card-detail">
+              <div class="card-detail-inner">
+                <div class="det-sec">
+                  <div class="det-label">🤖 AI 모델 리서치 · 스택 선정</div>
+                  <ul class="det-list">
+                    <li>객체 탐지·임베딩·고속 벡터 검색 분야 논문 및 모델 전반을 조사·비교해 프로젝트 AI 스택(YOLOv11, Fashion-CLIP, Elasticsearch KNN) 최종 선정 주도</li>
+                    <li>YOLOv11 분류 모델 파인튜닝 실험 — 카테고리별 탐지 성능 비교 및 최적 가중치 선택</li>
+                    <li>임베딩 모델 비교 실험 (Fashion-CLIP vs ResNet vs ViT) — 패션 도메인 유사도 정확도 기준으로 Fashion-CLIP 채택 근거 마련</li>
+                  </ul>
+                </div>
+                <div class="det-sec">
+                  <div class="det-label">🧠 VLM 선정 · 학습 · 텍스트 검색 모듈 구축</div>
+                  <ul class="det-list">
+                    <li>텍스트 기반 검색을 위한 VLM 모델 후보군 조사 — LLaVA · InstructBLIP · MiniGPT 비교 후 LLaVA 선정</li>
+                    <li>LLaVA 기반 VLM 프롬프트 설계 및 학습 실험 — 상품 이미지에서 자연어 설명 생성 품질 검증</li>
+                    <li>VLM 생성 텍스트 → SBERT 임베딩 연결 파이프라인 설계 — 텍스트 기반 검색 모듈의 핵심 흐름 구축</li>
+                    <li>이미지 검색(Fashion-CLIP)과 텍스트 검색(SBERT) 두 경로의 Late Fusion 전략 설계에 기여</li>
+                  </ul>
+                </div>
+                <div class="det-sec">
+                  <div class="det-label">🕷️ 크롤러 설계 · ML 파이프라인 자동화</div>
+                  <ul class="det-list">
+                    <li>무신사 · ZARA 크롤러 설계 및 개발, MongoDB 저장·이미지 다운로드 로직 구현</li>
+                    <li>Scraping 방식 전환으로 대용량 이미지 저장 용량 이슈 해결</li>
+                    <li>데이터 수집 → 전처리 → 임베딩 → DB 적재 통합 ML 파이프라인 구축</li>
+                    <li>Airflow DAG와 ML 파이프라인 최종 연결 — End-to-End 자동화 완성</li>
+                    <li>라이브러리 가이드 · 데이터 명세서 작성으로 팀 온보딩 지원</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 정수아 -->
+          <div class="team-card rv d4">
+            <div class="card-bar bar-ai"></div>
+            <div class="card-header">
+              <div class="card-avatar av-ai">정</div>
+              <div class="card-meta">
+                <div class="card-badge">AI Researcher · Model · Vector Search</div>
+                <div class="card-name">정수아</div>
+                <div class="card-name-en">Jung Su-A</div>
+              </div>
+            </div>
+            <div class="card-summary">
+              서비스 전체의 <strong>디자인 방향성과 UX 흐름</strong>을 정의하고,
+              이미지·텍스트 유사도 검색의 <strong>핵심 AI 코어</strong>를 개발했습니다.
+              YOLOv11 파인튜닝, Fashion-CLIP·SBERT 임베딩 구현부터
+              검색 정확도를 높이기 위한 하이퍼파라미터 튜닝, ML 전용 FastAPI 백엔드 구축까지
+              검색 품질 전반을 책임진 AI 연구자입니다.
+            </div>
+            <div class="card-tags">
+              <span class="ctag">YOLOv11 파인튜닝</span><span class="ctag">Fashion-CLIP</span>
+              <span class="ctag">Vector Search</span><span class="ctag">Model Pipeline</span>
+              <span class="ctag">UX 설계</span>
+            </div>
+            <div class="card-hint">✦ 마우스를 올려 세부 역할 확인</div>
+            <div class="card-detail">
+              <div class="card-detail-inner">
+                <div class="det-sec">
+                  <div class="det-label">🎨 서비스 디자인 방향성 · UX 설계</div>
+                  <ul class="det-list">
+                    <li>서비스 전체 디자인 방향성 정의 — 색상 체계·레이아웃·인터랙션 가이드 수립으로 UI 일관성 확보</li>
+                    <li>사용자 시나리오 기반 화면 설계서 및 UX 흐름 정의 — 이미지 업로드부터 결과 확인까지 전 과정 설계</li>
+                    <li>서비스 흐름도·유스케이스 명세서 작성으로 팀 전체 개발 방향 공유</li>
+                  </ul>
+                </div>
+                <div class="det-sec">
+                  <div class="det-label">🧠 검색 AI 코어 개발 · 정확도 튜닝</div>
+                  <ul class="det-list">
+                    <li>YOLOv11 파인튜닝 — 에포크·학습률·앵커 박스 등 하이퍼파라미터를 반복 실험해 카테고리별 탐지 정확도 최적화</li>
+                    <li>이미지 전처리·객체 탐지 후처리 파이프라인 구현 — 배경 제거 품질이 임베딩 정확도에 미치는 영향 분석 및 개선</li>
+                    <li>Fashion-CLIP 임베딩 모델 구현 및 유사도 임계값·검색 결과 수 튜닝으로 검색 품질 반복 개선</li>
+                    <li>SBERT 텍스트 임베딩 파이프라인 구현 — VLM 생성 텍스트의 임베딩 품질 검증 및 후처리 로직 설계</li>
+                    <li>Late Fusion(이미지 70% · 텍스트 30%) 가중치 실험 — 비율별 검색 정확도를 비교해 최적 융합 비율 도출</li>
+                  </ul>
+                </div>
+                <div class="det-sec">
+                  <div class="det-label">🔍 ML 백엔드 · 벡터 검색 구현</div>
+                  <ul class="det-list">
+                    <li>검색 전용 FastAPI 백엔드 서버 구축 — 이미지·텍스트·복합 입력 3가지 검색 경로를 단일 API로 통합</li>
+                    <li>Elasticsearch 벡터 DB 적재 코드 작성 — KNN 인덱스 설정, 샤드·리플리카 구성, 매핑 최적화</li>
+                    <li>이미지 유사도 검색 로직 설계·구현 및 Airflow 모델 파이프라인 자동화 개발</li>
+                    <li>ARM 리눅스 환경 구성 및 모델 실행 최적화 — GPU 메모리 관리·배치 크기 조정으로 추론 속도 개선</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ SECTION 4: PIPELINE (LEGACY) ══ -->
+    <div id="lk-pipeline-legacy-wrapper">
+      <div class="lk-section">
+        <div class="lk-eyebrow rv">Pipeline</div>
+        <h2 class="lk-h2 rv">시스템 <em>파이프라인</em></h2>
+        <div class="lk-rule rv"></div>
+
+        <!-- 탭 버튼 (teams 원본 클래스 복원) -->
+        <div class="pipe-tabs rv">
+          <button class="pipe-tab active" data-tab="data-legacy">
+            <span class="tab-icon">🗄️</span>
+            <span class="tab-text">데이터 수집 파이프라인<small>Airflow · Spark · Crawling</small></span>
+          </button>
+          <button class="pipe-tab" data-tab="search-legacy">
+            <span class="tab-icon">⚡</span>
+            <span class="tab-text">서비스 파이프라인<small>사용자 요청 → 검색 결과</small></span>
+          </button>
+          <button class="pipe-tab" data-tab="ops-legacy">
+            <span class="tab-icon">🛡️</span>
+            <span class="tab-text">운영 파이프라인<small>실시간 모니터링 · 알람 · 자동복구</small></span>
+          </button>
+        </div>
+
+        <!-- 데이터 수집 파이프라인 (기존 내용 100% 동일 복원) -->
+        <div class="pipe-panel" id="tab-data-legacy">
+          <div class="pipe-list">
+            <div class="pipe-step">
+              <div class="pipe-dot" style="--dc:#d4522a">1</div>
+              <div class="pipe-body">
+                <h4>Airflow DAG 실행 — 매일 새벽 2시 자동 트리거</h4>
+                <p>스케줄러가 DAG를 자동 실행해 크롤링 → 전처리 → 임베딩 전 과정을 무인 자동화로 처리합니다.</p>
+              </div>
+            </div>
+            <div class="pipe-step">
+              <div class="pipe-dot" style="--dc:#d4522a">2</div>
+              <div class="pipe-body">
+                <h4>크롤링 — 유니클로 · ZARA · 탑텐 · 무신사 스탠다드 · 8-seconds</h4>
+                <p>상품명·이미지·가격·상세 정보를 수집해 Hadoop에 원본 저장합니다. 탑텐은 상세 정보가 이미지이므로 OCR로 텍스트를 추출합니다.</p>
+              </div>
+            </div>
+            <div class="pipe-step">
+              <div class="pipe-dot" style="--dc:#d4522a">3</div>
+              <div class="pipe-body">
+                <h4>Spark 전처리 — Hadoop Parquet 변환</h4>
+                <p>병렬 처리로 데이터 정제·중복 제거·이미지 다운로드 후 Parquet 포맷으로 변환해 분석 효율을 높입니다.</p>
+              </div>
+            </div>
+            <div class="pipe-step">
+              <div class="pipe-dot" style="--dc:#d4522a">4</div>
+              <div class="pipe-body">
+                <h4>PostgreSQL · MongoDB 분리 적재</h4>
+                <p>정형 상품 데이터는 PostgreSQL(JSONB · 시계열 파티셔닝), 크롤링 원본·로그·AI 분석 결과는 MongoDB에 저장합니다.</p>
+              </div>
+            </div>
+            <div class="pipe-step">
+              <div class="pipe-dot" style="--dc:#d4522a">5</div>
+              <div class="pipe-body">
+                <h4>Naver 쇼핑 API — 최저가 5개 수집</h4>
+                <p>상품명으로 Naver API를 조회해 오름차순 최저가 5개 판매처를 수집합니다. MongoDB 캐시로 중복 API 호출을 방지합니다.</p>
+              </div>
+            </div>
+            <div class="pipe-step">
+              <div class="pipe-dot" style="--dc:#d4522a">6</div>
+              <div class="pipe-body">
+                <h4>임베딩 생성 → Elasticsearch 벡터 DB 이중 적재</h4>
+                <p>크롤링으로 수집된 상품 이미지를 두 경로로 병렬 처리합니다.</p>
+                <div class="pipe-branch-wrap">
+                  <div class="pipe-branch branch-a">
+                    <div class="branch-label">📷 이미지 임베딩 경로</div>
+                    <div class="branch-flow">
+                      <div class="branch-node">YOLOv11<small>객체 탐지 · 카테고리 분류</small></div>
+                      <div class="branch-arrow">↓</div>
+                      <div class="branch-node">Fashion-CLIP<small>이미지 → 벡터 변환</small></div>
+                      <div class="branch-arrow">↓</div>
+                      <div class="branch-node es-node">Elasticsearch<small>이미지 벡터 인덱스 저장</small></div>
+                    </div>
+                  </div>
+                  <div class="pipe-branch branch-b">
+                    <div class="branch-label">📝 텍스트 임베딩 경로</div>
+                    <div class="branch-flow">
+                      <div class="branch-node">VLM<small>이미지 → 상품 설명 텍스트 생성</small></div>
+                      <div class="branch-arrow">↓</div>
+                      <div class="branch-node">SBERT<small>텍스트 → 벡터 변환</small></div>
+                      <div class="branch-arrow">↓</div>
+                      <div class="branch-node es-node">Elasticsearch<small>텍스트 벡터 인덱스 저장</small></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 서비스 파이프라인 (기존 내용 100% 동일 복원) -->
+        <div class="pipe-panel hidden" id="tab-search-legacy">
+          <div class="pipe-list">
+            <div class="pipe-step">
+              <div class="pipe-dot" style="--dc:#2563a8">1</div>
+              <div class="pipe-body">
+                <h4>사용자 입력 — 이미지 / 텍스트 / 이미지+텍스트</h4>
+                <p>메인 페이지에서 착용 사진·상품 이미지를 업로드하거나, 텍스트 키워드를 입력하거나, 두 가지를 함께 입력할 수 있습니다. 입력 유형에 따라 아래 세 가지 검색 경로 중 하나로 분기됩니다.</p>
+              </div>
+            </div>
+            <div class="pipe-step">
+              <div class="pipe-dot" style="--dc:#2563a8">2</div>
+              <div class="pipe-body">
+                <h4>유사도 검색 — 입력 유형에 따른 3가지 분기</h4>
+                <div class="pipe-branch-wrap">
+                  <div class="pipe-branch branch-img">
+                    <div class="branch-label">📷 이미지만 입력</div>
+                    <div class="branch-flow">
+                      <div class="branch-node">Fashion-CLIP<small>이미지 → 벡터 임베딩</small></div>
+                      <div class="branch-arrow">↓</div>
+                      <div class="branch-node es-node">Elasticsearch<small>이미지 벡터 유사도 계산 → 상위 6개 반환</small></div>
+                    </div>
+                  </div>
+                  <div class="pipe-branch branch-txt">
+                    <div class="branch-label">📝 텍스트만 입력</div>
+                    <div class="branch-flow">
+                      <div class="branch-node">SBERT<small>텍스트 → 벡터 임베딩</small></div>
+                      <div class="branch-arrow">↓</div>
+                      <div class="branch-node es-node">Elasticsearch<small>텍스트 벡터 유사도 계산 → 상위 6개 반환</small></div>
+                    </div>
+                  </div>
+                  <div class="pipe-branch branch-both">
+                    <div class="branch-label">🔀 이미지 + 텍스트 입력</div>
+                    <div class="branch-flow">
+                      <div class="branch-node">Fashion-CLIP + SBERT<small>이미지 벡터 · 텍스트 벡터 각각 생성</small></div>
+                      <div class="branch-arrow">↓</div>
+                      <div class="branch-node fusion-node">Late Fusion<small>이미지 70% · 텍스트 30% 가중 결합</small></div>
+                      <div class="branch-arrow">↓</div>
+                      <div class="branch-node es-node">Elasticsearch<small>결합 벡터 유사도 계산 → 상위 6개 반환</small></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="pipe-step">
+              <div class="pipe-dot" style="--dc:#2563a8">3</div>
+              <div class="pipe-body">
+                <h4>상품 상세 정보 및 최저가 조회 → 결과 반환</h4>
+                <p>유사 상품 6개가 확정되면 PostgreSQL에서 상품 상세 정보(상품명·브랜드·공식가)를 가져오고, Naver 쇼핑 API로 외부 쇼핑몰 최저가 5개를 조회합니다. 최종 결과를 검색 결과 페이지에 표시하며, 사용자는 마이페이지에 저장하거나 검색 히스토리로 관리할 수 있습니다.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 운영 파이프라인 (기존 내용 100% 동일 복원) -->
+        <div class="pipe-panel hidden" id="tab-ops-legacy">
+          <div class="pipe-list">
+            <!-- STEP 1: 이중 수집 -->
+            <div class="pipe-step">
+              <div class="pipe-dot" style="--dc:#2d8a5e">1</div>
+              <div class="pipe-body">
+                <h4>로그 &amp; 메트릭 이중 수집 — 14개 Docker 컨테이너 대상</h4>
+                <p>7개 서비스 그룹(Airflow·Spark·Hadoop·Kafka·DB·Elasticsearch·FastAPI)에서 발생하는 로그와 CPU/메모리 메트릭을 이중 경로로 안정적으로 수집합니다.</p>
+                <div class="pipe-branch-wrap">
+                  <div class="pipe-branch branch-a">
+                    <div class="branch-label">📋 로그 수집 경로</div>
+                    <div class="branch-flow">
+                      <div class="branch-node">Filebeat 8.x<small>컨테이너 로그 파일 tail → 노이즈 필터링</small></div>
+                      <div class="branch-arrow">↓</div>
+                      <div class="branch-node fusion-node">Kafka<small>토픽: container-logs · gzip 압축 · 버퍼링</small></div>
+                      <div class="branch-arrow">↓</div>
+                      <div class="branch-node">KafkaLogConsumer<small>50건 or 10초마다 ES Bulk 인덱싱</small></div>
+                      <div class="branch-arrow">↓</div>
+                      <div class="branch-node es-node">Elasticsearch<small>container-logs 인덱스 · ILM 7일 자동삭제</small></div>
+                    </div>
+                  </div>
+                  <div class="pipe-branch branch-b">
+                    <div class="branch-label">📊 메트릭 수집 경로 (15초 주기)</div>
+                    <div class="branch-flow">
+                      <div class="branch-node">MetricCollector<small>Docker Socket API → CPU/메모리 수집</small></div>
+                      <div class="branch-arrow">↓</div>
+                      <div class="branch-node fusion-node">Kafka<small>토픽: system-metrics · Fail-Safe 패턴</small></div>
+                      <div class="branch-arrow">↓</div>
+                      <div class="branch-node">KafkaMetricConsumer<small>10건 or 2초마다 ES Bulk 인덱싱</small></div>
+                      <div class="branch-arrow">↓</div>
+                      <div class="branch-node es-node">Elasticsearch<small>container-metrics 인덱스 · 시계열 보존</small></div>
+                    </div>
+                  </div>
+                </div>
+                <div class="ops-note">
+                  <span class="ops-note-badge">Fallback</span>
+                  Kafka 장애 시 <strong>Docker SDK 직접 수집(LogCollector)</strong>이 자동 활성화되어 로그 유실을 방지합니다. MD5 해시 기반 문서 ID로 이중 수집 시에도 Elasticsearch가 자동 중복 제거합니다.
+                </div>
+              </div>
+            </div>
+
+            <!-- STEP 2: 실시간 대시보드 -->
+            <div class="pipe-step">
+              <div class="pipe-dot" style="--dc:#2d8a5e">2</div>
+              <div class="pipe-body">
+                <h4>실시간 어드민 대시보드 — 30초 자동 갱신</h4>
+                <p>Elasticsearch에 저장된 데이터를 FastAPI REST API로 조회하여 인프라 상태와 로그를 실시간으로 시각화합니다. 초기 로딩을 최소화하기 위해 통합 API와 2단계 점진적 로딩을 적용했습니다.</p>
+                <div class="pipe-branch-wrap">
+                  <div class="pipe-branch branch-img">
+                    <div class="branch-label">🖥️ 인프라 모니터링</div>
+                    <div class="branch-flow">
+                      <div class="branch-node">/api/metrics/stream · stats<small>ES → CPU/메모리 시계열 차트</small></div>
+                      <div class="branch-arrow">↓</div>
+                      <div class="branch-node">/api/admin/infra/dashboard<small>시스템 리소스 + DB 상태 통합 1회 왕복</small></div>
+                      <div class="branch-arrow">↓</div>
+                      <div class="branch-node">/api/admin/docker/containers<small>14개 컨테이너 실행 상태 (캐시 워밍)</small></div>
+                    </div>
+                  </div>
+                  <div class="pipe-branch branch-txt">
+                    <div class="branch-label">📋 로그 모니터링</div>
+                    <div class="branch-flow">
+                      <div class="branch-node">/api/logs/dashboard<small>stats + trend + top-errors + 서비스 건강도 통합</small></div>
+                      <div class="branch-arrow">↓</div>
+                      <div class="branch-node">/api/logs/stream<small>실시간 로그 필터링 (서비스 / 레벨 / 키워드)</small></div>
+                      <div class="branch-arrow">↓</div>
+                      <div class="branch-node">/api/logs/pipeline-status<small>Kafka · Docker SDK · ES 파이프라인 활성 상태</small></div>
+                    </div>
+                  </div>
+                  <div class="pipe-branch branch-both">
+                    <div class="branch-label">🗄️ DB 상태 모니터링</div>
+                    <div class="branch-flow">
+                      <div class="branch-node">PostgreSQL<small>pg_stat_activity (활성 연결) · pg_database_size</small></div>
+                      <div class="branch-arrow">↓</div>
+                      <div class="branch-node">Redis · MongoDB<small>INFO/DBSIZE · dbStats (메모리·키수·컬렉션)</small></div>
+                      <div class="branch-arrow">↓</div>
+                      <div class="branch-node es-node">asyncio.gather() 병렬 조회<small>직렬 ~300ms → 병렬 ~100ms</small></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- STEP 3: 슬랙 알람 -->
+            <div class="pipe-step">
+              <div class="pipe-dot" style="--dc:#2d8a5e">3</div>
+              <div class="pipe-body">
+                <h4>Slack 알람 — CRITICAL/ERROR 발생 시 즉시 알림</h4>
+                <p>LogCollector가 파싱한 로그 레벨이 임계치를 초과하면 SlackNotifier가 Webhook으로 즉시 알림을 전송합니다. 중복 알람 방지를 위한 쿨다운·레이트 리미팅·서킷 브레이커를 내장했습니다.</p>
+                <div class="pipe-branch-wrap" style="grid-template-columns:1fr 1fr;">
+                  <div class="pipe-branch branch-img">
+                    <div class="branch-label">⚡ 즉시 알림 조건</div>
+                    <div class="branch-flow">
+                      <div class="branch-node">CRITICAL / ERROR 로그 감지<small>쿨다운 60초 · HTTP 정상 요청 오분류 방지</small></div>
+                      <div class="branch-arrow">↓</div>
+                      <div class="branch-node fusion-node">Slack Webhook 전송<small>서비스명 · 레벨 · 메시지 · 타임스탬프</small></div>
+                    </div>
+                  </div>
+                  <div class="pipe-branch branch-txt">
+                    <div class="branch-label">📈 에러 급증 감지</div>
+                    <div class="branch-flow">
+                      <div class="branch-node">슬라이딩 윈도우 집계<small>10분간 15건 초과 시 요약 알림</small></div>
+                      <div class="branch-arrow">↓</div>
+                      <div class="branch-node fusion-node">알림 쿨다운 5분<small>레이트 리미팅 · 서킷 브레이커 내장</small></div>
+                    </div>
+                  </div>
+                </div>
+                <div class="ops-note">
+                  <span class="ops-note-badge">설정</span>
+                  알림 레벨(CRITICAL/ERROR/WARN) · 활성 시간대(KST) · 제외 서비스를 어드민 UI에서 토글로 제어합니다.
+                </div>
+              </div>
+            </div>
+
+            <!-- STEP 4: 자동 복구 -->
+            <div class="pipe-step">
+              <div class="pipe-dot" style="--dc:#2d8a5e">4</div>
+              <div class="pipe-body">
+                <h4>자동 복구 (Auto-Recovery) — 장애 컨테이너 자동 재시작</h4>
+                <p>서비스별 에러 카운트가 임계치를 넘으면 AutoRecovery가 Docker Socket API로 해당 컨테이너를 재시작합니다. 무한 재시작을 막는 4단계 안전장치를 내장했습니다.</p>
+                <div class="pipe-branch-wrap" style="grid-template-columns:1fr 1fr;">
+                  <div class="pipe-branch branch-img">
+                    <div class="branch-label">🔄 자동 복구 흐름</div>
+                    <div class="branch-flow">
+                      <div class="branch-node">ERROR/CRITICAL 에러 카운트<small>슬라이딩 윈도우 5분 · 임계치 10건</small></div>
+                      <div class="branch-arrow">↓</div>
+                      <div class="branch-node fusion-node">안전 장치 통과 확인<small>시간당 최대 3회 · 쿨다운 2분</small></div>
+                      <div class="branch-arrow">↓</div>
+                      <div class="branch-node es-node">Docker container.restart()<small>성공/실패 모두 Slack 알림 전송</small></div>
+                    </div>
+                  </div>
+                  <div class="pipe-branch branch-txt">
+                    <div class="branch-label">📊 로그 관리 기능</div>
+                    <div class="branch-flow">
+                      <div class="branch-node">Purge (로그 초기화)<small>DELETE /api/logs/purge → ES match_all 삭제</small></div>
+                      <div class="branch-arrow">↓</div>
+                      <div class="branch-node fusion-node">좀비 로그 차단<small>PURGE_TIMESTAMP 이전 재수집 로그 즉시 파기</small></div>
+                      <div class="branch-arrow">↓</div>
+                      <div class="branch-node es-node">로그 다운로드 / 클립보드 복사<small>필터링 로그 .txt 내보내기 · 모달 복사</small></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ══ SECTION 5: PHASES (LEGACY) ══ -->
+    <div id="lk-phases-legacy">
+      <div class="lk-section">
+        <div class="lk-eyebrow rv">Development Journey</div>
+        <h2 class="lk-h2 rv">개발 여정</h2>
+        <div class="lk-rule rv"></div>
+        <div class="phases-grid rv">
+          <div class="phase-card">
+            <div class="phase-num">01</div>
+            <div class="phase-title">기획 &amp; 설계</div>
+            <ul class="phase-items">
+              <li>주제 선정 및 타겟 소비자 조사</li>
+              <li>관련 논문 및 모델 리서치</li>
+              <li>기능 정의서 · 아키텍처 설계</li>
+              <li>화면 설계서 · 유스케이스 명세서</li>
+              <li>테이블 정의서 · ERD 설계</li>
+            </ul>
+          </div>
+          <div class="phase-card">
+            <div class="phase-num">02</div>
+            <div class="phase-title">환경 구축 &amp; 데이터</div>
+            <ul class="phase-items">
+              <li>AWS · Docker 인프라 환경 구성</li>
+              <li>크롤러 개발 (무신사·ZARA·탑텐)</li>
+              <li>Airflow DAG · Spark 파이프라인</li>
+              <li>Hadoop · PostgreSQL · MongoDB</li>
+              <li>Naver API 연동 최저가 수집</li>
+            </ul>
+          </div>
+          <div class="phase-card">
+            <div class="phase-num">03</div>
+            <div class="phase-title">AI 모델 개발</div>
+            <ul class="phase-items">
+              <li>YOLO-Seg 객체 탐지 파인튜닝</li>
+              <li>Fashion-CLIP 임베딩 구축</li>
+              <li>VLM (LLaVA) 프롬프트 설계</li>
+              <li>Elasticsearch 벡터 DB 적재</li>
+              <li>ML Pipeline 자동화 연결</li>
+            </ul>
+          </div>
+          <div class="phase-card">
+            <div class="phase-num">04</div>
+            <div class="phase-title">서비스 완성 &amp; 운영</div>
+            <ul class="phase-items">
+              <li>프론트엔드 전 페이지 완성</li>
+              <li>실시간 인프라·로그 모니터링</li>
+              <li>Slack 에러 알람 자동화</li>
+              <li>CI/CD 자동 배포 시스템</li>
+              <li>통합 테스트 · 최종 발표</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+
   </div>
 
 </div>
+
+<script>
+(function() {
+  // ── 메인 탭 전환 (현재 경량 / 레거시 분산) ──
+  document.querySelectorAll('.main-tab').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      document.querySelectorAll('.main-tab').forEach(function(b) { b.classList.remove('main-tab-active'); });
+      document.getElementById('main-panel-current').classList.add('main-panel-hidden');
+      document.getElementById('main-panel-legacy').classList.add('main-panel-hidden');
+      
+      btn.classList.add('main-tab-active');
+      var targetId = 'main-panel-' + btn.dataset.mainTab;
+      var target = document.getElementById(targetId);
+      if (target) target.classList.remove('main-panel-hidden');
+    });
+  });
+
+  // ── 파이프라인 내부 탭 전환 (useCapture 캡처링 단계에서 전역 common.js 오작동 강제 차단) ──
+  document.querySelectorAll('.pipe-tabs .pipe-tab').forEach(function(btn) {
+    btn.addEventListener('click', function(e) {
+      e.stopImmediatePropagation(); // common.js 전역 리스너의 실행 자체를 원천 중단!
+      
+      var parentPanel = btn.closest('.main-panel');
+      parentPanel.querySelectorAll('.pipe-tab').forEach(function(b) { b.classList.remove('active'); });
+      parentPanel.querySelectorAll('.pipe-panel').forEach(function(p) { p.classList.add('hidden'); });
+      
+      btn.classList.add('active');
+      var tabId = 'tab-' + btn.dataset.tab;
+      var target = parentPanel.querySelector('#' + tabId);
+      if (target) target.classList.remove('hidden');
+    }, true); // useCapture = true: 버블링 단계 전에 가로채기 적용
+  });
+})();
+</script>
 {% endblock %}

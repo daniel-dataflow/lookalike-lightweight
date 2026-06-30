@@ -101,36 +101,49 @@ class SearchService:
         self,
         image_vector: Optional[list[float]] = None,
         text_vector: Optional[list[float]] = None,
+        search_text: Optional[str] = None,
         category: Optional[str] = None,
         gender: Optional[str] = None,
         limit: int = 6,
     ) -> list:
         """
-        라우터에서 넘겨받은 임베딩 벡터로 pgvector HNSW 검색 실행.
-        벡터가 없으면 DB 랜덤 fallback.
+        3단계 하이브리드 검색 체인 가동:
+        1. 1순위: pgvector 의미론적(Semantic) 임베딩 검색 실행 (추상적 검색어 수용)
+        2. 2순위: 임베딩 매칭 실패 또는 결과 미비 시, p.prod_name 키워드(LIKE/ILIKE) 검색으로 보완
+        3. 3순위: 최종 Fallback으로 카테고리/성별 기반 무작위 랜덤 매칭
         """
         has_image = image_vector is not None and len(image_vector) > 0
         has_text = text_vector is not None and len(text_vector) > 0
 
+        # ── [1순위] pgvector 의미론적 임베딩 검색 ──
         if has_image or has_text:
             try:
                 results = self._vector_search(
                     image_vector=image_vector if has_image else None,
                     text_vector=text_vector if has_text else None,
+                    search_text=search_text,
                     category=category,
                     gender=gender,
                     limit=limit,
                 )
                 if results:
-                    logger.info(f"벡터 검색 성공: {len(results)}개 상품")
+                    logger.info(f"✅ [1순위] pgvector 임베딩 의미 검색 성공: {len(results)}개 상품")
                     return results
-                else:
-                    logger.warning("벡터 검색 결과 없음, DB fallback 진행")
             except Exception as e:
-                logger.error(f"벡터 검색 실패: {e}, DB fallback 진행")
+                logger.error(f"❌ [1순위] pgvector 임베딩 검색 실패: {e}")
 
-        # Fallback: 랜덤 검색 또는 카테고리/성별 기반 검색
-        logger.info("DB fallback으로 상품 검색")
+        # ── [2순위] 상품명 직접 키워드(ILIKE) 검색 (임베딩 검색 실패 또는 결과가 없을 때) ──
+        if search_text and search_text.strip():
+            try:
+                results = self._search_products_by_keyword(search_text, category, gender, limit)
+                if results:
+                    logger.info(f"✅ [2순위] products 직접 키워드(ILIKE) 검색 성공: {len(results)}개 상품")
+                    return results
+            except Exception as e:
+                logger.error(f"❌ [2순위] 키워드 검색 실패: {e}")
+
+        # ── [3순위] 최종 Fallback: 카테고리/성별 기반 랜덤 검색 ──
+        logger.info("⚠️ [3순위] 최종 Fallback: DB 카테고리 랜덤 검색 진행")
         return self._search_by_db(category=category, gender=gender, limit=limit)
 
     # ──────────────────────────────────────
@@ -255,6 +268,7 @@ class SearchService:
         self,
         image_vector: Optional[list[float]] = None,
         text_vector: Optional[list[float]] = None,
+        search_text: Optional[str] = None,
         category: Optional[str] = None,
         gender: Optional[str] = None,
         limit: int = 6,
@@ -266,6 +280,7 @@ class SearchService:
             image_results = self._knn_search_pg(
                 vector=image_vector,
                 vector_column="image_vector",
+                search_text=search_text,
                 category=category,
                 gender=gender,
                 limit=limit * 3,
@@ -275,6 +290,7 @@ class SearchService:
             text_results = self._knn_search_pg(
                 vector=text_vector,
                 vector_column="text_vector",
+                search_text=search_text,
                 category=category,
                 gender=gender,
                 limit=limit * 3,
@@ -296,11 +312,12 @@ class SearchService:
         self,
         vector: list[float],
         vector_column: str,
+        search_text: Optional[str] = None,
         category: Optional[str] = None,
         gender: Optional[str] = None,
         limit: int = 18,
     ) -> dict:
-        """<=> 연산자로 HNSW 인덱스 스캔, 1-거리로 스코어 산출"""
+        """<=> 연산자로 HNSW 인덱스 스캔, 1-거리로 스코어 산출 + 하이브리드 키워드 매칭"""
         try:
             with get_pg_cursor() as cur:
                 conditions = [f"e.{vector_column} IS NOT NULL"]
@@ -316,6 +333,51 @@ class SearchService:
                         conditions.append(f"LOWER(e.category) IN ({ph})")
                         params.extend(cat_vals)
 
+                # 하이브리드 키워드 매칭 필터 추가
+                if search_text and search_text.strip():
+                    kw = search_text.strip().lower()
+                    
+                    # 대표적인 한글 패션 카테고리 동의어 매핑
+                    synonyms = {
+                        "바지": ["바지", "팬츠", "pants", "슬랙스", "slacks", "데님", "denim", "청바지", "조거"],
+                        "팬츠": ["바지", "팬츠", "pants", "슬랙스", "slacks", "데님", "denim", "청바지", "조거"],
+                        "청바지": ["데님", "denim", "청바지", "바지", "팬츠", "pants"],
+                        "셔츠": ["셔츠", "shirts", "남방", "셔츠"],
+                        "티셔츠": ["티셔츠", "t-shirt", "반팔", "긴팔", "맨투맨", "스웨트"],
+                        "맨투맨": ["맨투맨", "스웨트", "sweatshirt"],
+                        "후드": ["후드", "hoodie"],
+                        "자켓": ["재킷", "자켓", "jacket", "바람막이", "블레이저", "blazer"],
+                        "재킷": ["재킷", "자켓", "jacket", "바람막이", "블레이저", "blazer"],
+                        "바람막이": ["바람막이", "윈드브레이커", "windbreaker"],
+                        "블레이저": ["블레이저", "blazer", "재킷", "자켓"],
+                        "코트": ["코트", "coat"],
+                        "패딩": ["패딩", "다운", "down", "푸퍼", "puffer", "점퍼"],
+                        "점퍼": ["점퍼", "jumper", "패딩", "재킷", "자켓"]
+                    }
+                    
+                    words = kw.split()
+                    kw_conditions = []
+                    
+                    for w in words:
+                        w_matched = False
+                        for syn_key, syn_list in synonyms.items():
+                            if syn_key in w or w in syn_key:
+                                syn_conds = []
+                                for s_val in syn_list:
+                                    syn_conds.append("p.prod_name ILIKE %s")
+                                    params.append(f"%{s_val}%")
+                                kw_conditions.append(f"({' OR '.join(syn_conds)})")
+                                w_matched = True
+                                break
+                        
+                        if not w_matched and len(w) >= 1:
+                            kw_conditions.append("(p.prod_name ILIKE %s OR p.brand_name ILIKE %s)")
+                            params.append(f"%{w}%")
+                            params.append(f"%{w}%")
+                            
+                    if kw_conditions:
+                        conditions.append(" AND ".join(kw_conditions))
+
                 where = " AND ".join(conditions)
                 vec_str = "[" + ",".join(str(v) for v in vector) + "]"
 
@@ -325,6 +387,7 @@ class SearchService:
                         e.product_id,
                         1 - (e.{vector_column} <=> %s::vector) AS score
                     FROM product_embeddings e
+                    JOIN products p ON e.product_id = p.product_id
                     WHERE {where}
                     ORDER BY e.{vector_column} <=> %s::vector ASC
                     LIMIT %s
@@ -409,6 +472,115 @@ class SearchService:
     def get_local_fallback_url(img_url: str) -> Optional[str]:
         """로컬 우회를 완전히 제거하고 실제 저장된 URL(Cloudinary)을 그대로 반환합니다."""
         return img_url
+
+    def _search_products_by_keyword(self, search_text: str, category: Optional[str], gender: Optional[str], limit: int) -> list:
+        """products 테이블 직접 ILIKE 키워드 검색 및 동의어 필터링 적용"""
+        try:
+            with get_pg_cursor() as cur:
+                conditions = []
+                params = []
+
+                if gender:
+                    conditions.append("p.gender = %s")
+                    params.append(gender.lower())
+                
+                if category:
+                    cat_vals = self._category_filter_values(category)
+                    if cat_vals:
+                        ph = ",".join(["%s"] * len(cat_vals))
+                        conditions.append(f"LOWER(p.category_code) IN ({ph})")
+                        params.extend(cat_vals)
+
+                kw = search_text.strip().lower()
+                
+                # 대표적인 한글 패션 카테고리 동의어 매핑
+                synonyms = {
+                    "바지": ["바지", "팬츠", "pants", "슬랙스", "slacks", "데님", "denim", "청바지", "조거", "하의"],
+                    "팬츠": ["바지", "팬츠", "pants", "슬랙스", "slacks", "데님", "denim", "청바지", "조거", "하의"],
+                    "청바지": ["데님", "denim", "청바지", "바지", "팬츠", "pants"],
+                    "셔츠": ["셔츠", "shirts", "남방", "셔츠", "상의"],
+                    "티셔츠": ["티셔츠", "t-shirt", "반팔", "긴팔", "맨투맨", "스웨트", "상의"],
+                    "맨투맨": ["맨투맨", "스웨트", "sweatshirt"],
+                    "후드": ["후드", "hoodie"],
+                    "자켓": ["재킷", "자켓", "jacket", "바람막이", "블레이저", "blazer", "아우터"],
+                    "재킷": ["재킷", "자켓", "jacket", "바람막이", "블레이저", "blazer", "아우터"],
+                    "바람막이": ["바람막이", "윈드브레이커", "windbreaker"],
+                    "블레이저": ["블레이저", "blazer", "재킷", "자켓"],
+                    "코트": ["코트", "coat", "아우터"],
+                    "패딩": ["패딩", "다운", "down", "푸퍼", "puffer", "점퍼", "아우터"],
+                    "점퍼": ["점퍼", "jumper", "패딩", "재킷", "자켓", "아우터"]
+                }
+                
+                words = kw.split()
+                kw_conditions = []
+                
+                for w in words:
+                    w_matched = False
+                    for syn_key, syn_list in synonyms.items():
+                        if syn_key in w or w in syn_key:
+                            syn_conds = []
+                            for s_val in syn_list:
+                                syn_conds.append("p.prod_name ILIKE %s")
+                                params.append(f"%{s_val}%")
+                            kw_conditions.append(f"({' OR '.join(syn_conds)})")
+                            w_matched = True
+                            break
+                    
+                    if not w_matched and len(w) >= 1:
+                        kw_conditions.append("(p.prod_name ILIKE %s OR p.brand_name ILIKE %s)")
+                        params.append(f"%{w}%")
+                        params.append(f"%{w}%")
+                        
+                if kw_conditions:
+                    conditions.append(" AND ".join(kw_conditions))
+
+                where_clause = ""
+                if conditions:
+                    where_clause = "WHERE " + " AND ".join(conditions)
+
+                cur.execute(
+                    f"""
+                    SELECT
+                        p.product_id, p.prod_name, p.brand_name,
+                        p.base_price, p.img_url, p.category_code, p.origin_url,
+                        COALESCE(np.naver_price, p.base_price) AS lowest_price,
+                        np.mall_name, np.mall_url
+                    FROM products p
+                    LEFT JOIN naver_prices np ON p.product_id = np.product_id AND np.rank = 1
+                    {where_clause}
+                    ORDER BY p.update_dt DESC
+                    LIMIT %s
+                    """,
+                    params + [limit],
+                )
+                
+                rows = cur.fetchall()
+                products = []
+                for row in rows:
+                    pid = str(row["product_id"])
+                    img_url = row["img_url"] or ""
+                    local_url = self.get_local_fallback_url(img_url)
+
+                    products.append({
+                        "product_id": pid,
+                        "product_name": row["prod_name"] or "상품명 없음",
+                        "brand": row["brand_name"] or "브랜드 없음",
+                        "price": row["lowest_price"] or 0,
+                        "image_url": img_url or "https://placehold.co/300x300?text=No+Image",
+                        "local_url": local_url,
+                        "mall_name": row["mall_name"] or row["brand_name"] or "공식몰",
+                        "mall_url": row["mall_url"] or row["origin_url"] or "#",
+                        "similarity_score": 0.99,  # 정확한 키워드 매칭 스코어 표기
+                        "search_source": "db_keyword_match",
+                    })
+                
+                logger.info(f"✅ products 직접 키워드 검색 성공: {len(products)}개 결과 반환")
+                return products
+                
+        except Exception as e:
+            logger.error(f"❌ products 직접 키워드 검색 실패: {e}")
+            
+        return []
 
     def _search_by_db(self, category, gender, limit: int) -> list:
         """Fallback: 카테고리/성별 기반 검색 + similarity score 할당"""

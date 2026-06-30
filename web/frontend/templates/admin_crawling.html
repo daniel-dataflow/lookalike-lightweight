@@ -169,6 +169,11 @@
       <i class="fas fa-hand-paper me-1 text-primary"></i> 수동 크롤링 & 스테이징 현황
     </button>
   </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link fw-bold" id="error-tab" data-bs-toggle="tab" data-bs-target="#error-content" type="button" role="tab" aria-controls="error-content" aria-selected="false">
+      <i class="fas fa-exclamation-triangle me-1 text-danger"></i> 에러 상품 통제 & 복구
+    </button>
+  </li>
 </ul>
 
 <!-- ─────────────── 탭 컨텐츠 래퍼 ─────────────── -->
@@ -503,6 +508,86 @@
     </div>
   </div>
 
+  <!-- ==================== [Tab 3] 에러 상품 통제 & 복구 ==================== -->
+  <div class="tab-pane fade" id="error-content" role="tabpanel" aria-labelledby="error-tab">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+      <div>
+        <h5 class="fw-bold mb-1">⚠️ 에러 상품 통제 및 핀포인트 복구</h5>
+        <p class="text-muted mb-0" style="font-size:.8rem;">크롤링 및 임베딩 처리 중 치명적 오류가 감지되어 격리 보류된 상품들의 통제소</p>
+      </div>
+      <div class="d-flex gap-2">
+        <select class="form-select form-select-sm" id="errorBrandSelect" onchange="loadErrorProducts()" style="width: 150px;">
+          <option value="giordano">GIORDANO</option>
+          <option value="spao" selected>SPAO</option>
+          <option value="topten">TOPTEN</option>
+        </select>
+        <button class="btn btn-sm btn-outline-secondary" onclick="loadErrorProducts()">
+          <i class="fas fa-sync-alt me-1"></i>새로고침
+        </button>
+      </div>
+    </div>
+
+    <!-- 에러 벌크 조치 통제 바 -->
+    <div class="card border-0 shadow-sm mb-4 bg-light">
+      <div class="card-body py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <div class="d-flex align-items-center gap-2">
+          <span class="text-dark small fw-bold"><i class="fas fa-tasks me-1 text-danger"></i>선택 상품 일괄 조치:</span>
+          <span class="badge bg-secondary font-monospace small" id="selectedCountBadge">0개 선택됨</span>
+        </div>
+        <div class="d-flex gap-2">
+          <button class="btn btn-sm btn-success fw-bold" onclick="resolveSelectedErrors('partial_switch')">
+            <i class="fas fa-check-circle me-1"></i>선택 상품 강제 이관 (수동 강제)
+          </button>
+          <button class="btn btn-sm btn-info fw-bold text-dark" onclick="resolveSelectedErrors('re_crawl')">
+            <i class="fas fa-redo me-1"></i>선택 상품 재크롤링
+          </button>
+          <button class="btn btn-sm btn-warning fw-bold text-dark" onclick="resolveSelectedErrors('re_embed')">
+            <i class="fas fa-magic me-1"></i>선택 상품 임베딩 재생성
+          </button>
+          <button class="btn btn-sm btn-danger fw-bold" onclick="resolveSelectedErrors('delete_staging')">
+            <i class="fas fa-trash-alt me-1"></i>스테이징 삭제
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 에러 리스트 테이블 -->
+    <div class="card border-0 shadow-sm">
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-hover align-middle mb-0" style="font-size: 0.85rem;">
+            <thead class="table-light text-secondary font-semibold">
+              <tr>
+                <th style="width: 5%;" class="text-center">
+                  <input class="form-check-input" type="checkbox" id="selectAllErrors" onchange="toggleSelectAllErrors(this)">
+                </th>
+                <th style="width: 10%;">상품 ID</th>
+                <th style="width: 20%;">상품명</th>
+                <th style="width: 10%;">카테고리</th>
+                <th style="width: 13%;">오류 분류</th>
+                <th style="width: 22%;">상세 원인</th>
+                <th style="width: 10%;" class="text-center">이미지</th>
+                <th style="width: 10%;" class="text-center">수동 조치</th>
+              </tr>
+            </thead>
+            <tbody id="errorProductsTableBody">
+              <tr>
+                <td colspan="8" class="text-center py-5 text-muted">에러 내역이 없습니다.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card-footer bg-white border-0 py-2 d-flex justify-content-center align-items-center">
+        <nav aria-label="Error Products page navigation">
+          <ul class="pagination pagination-sm mb-0" id="errorProductsPagination">
+            <!-- 동적 페이지네이션 -->
+          </ul>
+        </nav>
+      </div>
+    </div>
+  </div>
+
 </div>
 
 <!-- ─────────────── 수동 크롤링 트리거 실행 모달 ─────────────── -->
@@ -692,6 +777,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Bootstrap 탭 전환 시 shown.bs.tab 이벤트를 감지하여 데이터 로딩 및 모드 스위칭
   const autoTabBtn = document.getElementById('auto-tab');
   const manualTabBtn = document.getElementById('manual-tab');
+  const errorTabBtn = document.getElementById('error-tab');
   
   if (autoTabBtn) {
     autoTabBtn.addEventListener('shown.bs.tab', () => {
@@ -701,6 +787,11 @@ document.addEventListener('DOMContentLoaded', () => {
   if (manualTabBtn) {
     manualTabBtn.addEventListener('shown.bs.tab', () => {
       switchDashboardMode('manual');
+    });
+  }
+  if (errorTabBtn) {
+    errorTabBtn.addEventListener('shown.bs.tab', () => {
+      switchDashboardMode('error');
     });
   }
 
@@ -713,6 +804,12 @@ document.addEventListener('DOMContentLoaded', () => {
       tab.show();
     }
     loadManualData();
+  } else if (savedMode === 'error') {
+    if (errorTabBtn) {
+      const tab = new bootstrap.Tab(errorTabBtn);
+      tab.show();
+    }
+    loadErrorProducts();
   } else {
     if (autoTabBtn) {
       const tab = new bootstrap.Tab(autoTabBtn);
@@ -721,11 +818,11 @@ document.addEventListener('DOMContentLoaded', () => {
     loadAutoData();
   }
 
-  // 5초 주기로 활성화 탭 데이터 자동 새로고침
+  // 5초 주기로 활성화 탭 데이터 자동 새로고침 (에러 탭은 운영자 통제 집중을 위해 자동 주기 갱신 제외)
   setInterval(() => {
     if (activeDashboardMode === 'manual') {
       loadManualData(true);
-    } else {
+    } else if (activeDashboardMode === 'auto') {
       loadAutoData();
     }
   }, 5000);
@@ -737,6 +834,8 @@ function switchDashboardMode(mode) {
   localStorage.setItem('activeCrawlingTab', mode);
   if (mode === 'manual') {
     loadManualData();
+  } else if (mode === 'error') {
+    loadErrorProducts();
   } else {
     loadAutoData();
   }
@@ -2127,6 +2226,200 @@ function toggleCategoryAccordion(btn, brand) {
         icon.classList.add('fa-chevron-down');
       }, { once: true });
     }
+  }
+}
+
+// ─── [Tab 3] 에러 상품 통제 및 핀포인트 복구 관련 JS ───
+let selectedErrorProductIds = new Set();
+let currentErrorProductPage = 1;
+
+async function loadErrorProducts(page = 1) {
+  currentErrorProductPage = page;
+  const brand = document.getElementById('errorBrandSelect').value;
+  const tableBody = document.getElementById('errorProductsTableBody');
+  const pagination = document.getElementById('errorProductsPagination');
+  
+  if (!tableBody) return;
+  
+  tableBody.innerHTML = `<tr><td colspan="8" class="text-center py-5"><i class="fas fa-spinner fa-spin me-1"></i>에러 상품 목록을 가져오는 중...</td></tr>`;
+  
+  try {
+    const res = await fetch(`/api/admin/pipeline/errors/products?brand=${brand}&page=${page}&limit=15`);
+    const data = await res.json();
+    
+    if (res.ok && data.success) {
+      if (data.products.length === 0) {
+        tableBody.innerHTML = `<tr><td colspan="8" class="text-center py-5 text-muted"><i class="fas fa-check-circle me-1 text-success"></i>격리 보류된 에러 상품이 없습니다. 수집 상태가 무결합니다!</td></tr>`;
+        pagination.innerHTML = '';
+        updateSelectedBadge();
+        return;
+      }
+      
+      tableBody.innerHTML = '';
+      data.products.forEach(p => {
+        // 오류 유형 한글 배지 치환
+        let typeBadge = '';
+        if (p.error_type === 'NAVER_PRICE_MISSING') typeBadge = '<span class="badge bg-danger">가격 5개 유실</span>';
+        else if (p.error_type === 'IMAGE_BROKEN') typeBadge = '<span class="badge bg-warning text-dark">이미지 깨짐</span>';
+        else if (p.error_type === 'EMBEDDING_MISSING') typeBadge = '<span class="badge bg-info text-dark">임베딩 누락</span>';
+        else if (p.error_type === 'METADATA_LOSS') typeBadge = '<span class="badge bg-secondary">필수메타 누락</span>';
+        else typeBadge = `<span class="badge bg-dark">${p.error_type}</span>`;
+
+        const isChecked = selectedErrorProductIds.has(p.product_id) ? 'checked' : '';
+        const imgHtml = p.image_url ? `<img src="${p.image_url}" class="rounded" style="width:36px; height:36px; object-fit:cover;">` : '<span class="text-muted small">없음</span>';
+
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td class="text-center">
+            <input class="form-check-input error-select-chk" type="checkbox" data-id="${p.product_id}" ${isChecked} onchange="toggleErrorProductSelection('${p.product_id}', this.checked)">
+          </td>
+          <td class="font-monospace text-secondary">${p.product_id}</td>
+          <td class="fw-semibold">${p.product_name || '상품명 없음'}</td>
+          <td><span class="badge bg-light text-dark">${p.category || '미지정'}</span></td>
+          <td>${typeBadge}</td>
+          <td class="text-muted text-wrap" style="max-width: 250px; font-size: 0.8rem;">${p.error_message}</td>
+          <td class="text-center">${imgHtml}</td>
+          <td class="text-center">
+            <button class="btn btn-xs btn-outline-warning fw-bold" style="font-size: 0.72rem;" onclick="retrySingleProductInError('${p.product_id}')">
+              <i class="fas fa-redo me-1"></i>재수집
+            </button>
+          </td>
+        `;
+        tableBody.appendChild(tr);
+      });
+      
+      // 페이지네이션 바인딩
+      renderErrorPagination(data.total, page, 15);
+      
+    } else {
+      tableBody.innerHTML = `<tr><td colspan="8" class="text-center py-5 text-danger">조회 실패: ${data.detail || '서버 오류'}</td></tr>`;
+    }
+  } catch (err) {
+    tableBody.innerHTML = `<tr><td colspan="8" class="text-center py-5 text-danger">네트워크 통신 오류: ${err.message}</td></tr>`;
+  }
+  updateSelectedBadge();
+}
+
+function toggleErrorProductSelection(prodId, isChecked) {
+  if (isChecked) {
+    selectedErrorProductIds.add(prodId);
+  } else {
+    selectedErrorProductIds.delete(prodId);
+  }
+  updateSelectedBadge();
+}
+
+function toggleSelectAllErrors(headerCheckbox) {
+  const chks = document.querySelectorAll('.error-select-chk');
+  chks.forEach(chk => {
+    chk.checked = headerCheckbox.checked;
+    const prodId = chk.getAttribute('data-id');
+    toggleErrorProductSelection(prodId, headerCheckbox.checked);
+  });
+}
+
+function updateSelectedBadge() {
+  const badge = document.getElementById('selectedCountBadge');
+  if (badge) {
+    badge.textContent = `${selectedErrorProductIds.size}개 선택됨`;
+  }
+}
+
+function renderErrorPagination(total, currentPage, limit) {
+  const totalPages = Math.ceil(total / limit);
+  const pagination = document.getElementById('errorProductsPagination');
+  if (!pagination) return;
+  
+  pagination.innerHTML = '';
+  
+  if (totalPages <= 1) return;
+  
+  // Previous button
+  const prevLi = document.createElement('li');
+  prevLi.className = `page-item ${currentPage === 1 ? 'disabled' : ''}`;
+  prevLi.innerHTML = `<a class="page-link" href="#" onclick="loadErrorProducts(${currentPage - 1}); return false;">이전</a>`;
+  pagination.appendChild(prevLi);
+  
+  // Pages
+  for (let i = 1; i <= totalPages; i++) {
+    const li = document.createElement('li');
+    li.className = `page-item ${currentPage === i ? 'active' : ''}`;
+    li.innerHTML = `<a class="page-link" href="#" onclick="loadErrorProducts(${i}); return false;">${i}</a>`;
+    pagination.appendChild(li);
+  }
+  
+  // Next button
+  const nextLi = document.createElement('li');
+  nextLi.className = `page-item ${currentPage === totalPages ? 'disabled' : ''}`;
+  nextLi.innerHTML = `<a class="page-link" href="#" onclick="loadErrorProducts(${currentPage + 1}); return false;">다음</a>`;
+  pagination.appendChild(nextLi);
+}
+
+async function resolveSelectedErrors(action) {
+  if (selectedErrorProductIds.size === 0) {
+    alert('조치할 상품을 최소 1개 이상 선택해 주세요.');
+    return;
+  }
+  
+  const brand = document.getElementById('errorBrandSelect').value;
+  const actionText = action === 'partial_switch' ? '선택 상품 운영 DB 강제 이관' : (action === 're_embed' ? '선택 상품 임베딩 재연산' : '선택 상품 스테이징 데이터 영구 삭제');
+  
+  if (!confirm(`선택한 ${selectedErrorProductIds.size}개 상품에 대해 [${actionText}] 조치를 진행하시겠습니까?`)) {
+    return;
+  }
+  
+  try {
+    const res = await fetch('/api/admin/pipeline/errors/resolve', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        brand: brand,
+        action: action,
+        product_ids: Array.from(selectedErrorProductIds)
+      })
+    });
+    
+    const data = await res.json();
+    if (res.ok && data.success) {
+      alert(data.message || '조치가 성공적으로 완료되었습니다.');
+      selectedErrorProductIds.clear();
+      document.getElementById('selectAllErrors').checked = false;
+      loadErrorProducts(currentErrorProductPage);
+      
+      // 수동/자동 데이터 현황 카드 갱신을 위해 데이터 릴로드 호출
+      loadManualData(true);
+      loadAutoData();
+    } else {
+      alert(`조치 실패: ${data.detail || '서버 오류'}`);
+    }
+  } catch (err) {
+    alert(`네트워크 통신 중 오류: ${err.message}`);
+  }
+}
+
+async function retrySingleProductInError(productId) {
+  const brand = document.getElementById('errorBrandSelect').value;
+  if (!confirm(`상품 [${productId}] 에 대해 즉시 핀포인트 재수집(가격비교 및 임베딩 갱신)을 실행하시겠습니까?`)) {
+    return;
+  }
+  
+  try {
+    const res = await fetch('/api/admin/pipeline/crawling/retry', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ brand: brand, product_id: productId })
+    });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      alert(data.message || '재수집 및 임베딩 갱신 조치가 성공적으로 수립되었습니다.');
+      loadErrorProducts(currentErrorProductPage);
+      loadManualData(true);
+      loadAutoData();
+    } else {
+      alert(`재수집 조치 실패: ${data.detail || '서버 오류'}`);
+    }
+  } catch (err) {
+    alert(`네트워크 통신 중 오류: ${err.message}`);
   }
 }
 </script>
