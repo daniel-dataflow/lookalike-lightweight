@@ -36,6 +36,8 @@ Pillow>=10.0.0
 
 # 기타
 urllib3<2
+aiohttp>=3.8.0
+numpy>=1.20.0
 
 # gradio_client: handle_file() 방식으로 HF Space(gr.Interface) 호출
 gradio_client
