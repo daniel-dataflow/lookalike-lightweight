@@ -277,10 +277,13 @@ web/backend/app/main.py
 | **Docs** | `docs/renewal/admin_visitors_renewal.md` | `NEW` | 방문자 분석 대시보드 리뉴얼 아키텍처 및 상세 사양서 작성 |
 | **Backend** | `web/backend/app/routers/admin_error.py` | `NEW` | 에러 상품 상세 조회, 벌크 조치 및 단일 상품 핀포인트 복구 API 라우터 신설 |
 | **Frontend** | `web/frontend/templates/admin_crawling.html` | `MODIFY` | "에러 상품 통제 & 복구" 탭 및 행별 핀포인트 재수집 단추와 벌크 액션 JS 핸들러 탑재 |
+| **Docs** | `docs/renewal/admin_users_security_renewal.md` | `NEW` | 관리자 페이지 단위 체크박스 세부 권한(RBAC) 및 유저 비밀번호 보안 찾기 사양서 작성 |
+| **Frontend** | `web/frontend/templates/admin_users.html` | `NEW` | 독립된 관리자 및 유저 모니터링 관리 전용 페이지 신설 및 권한 체크박스 모달 연동 |
+| **Frontend** | `web/frontend/templates/forgot_password.html` | `NEW` | 보안 질문/답변 기반 1회용 임시 패스워드 즉시 노출 발급 신설 화면 |
 
 ---
 
-## 7. 리팩토링 및 최적화 이력 (1차 ~ 10차 고도화)
+## 7. 리팩토링 및 최적화 이력 (1차 ~ 11차 고도화)
 
 * **1차 리팩토링: Actions 기반 수집 분리 (2026-05-24)**
   * 렌더(Render) 무료 서버의 CPU/메모리 부하 경감을 위해 대규모 크롤링 연산을 깃허브 액션(GitHub Actions) 환경으로 이관했습니다.
@@ -323,4 +326,9 @@ web/backend/app/main.py
   * **4대 치명 에러 격리 배제**: 스위칭 이관 시 필수 메타 유실, 네이버 가격 전무, 임베딩 누락, 이미지 URL 깨짐이 발생한 불량 상품들을 자동 이관 대상에서 배제하여 Staging 테이블에 잔류하도록 처리했습니다.
   * **핀포인트 1초 즉시 복구 API**: 에러 상품 목록에서 `[재수집]` 버튼을 누르면 실시간으로 네이버 쇼핑 openAPI 5대 최저가를 재수집하고 CLIP 임베딩을 보정하여 즉각 오류를 소거하는 백엔드 API를 신설했습니다.
   * **벌크 복구 액션 및 UI 연동**: 에러 상품들을 다중 선택하여 일괄 강제 이관(`partial_switch`), 벌크 최저가 재수집(`re_crawl`), 임베딩 재생성(`re_embed`), 또는 스테이징 비우기(`delete_staging`)를 처리하는 통합 관리자 제어 탭을 구축했습니다.
+* **11차 고도화: 어드민 세부 권한(RBAC) 제어 및 유저 비밀번호 보안 찾기 개편 (2026-07-01)**
+  * **PostgreSQL SELECT DISTINCT 에러 핫픽스**: `SELECT DISTINCT`와 `ORDER BY` 표현식 불일치 문제 해결을 위해 `GROUP BY`와 `MAX(create_dt)` 기반의 표준 쿼리문으로 전면 보완하였습니다.
+  * **페이지 단위 다중 권한(RBAC) 설정**: 최고 관리자(SUPER_ADMIN)의 고유 권한으로 하위 어드민의 페이지(인프라/크롤링/로그/방문자/문의)별 접근 권한을 체크박스 모달을 통해 맞춤 설정할 수 있도록 구조 개편했습니다. 허용되지 않은 메뉴는 사이드바에서 자동 숨김 처리 및 경로 차단 미들웨어를 연동했습니다.
+  * **임시 비밀번호 & 강제 패스워드 변경**: 이메일 가입 유저가 비밀번호 분실 시 본인 확인용 보안 질문/답변 매칭을 거쳐 12자리 임시 패스워드를 화면에 즉시 노출 발급해 주는 전용 독립 뷰 페이지(`forgot_password.html`)를 제작했습니다. 발급된 임시 번호로 최초 로그인 성공 시, 강제로 새 암호를 설정하기 전까지 다른 화면 접근을 차단하는 격리 팝업 모달을 연동했습니다.
+  * **상세 가이드 연동**: 신규 상세 아키텍처 사양은 [admin_users_security_renewal.md](file:///d:/dev/lookalike-lightweight/docs/renewal/admin_users_security_renewal.md) 파일에 정리했습니다.
 

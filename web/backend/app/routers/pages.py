@@ -83,6 +83,39 @@ async def admin_login_page(request: Request):
         return RedirectResponse(url="/admin/infra", status_code=302)
     return templates.TemplateResponse(request=request, name="admin_login.html", context={"request": request})
 
+def _check_page_permission(request: Request, required_permission: str):
+    """특정 어드민 페이지 접근 권한 검증 및 세션 반환 헬퍼"""
+    session = _get_admin_session(request)
+    if not session or not session.get("is_admin"):
+        return False, RedirectResponse(url="/admin/login", status_code=302)
+        
+    perm = session.get("admin_permission", "")
+    
+    # 1. SUPER_ADMIN은 모든 권한 통과
+    if perm == "SUPER_ADMIN":
+        return True, session
+        
+    # 2. 사용자 관리(users) 페이지는 최고 관리자(SUPER_ADMIN)만 진입 가능
+    if required_permission == "users":
+        return False, templates.TemplateResponse(
+            request=request, 
+            name="admin_forbidden.html", 
+            context={"request": request, "required_menu": required_permission}
+        )
+        
+    # 3. 그 외 페이지는 쉼표로 분리된 문자열 대조
+    perms = [p.strip() for p in perm.split(",") if p.strip()]
+    if required_permission in perms:
+        return True, session
+        
+    # 4. 권한 없음 페이지 렌더링
+    return False, templates.TemplateResponse(
+        request=request, 
+        name="admin_forbidden.html", 
+        context={"request": request, "required_menu": required_permission}
+    )
+
+
 @router.get("/admin", response_class=HTMLResponse)
 async def admin_root(request: Request):
     session = _get_admin_session(request)
@@ -90,23 +123,35 @@ async def admin_root(request: Request):
         return RedirectResponse(url="/admin/login", status_code=302)
     return RedirectResponse(url="/admin/infra", status_code=302)
 
+
 @router.get("/admin/infra", response_class=HTMLResponse)
 async def admin_infra(request: Request):
-    session = _get_admin_session(request)
-    if not session or not session.get("is_admin"):
-        return RedirectResponse(url="/admin/login", status_code=302)
-    return templates.TemplateResponse(request=request, name="admin_infra.html", context={"request": request})
+    ok, res = _check_page_permission(request, "infra")
+    if not ok:
+        return res
+    return templates.TemplateResponse(request=request, name="admin_infra.html", context={
+        "request": request,
+        "admin_permissions": res.get("admin_permission", ""),
+        "admin_username": res.get("user_name") or res.get("user_id") or "Admin"
+    })
+
 
 @router.get("/admin/stats", response_class=HTMLResponse)
 async def admin_stats(request: Request):
-    session = _get_admin_session(request)
-    if not session or not session.get("is_admin"):
-        return RedirectResponse(url="/admin/login", status_code=302)
-    return templates.TemplateResponse(request=request, name="admin_dashboard.html", context={"request": request})
+    ok, res = _check_page_permission(request, "stats")
+    if not ok:
+        return res
+    return templates.TemplateResponse(request=request, name="admin_dashboard.html", context={
+        "request": request,
+        "admin_permissions": res.get("admin_permission", ""),
+        "admin_username": res.get("user_name") or res.get("user_id") or "Admin"
+    })
+
 
 @router.get("/inquiry", response_class=HTMLResponse)
 async def inquiry_page(request: Request):
     return templates.TemplateResponse(request=request, name="inquiry.html", context={"request": request})
+
 
 @router.get("/recent", response_class=HTMLResponse)
 async def recent_viewed(request: Request):
@@ -115,6 +160,7 @@ async def recent_viewed(request: Request):
         return RedirectResponse(url="/?error=login_required", status_code=302)
     return templates.TemplateResponse(request=request, name="recent.html", context={"request": request})
 
+
 @router.get("/likes", response_class=HTMLResponse)
 async def likes(request: Request):
     session = _get_session(request)
@@ -122,66 +168,105 @@ async def likes(request: Request):
         return RedirectResponse(url="/?error=login_required", status_code=302)
     return templates.TemplateResponse(request=request, name="likes.html", context={"request": request})
 
+
 @router.get("/search-history", response_class=HTMLResponse)
 async def search_history(request: Request):
     return templates.TemplateResponse(request=request, name="search_history.html", context={"request": request})
+
 
 @router.get("/terms", response_class=HTMLResponse)
 async def terms_page(request: Request):
     return templates.TemplateResponse(request=request, name="terms.html", context={"request": request})
 
+
 @router.get("/privacy", response_class=HTMLResponse)
 async def privacy_page(request: Request):
     return templates.TemplateResponse(request=request, name="privacy.html", context={"request": request})
+
 
 @router.get("/teams_history", response_class=HTMLResponse)
 async def teams_history_page(request: Request):
     return templates.TemplateResponse(request=request, name="teams_history.html", context={"request": request})
 
+
 @router.get("/teams_renewal", response_class=HTMLResponse)
 async def teams_renewal_page(request: Request):
     return templates.TemplateResponse(request=request, name="teams_renewal.html", context={"request": request})
+
 
 @router.get("/teams", response_class=HTMLResponse)
 async def teams_page(request: Request):
     return templates.TemplateResponse(request=request, name="teams.html", context={"request": request})
 
+
 @router.get("/admin/batch", response_class=HTMLResponse)
 async def admin_batch(request: Request):
-    session = _get_admin_session(request)
-    if not session or not session.get("is_admin"):
-        return RedirectResponse(url="/admin/login", status_code=302)
-    return templates.TemplateResponse(request=request, name="admin_batch.html", context={"request": request})
+    ok, res = _check_page_permission(request, "batch")
+    if not ok:
+        return res
+    return templates.TemplateResponse(request=request, name="admin_batch.html", context={
+        "request": request,
+        "admin_permissions": res.get("admin_permission", ""),
+        "admin_username": res.get("user_name") or res.get("user_id") or "Admin"
+    })
+
 
 @router.get("/admin/inquiry", response_class=HTMLResponse)
 async def admin_inquiry(request: Request):
-    session = _get_admin_session(request)
-    if not session or not session.get("is_admin"):
-        return RedirectResponse(url="/admin/login", status_code=302)
-    return templates.TemplateResponse(request=request, name="admin_inquiry.html", context={"request": request})
+    ok, res = _check_page_permission(request, "inquiry")
+    if not ok:
+        return res
+    return templates.TemplateResponse(request=request, name="admin_inquiry.html", context={
+        "request": request,
+        "admin_permissions": res.get("admin_permission", ""),
+        "admin_username": res.get("user_name") or res.get("user_id") or "Admin"
+    })
+
 
 @router.get("/admin/crawling", response_class=HTMLResponse)
 async def admin_crawling(request: Request):
     """크롤링 파이프라인 모니터링 — 스테이징 현황 및 수동 스위칭 페이지"""
-    session = _get_admin_session(request)
-    if not session or not session.get("is_admin"):
-        return RedirectResponse(url="/admin/login", status_code=302)
-    return templates.TemplateResponse(request=request, name="admin_crawling.html", context={"request": request})
+    ok, res = _check_page_permission(request, "crawling")
+    if not ok:
+        return res
+    return templates.TemplateResponse(request=request, name="admin_crawling.html", context={
+        "request": request,
+        "admin_permissions": res.get("admin_permission", ""),
+        "admin_username": res.get("user_name") or res.get("user_id") or "Admin"
+    })
+
+
+@router.get("/admin/users", response_class=HTMLResponse)
+async def admin_users(request: Request):
+    """사용자 관리 및 통제 대시보드 페이지"""
+    ok, res = _check_page_permission(request, "users")
+    if not ok:
+        return res
+    return templates.TemplateResponse(request=request, name="admin_users.html", context={
+        "request": request,
+        "admin_permissions": res.get("admin_permission", ""),
+        "admin_username": res.get("user_name") or res.get("user_id") or "Admin"
+    })
+
 
 @router.get("/admin/logs", response_class=HTMLResponse)
 async def admin_logs(request: Request):
-    session = _get_admin_session(request)
-    if not session or not session.get("is_admin"):
-        return RedirectResponse(url="/admin/login", status_code=302)
-    return templates.TemplateResponse(request=request, name="admin_logs.html", context={"request": request})
+    ok, res = _check_page_permission(request, "logs")
+    if not ok:
+        return res
+    return templates.TemplateResponse(request=request, name="admin_logs.html", context={
+        "request": request,
+        "admin_permissions": res.get("admin_permission", ""),
+        "admin_username": res.get("user_name") or res.get("user_id") or "Admin"
+    })
 
 
 @router.get("/admin/visitors", response_class=HTMLResponse)
 async def admin_visitors(request: Request, owner: bool = False):
     """방문자 분석 대시보드 페이지"""
-    session = _get_admin_session(request)
-    if not session or not session.get("is_admin"):
-        return RedirectResponse(url="/admin/login", status_code=302)
+    ok, res = _check_page_permission(request, "visitors")
+    if not ok:
+        return res
         
     # ?owner=true가 파라미터로 제공될 경우 접속자의 IP를 OWNER IP로 자동 등록
     if owner and request.client:
@@ -208,7 +293,18 @@ async def admin_visitors(request: Request, owner: bool = False):
             except Exception as e:
                 pass
                 
-    return templates.TemplateResponse(request=request, name="admin_visitors.html", context={"request": request})
+    return templates.TemplateResponse(request=request, name="admin_visitors.html", context={
+        "request": request,
+        "admin_permissions": res.get("admin_permission", ""),
+        "admin_username": res.get("user_name") or res.get("user_id") or "Admin"
+    })
+
+
+@router.get("/forgot-password", response_class=HTMLResponse)
+async def forgot_password_page(request: Request):
+    """비밀번호 분실 찾기 페이지"""
+    return templates.TemplateResponse(request=request, name="forgot_password.html", context={"request": request})
+
 
 
 

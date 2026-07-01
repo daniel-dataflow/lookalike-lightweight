@@ -21,6 +21,8 @@ from ..models.user import (
     UserResponse,
     LoginResponse,
     OAuthConfigResponse,
+    ForgotPasswordRequest,
+    ChangePasswordRequest,
 )
 from ..config import get_settings
 from ..config.auth import OAUTH_CONFIGS
@@ -156,11 +158,18 @@ async def register(req: UserRegisterRequest, response: Response):
 
             cur.execute(
                 """
-                INSERT INTO users (user_id, password, user_name, email, provider)
-                VALUES (%s, %s, %s, %s, 'email')
+                INSERT INTO users (user_id, password, user_name, email, provider, security_question, security_answer)
+                VALUES (%s, %s, %s, %s, 'email', %s, %s)
                 RETURNING user_id, user_name as name, email, role, provider, profile_image, create_dt
                 """,
-                (user_id, _hash_password(req.password), req.name, req.email),
+                (
+                    user_id, 
+                    _hash_password(req.password), 
+                    req.name, 
+                    req.email,
+                    req.security_question.strip(),
+                    _hash_password(req.security_answer.strip().lower())  # 대소문자 무관 비교용 소문자 변환 해싱
+                ),
             )
             row = cur.fetchone()
 
@@ -191,7 +200,7 @@ async def login(req: UserLoginRequest, response: Response):
             cur.execute(
                 """
                 SELECT user_id, user_name as name, email, role, provider, profile_image,
-                       last_login, create_dt, password
+                       last_login, create_dt, password, is_temp_password
                 FROM users WHERE email = %s AND provider = 'email'
                 """,
                 (req.email,),
@@ -215,7 +224,8 @@ async def login(req: UserLoginRequest, response: Response):
         return LoginResponse(
             success=True,
             message="로그인 성공",
-            user=UserResponse(**{k: v for k, v in row.items() if k != "password"}),
+            user=UserResponse(**{k: v for k, v in row.items() if k not in ["password", "is_temp_password"]}),
+            require_password_change=bool(row.get("is_temp_password")),
         )
 
     except Exception as e:
@@ -237,31 +247,49 @@ async def logout(request: Request, response: Response):
 # 어드민 로그인 / 로그아웃
 # ──────────────────────────────────────
 @router.post("/admin/login")
-async def admin_login(req: AdminLoginRequest, response: Response):
-    """관리자 전용 로그인"""
-    settings = get_settings()
-    if req.username != settings.ADMIN_USERNAME or req.password != settings.ADMIN_PASSWORD:
-        raise HTTPException(status_code=401, detail="관리자 아이디 또는 비밀번호가 일치하지 않습니다")
-
+async def admin_login(req: AdminLoginRequest, response: Response, request: Request):
+    """관리자 전용 로그인 (DB users 테이블 연동 및 bcrypt 검증)"""
     try:
-        # 세션 생성 시 user_sessions.user_id FK 제약 조건을 만족하기 위해 admin 계정을 users 테이블에 보장
         with get_pg_cursor() as cur:
+            # role이 'ADMIN'인 유저 중 입력받은 ID 대조
             cur.execute("""
-                INSERT INTO users (user_id, user_name, email, role, provider)
-                VALUES ('admin', '시스템 관리자', 'admin@lookalike.com', 'ADMIN', 'system')
-                ON CONFLICT (user_id) DO NOTHING
-            """)
+                SELECT user_id, user_name as name, email, role, provider, profile_image, password, admin_permission
+                FROM users
+                WHERE user_id = %s AND role = 'ADMIN'
+            """, (req.username.strip(),))
+            row = cur.fetchone()
+
+            if not row:
+                raise HTTPException(status_code=401, detail="존재하지 않거나 어드민 권한이 없는 계정입니다")
+
+            if not row["password"] or not _verify_password(req.password, row["password"]):
+                raise HTTPException(status_code=401, detail="관리자 비밀번호가 일치하지 않습니다")
+
+            cur.execute(
+                "UPDATE users SET last_login = NOW() WHERE user_id = %s",
+                (row["user_id"],),
+            )
 
         user_data = {
-            "user_id": "admin",
-            "name": "시스템 관리자",
-            "email": "admin@lookalike.com",
+            "user_id": row["user_id"],
+            "name": row["name"] or "관리자",
+            "email": row["email"] or "admin@lookalike.com",
             "role": "ADMIN",
-            "provider": "system",
-            "profile_image": "",
+            "provider": row["provider"] or "system",
+            "profile_image": row["profile_image"] or "",
             "is_admin": True,
+            "admin_permission": row["admin_permission"] or "SUPER_ADMIN"
         }
         _create_admin_session(response, user_data)
+        
+        # [보안 개정] 어드민 로그인에 확실히 성공한 접속 정보인 경우에만 해당 IP를 관리자 IP로 자동 등록
+        if request.client and request.client.host:
+            try:
+                from .admin import _register_admin_ip
+                _register_admin_ip(request.client.host)
+            except Exception as e:
+                logger.warning(f"어드민 로그인 성공 IP 자동 등록 실패: {e}")
+
         return {"success": True, "message": "관리자 접속 성공"}
 
     except HTTPException:
@@ -291,6 +319,76 @@ async def admin_logout(request: Request, response: Response):
     """관리자 전용 로그아웃"""
     _delete_admin_session(request, response)
     return {"success": True, "message": "관리자 로그아웃 되었습니다"}
+
+
+# ──────────────────────────────────────
+# 비밀번호 찾기 및 변경 (보안질문/답변 기반)
+# ──────────────────────────────────────
+@router.post("/forgot-password")
+async def forgot_password(req: ForgotPasswordRequest):
+    """보안 질문/답변 대조 기반 즉시 임시 비밀번호 발급 API"""
+    try:
+        with get_pg_cursor() as cur:
+            cur.execute("""
+                SELECT user_id, security_question, security_answer FROM users
+                WHERE email = %s AND provider = 'email'
+            """, (req.email,))
+            row = cur.fetchone()
+            
+            if not row:
+                raise HTTPException(status_code=404, detail="존재하지 않는 회원 이메일입니다")
+                
+            if not row["security_question"] or row["security_question"] != req.security_question.strip():
+                raise HTTPException(status_code=400, detail="등록된 보안 질문과 일치하지 않습니다")
+                
+            # 보안 답변 검증 (Bcrypt)
+            if not row["security_answer"] or not _verify_password(req.security_answer.strip().lower(), row["security_answer"]):
+                raise HTTPException(status_code=400, detail="보안 답변이 일치하지 않습니다")
+                
+            # 임시 비밀번호 12자리 난수 생성 (UUID 기반)
+            temp_pwd = uuid.uuid4().hex[:12]
+            hashed_pwd = _hash_password(temp_pwd)
+            
+            # 비밀번호 갱신 및 임시 플래그 True 설정
+            cur.execute("""
+                UPDATE users
+                SET password = %s, is_temp_password = True
+                WHERE user_id = %s
+            """, (hashed_pwd, row["user_id"]))
+            
+        return {"success": True, "message": "임시 비밀번호가 발급되었습니다", "temp_password": temp_pwd}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"비밀번호 찾기 처리 실패: {e}")
+        raise HTTPException(status_code=500, detail="임시 비밀번호 발급에 실패했습니다")
+
+
+@router.post("/change-password")
+async def change_password(request: Request, req: ChangePasswordRequest):
+    """로그인 세션 기반 비밀번호 강제 변경 API"""
+    token = request.cookies.get("session_token")
+    if not token:
+        raise HTTPException(status_code=401, detail="인증되지 않은 사용자입니다")
+        
+    user_data = get_session(token, is_admin=False)
+    if not user_data:
+        raise HTTPException(status_code=401, detail="유효하지 않은 세션입니다")
+        
+    user_id = user_data.get("user_id")
+    try:
+        hashed_pwd = _hash_password(req.new_password)
+        with get_pg_cursor() as cur:
+            cur.execute("""
+                UPDATE users
+                SET password = %s, is_temp_password = False
+                WHERE user_id = %s
+            """, (hashed_pwd, user_id))
+            
+        return {"success": True, "message": "비밀번호 변경이 완료되었습니다"}
+    except Exception as e:
+        logger.error(f"비밀번호 변경 실패: {e}")
+        raise HTTPException(status_code=500, detail="비밀번호 변경에 실패했습니다")
 
 
 # ──────────────────────────────────────

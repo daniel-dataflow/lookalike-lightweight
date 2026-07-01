@@ -50,17 +50,8 @@
     });
 })();
 
-// 서버에서 이미 권한을 검증하고 렌더링했으므로, 사용자 이름만 한 번 더 가져옵니다.
-document.addEventListener('DOMContentLoaded', async function () {
-    try {
-        const meResp = await fetch('/api/auth/me', { credentials: 'same-origin' });
-        const meData = await meResp.json();
-        const name = (meData.success && meData.user && meData.user.name) ? meData.user.name : 'Admin';
-        applyUserName(name);
-    } catch (e) {
-        // 무시
-    }
-});
+// 사용자 이름은 서버 사이드 렌더링(Jinja2) 시점에 이미 완벽히 연동되어 있으므로, 
+// 불필요한 비동기 API 이중 호출 및 오버라이트 로직은 삭제 처리하여 정합성을 유지합니다.
 
 function applyUserName(name) {
     const el1 = document.getElementById('adminUserName');

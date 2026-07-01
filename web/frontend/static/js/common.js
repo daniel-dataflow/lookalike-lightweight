@@ -67,6 +67,7 @@ document.addEventListener('DOMContentLoaded', function () {
     initLoginForm();
     initSignupForm();
     initPasswordStrength();
+    initForceChangePasswordForm();
 
     // URL에 에러 파라미터가 있으면 처리
     const urlParams = new URLSearchParams(window.location.search);
@@ -245,6 +246,15 @@ function initLoginForm() {
                 updateUIForLoggedIn(data.user);
                 closeModal();
                 form.reset();
+                
+                // 임시 비밀번호 로그인 시 강제 변경 모달 활성화
+                if (data.require_password_change) {
+                    const forceModal = new bootstrap.Modal(document.getElementById('forcePasswordChangeModal'), {
+                        backdrop: 'static',
+                        keyboard: false
+                    });
+                    forceModal.show();
+                }
             } else {
                 showFieldError('loginError', data.message || '로그인에 실패했습니다');
             }
@@ -276,6 +286,8 @@ function initSignupForm() {
         const email = document.getElementById('signupEmail').value.trim();
         const password = document.getElementById('signupPassword').value;
         const passwordConfirm = document.getElementById('signupPasswordConfirm').value;
+        const securityQuestion = document.getElementById('signupSecurityQuestion').value;
+        const securityAnswer = document.getElementById('signupSecurityAnswer').value.trim();
 
         // 유효성 검사
         if (!name) return showFieldError('signupNameError', '이름을 입력해주세요');
@@ -283,6 +295,8 @@ function initSignupForm() {
         if (!isValidEmail(email)) return showFieldError('signupEmailError', '올바른 이메일 형식이 아닙니다');
         if (!password || password.length < 4) return showFieldError('signupPasswordError', '비밀번호는 4자리 이상이어야 합니다');
         if (password !== passwordConfirm) return showFieldError('signupPasswordConfirmError', '비밀번호가 일치하지 않습니다');
+        if (!securityQuestion) return showFieldError('signupSecurityQuestionError', '보안 질문을 선택해주세요');
+        if (!securityAnswer) return showFieldError('signupSecurityAnswerError', '보안 답변을 입력해주세요');
 
         setLoading('signup', true);
 
@@ -291,7 +305,14 @@ function initSignupForm() {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'same-origin',
-                body: JSON.stringify({ name, email, password, password_confirm: passwordConfirm }),
+                body: JSON.stringify({ 
+                    name, 
+                    email, 
+                    password, 
+                    password_confirm: passwordConfirm,
+                    security_question: securityQuestion,
+                    security_answer: securityAnswer
+                }),
             });
 
             const data = await resp.json();
@@ -373,6 +394,70 @@ function initPasswordStrength() {
             strengthBar.classList.add('medium');
         } else {
             strengthBar.classList.add('strong');
+        }
+    });
+}
+
+
+// ============================================
+// 임시 비밀번호 강제 변경 처리
+// ============================================
+function initForceChangePasswordForm() {
+    const form = document.getElementById('forceChangePasswordForm');
+    if (!form) return;
+
+    form.addEventListener('submit', async function (e) {
+        e.preventDefault();
+        
+        // 에러 메세지 초기화
+        const errField = document.getElementById('forceChangePasswordError');
+        const errNewField = document.getElementById('forceNewPasswordError');
+        const errConfirmField = document.getElementById('forceNewPasswordConfirmError');
+        if (errField) errField.textContent = '';
+        if (errNewField) errNewField.textContent = '';
+        if (errConfirmField) errConfirmField.textContent = '';
+
+        const newPassword = document.getElementById('forceNewPassword').value;
+        const newPasswordConfirm = document.getElementById('forceNewPasswordConfirm').value;
+
+        // 유효성 검사
+        if (!newPassword || newPassword.length < 4) {
+            if (errNewField) errNewField.textContent = '비밀번호는 최소 4자 이상이어야 합니다';
+            return;
+        }
+        if (newPassword !== newPasswordConfirm) {
+            if (errConfirmField) errConfirmField.textContent = '비밀번호가 일치하지 않습니다';
+            return;
+        }
+
+        const btn = document.getElementById('forceChangePasswordSubmitBtn');
+        if (btn) btn.disabled = true;
+
+        try {
+            const resp = await fetch('/api/auth/change-password', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'same-origin',
+                body: JSON.stringify({ new_password: newPassword }),
+            });
+
+            const data = await resp.json();
+
+            if (resp.ok && data.success) {
+                showToast('비밀번호가 성공적으로 변경되었습니다. 정상 이용이 가능합니다.', 'success');
+                
+                // 모달 닫기
+                const modalEl = document.getElementById('forcePasswordChangeModal');
+                const modal = bootstrap.Modal.getInstance(modalEl);
+                if (modal) modal.hide();
+                form.reset();
+            } else {
+                if (errField) errField.textContent = data.detail || data.message || '비밀번호 변경에 실패했습니다';
+            }
+        } catch (err) {
+            if (errField) errField.textContent = '서버 연결에 실패했습니다';
+        } finally {
+            if (btn) btn.disabled = false;
         }
     });
 }

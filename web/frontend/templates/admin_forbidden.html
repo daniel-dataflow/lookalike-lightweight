@@ -1,0 +1,26 @@
+{% extends "admin_base.html" %}
+
+{% block title %}접근 권한 없음 - Lookalike Admin{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-column align-items-center justify-content-center" style="min-height: 70vh;">
+  <div class="card border-0 shadow-lg p-5 text-center rounded-4" style="max-width: 500px; background: #ffffff;">
+    <div class="icon-wrap bg-light-danger text-danger d-inline-flex align-items-center justify-content-center mb-4" 
+         style="width: 80px; height: 80px; border-radius: 50%; font-size: 2.2rem; background: #fef2f2 !important;">
+      <i class="fas fa-shield-alt text-danger"></i>
+    </div>
+    
+    <h4 class="fw-bold text-dark mb-2">접근 권한이 제한되었습니다</h4>
+    <p class="text-muted small mb-4" style="line-height: 1.6;">
+      회원님의 관리자 계정은 해당 페이지(<strong>{{ required_menu }}</strong>)에 접근할 수 있는 권한이 부여되지 않았습니다.<br>
+      접근이 필요하신 경우 최고(SUPER_ADMIN) 관리자에게 권한 수정을 요청해 주세요.
+    </p>
+
+    <div class="d-flex gap-2 w-100">
+      <a href="/admin/infra" class="btn btn-dark rounded-pill w-100 py-2.5 fw-bold" style="font-size: 0.88rem;">
+        <i class="fas fa-home me-1"></i> 관리자 홈으로 이동
+      </a>
+    </div>
+  </div>
+</div>
+{% endblock %}

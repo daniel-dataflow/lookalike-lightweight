@@ -282,7 +282,37 @@ def init_all_databases():
     _ensure_infra_metrics_table()
     _ensure_app_logs_table()
     _ensure_owner_ips_table()
+    _migrate_users_table()
     logger.info("🚀 PostgreSQL 데이터베이스 연결 초기화 완료")
+
+
+def _migrate_users_table():
+    """users 테이블에 어드민 세부 권한, 임시 비밀번호 설정, 보안 질문/답변 필드 추가 및 초기 마이그레이션"""
+    try:
+        import bcrypt
+        with get_prod_cursor() as cur:
+            # 컬럼 추가 DDL
+            cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS admin_permission VARCHAR(50) DEFAULT 'SUPER_ADMIN';")
+            cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS is_temp_password BOOLEAN DEFAULT FALSE;")
+            cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS security_question VARCHAR(200) DEFAULT '';")
+            cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS security_answer VARCHAR(200) DEFAULT '';")
+            
+            # 1. admin_30d7 임시 테스트 계정 삭제
+            cur.execute("DELETE FROM users WHERE user_id = 'admin_30d7';")
+            
+            # 2. admin 슈퍼 어드민 계정 초기화 (admin / admin7777! 의 bcrypt 해시)
+            hashed = bcrypt.hashpw(b"admin7777!", bcrypt.gensalt()).decode("utf-8")
+            cur.execute("""
+                INSERT INTO users (user_id, password, user_name, email, role, provider, admin_permission)
+                VALUES ('admin', %s, '시스템 관리자', 'admin@lookalike.com', 'ADMIN', 'system', 'SUPER_ADMIN')
+                ON CONFLICT (user_id) DO UPDATE
+                SET password = EXCLUDED.password, role = 'ADMIN', admin_permission = 'SUPER_ADMIN';
+            """, (hashed,))
+            
+        logger.info("✅ users 테이블 마이그레이션 및 admin 초기 계정 생성 완료")
+    except Exception as e:
+        logger.error(f"❌ users 테이블 마이그레이션 실패: {e}")
+
 
 
 def _ensure_owner_ips_table():
