@@ -1910,10 +1910,6 @@ async def get_visitors_overview(
 ):
     """기간별 방문자 통계 개요 (전체 / 일반 / OWNER 구분 집계)"""
     try:
-        # 호출한 어드민의 IP를 OWNER 목록에 자동 등록
-        if request.client:
-            _register_admin_ip(request.client.host)
-            
         where_clause = "WHERE 1=1"
         params = []
         if start_date and end_date:
@@ -2052,9 +2048,6 @@ async def get_visitors_sessions(
 ):
     """IP별 검색 세션 분석 및 행동 패턴 타임라인 (전체 / 일반 / OWNER 구분)"""
     try:
-        if request.client:
-            _register_admin_ip(request.client.host)
-            
         where_clause = "WHERE 1=1"
         params = []
         if start_date and end_date:
@@ -2146,9 +2139,6 @@ async def get_visitors_sessions(
 async def get_visitors_realtime(request: Request):
     """최근 24시간 실시간 유저 유입 및 모니터링 로그 (어드민 OWNER 라벨링)"""
     try:
-        if request.client:
-            _register_admin_ip(request.client.host)
-            
         with get_pg_cursor() as cur:
             cur.execute("""
                 SELECT ip_address, user_agent, input_text, thumbnail_url, create_dt, user_id
@@ -2215,9 +2205,6 @@ async def get_visitors_geo(
 ):
     """접속 장소별(국가, 도시, ISP, 타임존) 통계 및 지도 마커 데이터"""
     try:
-        if request.client:
-            _register_admin_ip(request.client.host)
-            
         where_clause = "WHERE ip_address IS NOT NULL"
         params = []
         if start_date and end_date:
@@ -2386,4 +2373,233 @@ async def delete_owner_ip(ip_address: str):
     except Exception as e:
         logger.error(f"관리자 IP 삭제 실패: {e}")
         return {"success": False, "detail": str(e)}
+
+
+# ──────────────────────────────────────
+# 사용자 통제 및 권한 관리 API (신설)
+# ──────────────────────────────────────
+from pydantic import BaseModel, Field
+
+class CreateAdminRequest(BaseModel):
+    username: str = Field(..., min_length=4, max_length=50)
+    password: str = Field(..., min_length=4, max_length=255)
+    name: str = Field(..., min_length=1, max_length=50)
+    email: str = Field(..., min_length=3, max_length=100)
+    permission: str = Field("SUPER_ADMIN")
+
+class UpdatePermissionRequest(BaseModel):
+    username: str
+    permission: str
+
+class ResetAdminPasswordRequest(BaseModel):
+    username: str
+    new_password: str
+
+class ResetUserPasswordRequest(BaseModel):
+    user_id: str
+
+
+def _verify_super_admin(request: Request):
+    """SUPER_ADMIN 권한 보유 여부 검증 헬퍼"""
+    token = request.cookies.get("admin_session_token")
+    if not token:
+        raise HTTPException(status_code=401, detail="관리자 로그인이 필요합니다.")
+        
+    from ..database import get_session
+    admin_data = get_session(token, is_admin=True)
+    if not admin_data:
+        raise HTTPException(status_code=401, detail="유효하지 않은 어드민 세션입니다.")
+        
+    # 세부 권한 검증
+    perm = admin_data.get("admin_permission", "SUPER_ADMIN")
+    if perm != "SUPER_ADMIN":
+        raise HTTPException(status_code=403, detail="이 요청을 수행할 SUPER_ADMIN 권한이 없습니다.")
+    return admin_data
+
+
+def _verify_any_admin(request: Request):
+    """일반 어드민 권한 이상 보유 여부 검증 헬퍼"""
+    token = request.cookies.get("admin_session_token")
+    if not token:
+        raise HTTPException(status_code=401, detail="관리자 로그인이 필요합니다.")
+        
+    from ..database import get_session
+    admin_data = get_session(token, is_admin=True)
+    if not admin_data:
+        raise HTTPException(status_code=401, detail="유효하지 않은 어드민 세션입니다.")
+    return admin_data
+
+
+@router.get("/users/list")
+async def get_users_list(request: Request, tab: str = Query("general")):
+    """사용자(관리자 / 일반 유저 / 비로그인 유저) 모니터링 종합 목록 조회 API"""
+    _verify_any_admin(request)
+    
+    try:
+        with get_pg_cursor() as cur:
+            if tab == "admin":
+                # 1) 관리자 계정 조회
+                cur.execute("""
+                    SELECT user_id, user_name as name, email, role, admin_permission, create_dt
+                    FROM users
+                    WHERE role = 'ADMIN'
+                    ORDER BY create_dt DESC;
+                """)
+                rows = cur.fetchall()
+                return {"success": True, "users": [dict(r) for r in rows]}
+                
+            elif tab == "general":
+                # 2) 일반 회원 및 모니터링 활동 정보 조인 조회
+                cur.execute("""
+                    SELECT 
+                        u.user_id, u.user_name as name, u.email, u.provider, u.create_dt,
+                        (SELECT COUNT(*) FROM search_logs WHERE user_id = u.user_id) AS total_search_count,
+                        (SELECT MAX(create_dt) FROM search_logs WHERE user_id = u.user_id) AS last_search_dt,
+                        (SELECT ARRAY_TO_STRING(ARRAY(
+                            SELECT input_text FROM (
+                                SELECT input_text, MAX(create_dt) as max_dt
+                                FROM search_logs
+                                WHERE user_id = u.user_id AND input_text IS NOT NULL AND input_text != ''
+                                GROUP BY input_text
+                                ORDER BY max_dt DESC
+                                LIMIT 3
+                            ) tmp
+                        ), ', ')) AS recent_keywords
+                    FROM users u
+                    WHERE u.role = 'USER'
+                    ORDER BY u.create_dt DESC;
+                """)
+                rows = cur.fetchall()
+                return {"success": True, "users": [dict(r) for r in rows]}
+                
+            elif tab == "non-login":
+                # 3) 비로그인 유저 집계 조회 (ip_address GroupBy)
+                cur.execute("""
+                    SELECT 
+                        ip_address,
+                        MAX(user_agent) as user_agent,
+                        COUNT(*) AS total_search_count,
+                        MAX(create_dt) AS last_search_dt,
+                        (SELECT ARRAY_TO_STRING(ARRAY(
+                            SELECT input_text FROM (
+                                SELECT input_text, MAX(create_dt) as max_dt
+                                FROM search_logs
+                                WHERE ip_address = s.ip_address AND user_id IS NULL AND input_text IS NOT NULL AND input_text != ''
+                                GROUP BY input_text
+                                ORDER BY max_dt DESC
+                                LIMIT 3
+                            ) tmp
+                        ), ', ')) AS recent_keywords
+                    FROM search_logs s
+                    WHERE user_id IS NULL AND ip_address IS NOT NULL
+                    GROUP BY ip_address
+                    ORDER BY last_search_dt DESC;
+                """)
+                rows = cur.fetchall()
+                return {"success": True, "users": [dict(r) for r in rows]}
+                
+            else:
+                raise HTTPException(status_code=400, detail="유효하지 않은 탭 파라미터입니다.")
+                
+    except Exception as e:
+        logger.error(f"사용자 목록 조회 실패 ({tab}): {e}")
+        return {"success": False, "detail": str(e)}
+
+
+@router.post("/users/create-admin")
+async def create_admin(request: Request, req: CreateAdminRequest):
+    """신규 어드민 계정 생성 API (SUPER_ADMIN 전용)"""
+    _verify_super_admin(request)
+    
+    try:
+        import bcrypt
+        hashed = bcrypt.hashpw(req.password.strip().encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+        
+        with get_pg_cursor() as cur:
+            # 중복 체크
+            cur.execute("SELECT user_id FROM users WHERE user_id = %s", (req.username.strip(),))
+            if cur.fetchone():
+                return {"success": False, "detail": "이미 존재하는 아이디입니다."}
+                
+            cur.execute("""
+                INSERT INTO users (user_id, password, user_name, email, role, provider, admin_permission)
+                VALUES (%s, %s, %s, %s, 'ADMIN', 'system', %s)
+            """, (req.username.strip(), hashed, req.name.strip(), req.email.strip(), req.permission))
+            
+        return {"success": True, "message": "새로운 관리자 계정이 등록되었습니다."}
+    except Exception as e:
+        logger.error(f"어드민 생성 실패: {e}")
+        return {"success": False, "detail": str(e)}
+
+
+@router.post("/users/update-permission")
+async def update_permission(request: Request, req: UpdatePermissionRequest):
+    """어드민 세부 권한 변경 API (SUPER_ADMIN 전용)"""
+    _verify_super_admin(request)
+    
+    try:
+        with get_pg_cursor() as cur:
+            cur.execute("""
+                UPDATE users
+                SET admin_permission = %s
+                WHERE user_id = %s AND role = 'ADMIN'
+            """, (req.permission, req.username))
+            
+        return {"success": True, "message": f"'{req.username}' 관리자의 권한 수준이 '{req.permission}'(으)로 갱신되었습니다."}
+    except Exception as e:
+        logger.error(f"권한 변경 실패: {e}")
+        return {"success": False, "detail": str(e)}
+
+
+@router.post("/users/reset-admin-password")
+async def reset_admin_password(request: Request, req: ResetAdminPasswordRequest):
+    """하위 어드민 비밀번호 강제 변경 API (SUPER_ADMIN 전용)"""
+    _verify_super_admin(request)
+    
+    try:
+        import bcrypt
+        hashed = bcrypt.hashpw(req.new_password.strip().encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+        
+        with get_pg_cursor() as cur:
+            cur.execute("""
+                UPDATE users
+                SET password = %s
+                WHERE user_id = %s AND role = 'ADMIN'
+            """, (hashed, req.username))
+            
+        return {"success": True, "message": f"'{req.username}' 관리자의 비밀번호가 성공적으로 재설정되었습니다."}
+    except Exception as e:
+        logger.error(f"관리자 비밀번호 재설정 실패: {e}")
+        return {"success": False, "detail": str(e)}
+
+
+@router.post("/users/reset-user-password")
+async def reset_user_password(request: Request, req: ResetUserPasswordRequest):
+    """일반 회원 비밀번호 임시 비밀번호로 강제 재설정 API (어드민 전용)"""
+    _verify_any_admin(request)
+    
+    try:
+        import uuid
+        import bcrypt
+        
+        # 12자리 임시 비밀번호 난수 생성
+        temp_pwd = uuid.uuid4().hex[:12]
+        hashed = bcrypt.hashpw(temp_pwd.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+        
+        with get_pg_cursor() as cur:
+            cur.execute("""
+                UPDATE users
+                SET password = %s, is_temp_password = True
+                WHERE user_id = %s AND role = 'USER'
+            """, (hashed, req.user_id))
+            
+        return {
+            "success": True, 
+            "message": "해당 유저의 비밀번호를 성공적으로 초기화했습니다.", 
+            "temp_password": temp_pwd
+        }
+    except Exception as e:
+        logger.error(f"일반 유저 비밀번호 초기화 실패: {e}")
+        return {"success": False, "detail": str(e)}
+
 

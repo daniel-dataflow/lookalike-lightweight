@@ -1,0 +1,631 @@
+{% extends "admin_base.html" %}
+
+{% block title %}사용자 통제 및 모니터링 - Lookalike Admin{% endblock %}
+
+{% block page_title %}사용자 통제 및 모니터링{% endblock %}
+
+{% block content %}
+{% raw %}
+<style>
+  .pulse-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+  }
+  .dot-active   { background: #10b981; }
+  .dot-inactive { background: #9ca3af; }
+</style>
+
+<div class="container-fluid py-4">
+  <!-- 상단 요약 카드 및 설명 -->
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+      <h4 class="fw-bold mb-1 text-dark"><i class="fas fa-users-cog me-2 text-primary"></i>사용자 관리 및 모니터링 통제소</h4>
+      <p class="text-muted mb-0" style="font-size:.85rem;">어드민 계정 권한 제어 및 가입 회원/비로그인 방문자의 활동 패턴 밀착 모니터링</p>
+    </div>
+    <div>
+      <button class="btn btn-sm btn-outline-secondary rounded-pill px-3" onclick="loadUsersData()">
+        <i class="fas fa-sync-alt me-1"></i>새로고침
+      </button>
+    </div>
+  </div>
+
+  <!-- 하위 탭 구조 (관리자 / 일반회원 / 비로그인유저) -->
+  <ul class="nav nav-tabs mb-4" id="usersSubTabs" role="tablist">
+    <li class="nav-item">
+      <button class="nav-link active fw-bold" id="sub-admin-tab" data-bs-toggle="tab" data-bs-target="#sub-admin-pane" type="button" role="tab" onclick="switchUsersTab('admin')">
+        <i class="fas fa-user-shield me-1 text-danger"></i> 관리자 계정
+      </button>
+    </li>
+    <li class="nav-item">
+      <button class="nav-link fw-bold" id="sub-general-tab" data-bs-toggle="tab" data-bs-target="#sub-general-pane" type="button" role="tab" onclick="switchUsersTab('general')">
+        <i class="fas fa-user me-1 text-primary"></i> 일반 회원
+      </button>
+    </li>
+    <li class="nav-item">
+      <button class="nav-link fw-bold" id="sub-nonlogin-tab" data-bs-toggle="tab" data-bs-target="#sub-nonlogin-pane" type="button" role="tab" onclick="switchUsersTab('non-login')">
+        <i class="fas fa-user-secret me-1 text-secondary"></i> 비로그인 유저
+      </button>
+    </li>
+  </ul>
+
+  <div class="tab-content" id="usersSubTabContent">
+    <!-- 1) 관리자 계정 탭 -->
+    <div class="tab-pane fade show active" id="sub-admin-pane" role="tabpanel">
+      <div class="card border-0 shadow-sm mb-4" style="border-radius: 12px;">
+        <div class="card-header bg-white border-bottom-0 pt-3 pb-2 d-flex justify-content-between align-items-center">
+          <h6 class="fw-bold m-0 text-dark"><i class="fas fa-user-lock me-1"></i>등록된 관리자 목록</h6>
+          <button class="btn btn-sm btn-primary rounded-pill px-3" data-bs-toggle="modal" data-bs-target="#createAdminModal">
+            <i class="fas fa-user-plus me-1"></i>신규 관리자 추가
+          </button>
+        </div>
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0" style="font-size: 0.85rem;">
+              <thead class="table-light text-muted">
+                <tr>
+                  <th style="padding-left: 20px;">관리자 ID</th>
+                  <th>이름</th>
+                  <th>이메일</th>
+                  <th>허용 메뉴 (권한)</th>
+                  <th>가입일</th>
+                  <th class="text-center">계정 제어</th>
+                </tr>
+              </thead>
+              <tbody id="adminUsersTableBody">
+                <tr><td colspan="6" class="text-center py-4 text-muted">데이터를 로드 중입니다...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2) 일반 회원 탭 -->
+    <div class="tab-pane fade" id="sub-general-pane" role="tabpanel">
+      <div class="card border-0 shadow-sm mb-4" style="border-radius: 12px;">
+        <div class="card-header bg-white border-bottom-0 pt-3 pb-2">
+          <h6 class="fw-bold m-0 text-dark"><i class="fas fa-users me-1"></i>가입 회원 모니터링</h6>
+        </div>
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0" style="font-size: 0.85rem;">
+              <thead class="table-light text-muted">
+                <tr>
+                  <th style="padding-left: 20px;">사용자 ID</th>
+                  <th>이름</th>
+                  <th>이메일</th>
+                  <th>가입 경로</th>
+                  <th>가입일</th>
+                  <th class="text-center">총 검색 건수</th>
+                  <th>최근 검색어</th>
+                  <th>마지막 검색 시각</th>
+                  <th class="text-center">비밀번호 초기화</th>
+                </tr>
+              </thead>
+              <tbody id="generalUsersTableBody">
+                <tr><td colspan="9" class="text-center py-4 text-muted">데이터를 로드 중입니다...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3) 비로그인 유저 탭 -->
+    <div class="tab-pane fade" id="sub-nonlogin-pane" role="tabpanel">
+      <div class="card border-0 shadow-sm mb-4" style="border-radius: 12px;">
+        <div class="card-header bg-white border-bottom-0 pt-3 pb-2">
+          <h6 class="fw-bold m-0 text-dark"><i class="fas fa-network-wired me-1"></i>비로그인 유저 활동 로그</h6>
+        </div>
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0" style="font-size: 0.85rem;">
+              <thead class="table-light text-muted">
+                <tr>
+                  <th style="padding-left: 20px;">접속 IP 주소</th>
+                  <th>최근 사용 기기 (User-Agent)</th>
+                  <th class="text-center">총 검색 건수</th>
+                  <th>최근 검색어 (최근 3개)</th>
+                  <th>마지막 검색 시각</th>
+                </tr>
+              </thead>
+              <tbody id="nonloginUsersTableBody">
+                <tr><td colspan="5" class="text-center py-4 text-muted">데이터를 로드 중입니다...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 신규 어드민 생성 등록 모달 (SUPER_ADMIN 단독 허용) -->
+<div class="modal fade" id="createAdminModal" tabindex="-1" aria-labelledby="createAdminModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-0 shadow-lg">
+      <div class="modal-header bg-dark text-white">
+        <h6 class="modal-title fw-bold" id="createAdminModalLabel"><i class="fas fa-user-plus me-1"></i>신규 관리자 추가 등록</h6>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body px-4 py-3">
+        <form id="createAdminForm">
+          <div class="mb-3">
+            <label class="form-label small fw-bold text-muted">어드민 ID</label>
+            <input type="text" class="form-control form-control-sm" id="newAdminUsername" required placeholder="영문/숫자 4자 이상">
+          </div>
+          <div class="mb-3">
+            <label class="form-label small fw-bold text-muted">이름</label>
+            <input type="text" class="form-control form-control-sm" id="newAdminName" required placeholder="실명 입력">
+          </div>
+          <div class="mb-3">
+            <label class="form-label small fw-bold text-muted">이메일</label>
+            <input type="email" class="form-control form-control-sm" id="newAdminEmail" required placeholder="admin@example.com">
+          </div>
+          <div class="mb-3">
+            <label class="form-label small fw-bold text-muted">초기 비밀번호</label>
+            <input type="password" class="form-control form-control-sm" id="newAdminPassword" required placeholder="4자 이상 안전한 비밀번호">
+          </div>
+          <div class="mb-3">
+            <label class="form-label small fw-bold text-muted d-block">페이지별 접근 권한 설정</label>
+            
+            <div class="form-check form-check-inline mb-2">
+              <input class="form-check-input new-admin-perm" type="checkbox" value="infra" id="permInfra" checked>
+              <label class="form-check-label small" for="permInfra">인프라 모니터링</label>
+            </div>
+            <div class="form-check form-check-inline mb-2">
+              <input class="form-check-input new-admin-perm" type="checkbox" value="crawling" id="permCrawling">
+              <label class="form-check-label small" for="permCrawling">크롤링 모니터링</label>
+            </div>
+            <div class="form-check form-check-inline mb-2">
+              <input class="form-check-input new-admin-perm" type="checkbox" value="logs" id="permLogs">
+              <label class="form-check-label small" for="permLogs">로그 모니터링</label>
+            </div>
+            <div class="form-check form-check-inline mb-2">
+              <input class="form-check-input new-admin-perm" type="checkbox" value="visitors" id="permVisitors">
+              <label class="form-check-label small" for="permVisitors">방문자 분석</label>
+            </div>
+            <div class="form-check form-check-inline mb-2">
+              <input class="form-check-input new-admin-perm" type="checkbox" value="inquiry" id="permInquiry">
+              <label class="form-check-label small" for="permInquiry">문의 관리</label>
+            </div>
+            
+            <div class="mt-2 pt-2 border-top">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="permSuperAdmin" onchange="toggleSuperAdminCheck(this)">
+                <label class="form-check-label small fw-bold text-danger" for="permSuperAdmin">SUPER_ADMIN (모든 권한 프리패스)</label>
+              </div>
+            </div>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer bg-light border-top-0">
+        <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">취소</button>
+        <button type="button" class="btn btn-sm btn-primary" onclick="submitCreateAdmin()">등록 완료</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 어드민 권한 수정 모달 (SUPER_ADMIN 단독 허용) -->
+<div class="modal fade" id="editAdminPermissionModal" tabindex="-1" aria-labelledby="editAdminPermissionModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-0 shadow-lg">
+      <div class="modal-header bg-dark text-white">
+        <h6 class="modal-title fw-bold" id="editAdminPermissionModalLabel"><i class="fas fa-user-shield me-1"></i>관리자 상세 권한 수정</h6>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body px-4 py-3">
+        <input type="hidden" id="editPermissionTarget">
+        <div class="alert alert-info py-2 small border-0 mb-3" style="font-size: 0.78rem;">
+          <i class="fas fa-shield-alt me-1"></i>최고 관리자(SUPER_ADMIN)의 고유 권한으로 개별 페이지 접근 권한을 체크 지정합니다.
+        </div>
+        <div class="mb-3">
+          <label class="form-label small fw-bold text-muted" id="editPermissionTargetLabel">대상 관리자: —</label>
+        </div>
+        
+        <div class="mb-3">
+          <label class="form-label small fw-bold text-muted d-block">허용할 관리자 메뉴 페이지 선택</label>
+          
+          <div class="form-check form-check-inline mb-2">
+            <input class="form-check-input edit-admin-perm" type="checkbox" value="infra" id="editPermInfra">
+            <label class="form-check-label small" for="editPermInfra">인프라 모니터링</label>
+          </div>
+          <div class="form-check form-check-inline mb-2">
+            <input class="form-check-input edit-admin-perm" type="checkbox" value="crawling" id="editPermCrawling">
+            <label class="form-check-label small" for="editPermCrawling">크롤링 모니터링</label>
+          </div>
+          <div class="form-check form-check-inline mb-2">
+            <input class="form-check-input edit-admin-perm" type="checkbox" value="logs" id="editPermLogs">
+            <label class="form-check-label small" for="editPermLogs">로그 모니터링</label>
+          </div>
+          <div class="form-check form-check-inline mb-2">
+            <input class="form-check-input edit-admin-perm" type="checkbox" value="visitors" id="editPermVisitors">
+            <label class="form-check-label small" for="editPermVisitors">방문자 분석</label>
+          </div>
+          <div class="form-check form-check-inline mb-2">
+            <input class="form-check-input edit-admin-perm" type="checkbox" value="inquiry" id="editPermInquiry">
+            <label class="form-check-label small" for="editPermInquiry">문의 관리</label>
+          </div>
+          
+          <div class="mt-2 pt-2 border-top">
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" id="editPermSuperAdmin" onchange="toggleEditSuperAdminCheck(this)">
+              <label class="form-check-label small fw-bold text-danger" for="editPermSuperAdmin">SUPER_ADMIN (모든 권한 프리패스)</label>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer bg-light border-top-0">
+        <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">취소</button>
+        <button type="button" class="btn btn-sm btn-primary" onclick="submitUpdatePermission()">권한 저장</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 어드민 비밀번호 강제 변경 모달 (SUPER_ADMIN 전용) -->
+<div class="modal fade" id="resetAdminPasswordModal" tabindex="-1" aria-labelledby="resetAdminPasswordModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-0 shadow-lg">
+      <div class="modal-header bg-danger text-white">
+        <h6 class="modal-title fw-bold" id="resetAdminPasswordModalLabel"><i class="fas fa-key me-1"></i>어드민 비밀번호 강제 재설정</h6>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body px-4 py-3">
+        <input type="hidden" id="resetAdminPasswordTarget">
+        <div class="alert alert-warning py-2 small border-0 mb-3" style="font-size: 0.78rem;">
+          <i class="fas fa-exclamation-triangle me-1"></i>SUPER_ADMIN 권한으로 선택한 하위 어드민의 비밀번호를 강제 수정합니다.
+        </div>
+        <div class="mb-3">
+          <label class="form-label small fw-bold text-muted" id="resetPasswordTargetLabel">대상 관리자: —</label>
+        </div>
+        <div class="mb-3">
+          <label class="form-label small fw-bold text-muted">새로운 비밀번호</label>
+          <input type="password" class="form-control form-control-sm" id="resetAdminNewPassword" required placeholder="변경할 4자 이상의 새 비밀번호">
+        </div>
+      </div>
+      <div class="modal-footer bg-light border-top-0">
+        <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">취소</button>
+        <button type="button" class="btn btn-sm btn-danger" onclick="submitResetAdminPassword()">비밀번호 변경</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let activeUsersSubTab = 'admin'; // 'admin', 'general', 'non-login'
+
+document.addEventListener('DOMContentLoaded', function() {
+  loadUsersData();
+});
+
+function switchUsersTab(tabName) {
+  activeUsersSubTab = tabName;
+  loadUsersData();
+}
+
+async function loadUsersData() {
+  const containerId = activeUsersSubTab === 'admin' ? 'adminUsersTableBody' : 
+                      (activeUsersSubTab === 'general' ? 'generalUsersTableBody' : 'nonloginUsersTableBody');
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  
+  container.innerHTML = '<tr><td colspan="10" class="text-center py-4 text-muted"><i class="fas fa-spinner fa-spin me-1"></i>데이터를 불러오는 중입니다...</td></tr>';
+  
+  try {
+    const res = await fetch(`/api/admin/users/list?tab=${activeUsersSubTab}`);
+    const data = await res.json();
+    
+    if (res.ok && data.success) {
+      if (activeUsersSubTab === 'admin') {
+        renderAdminUsers(data.users);
+      } else if (activeUsersSubTab === 'general') {
+        renderGeneralUsers(data.users);
+      } else {
+        renderNonLoginUsers(data.users);
+      }
+    } else {
+      container.innerHTML = `<tr><td colspan="10" class="text-center py-4 text-danger"><i class="fas fa-exclamation-circle me-1"></i>데이터 로드 실패: ${data.detail || '서버 오류'}</td></tr>`;
+    }
+  } catch (err) {
+    container.innerHTML = `<tr><td colspan="10" class="text-center py-4 text-danger"><i class="fas fa-exclamation-circle me-1"></i>네트워크 오류: ${err.message}</td></tr>`;
+  }
+}
+
+function parsePermissionBadges(perm) {
+  if (!perm) return '<span class="badge bg-light text-muted">권한 없음</span>';
+  if (perm === 'SUPER_ADMIN') {
+    return '<span class="badge bg-danger text-white"><i class="fas fa-crown me-1"></i>SUPER_ADMIN</span>';
+  }
+  
+  const mapping = {
+    'infra': '인프라',
+    'crawling': '크롤링',
+    'logs': '로그',
+    'visitors': '방문자',
+    'inquiry': '문의'
+  };
+  
+  return perm.split(',').map(p => {
+    const val = p.trim();
+    if (!val) return '';
+    const label = mapping[val] || val;
+    return `<span class="badge bg-light text-dark border me-1">${label}</span>`;
+  }).join('');
+}
+
+function renderAdminUsers(users) {
+  const tbody = document.getElementById('adminUsersTableBody');
+  if (users.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted">등록된 관리자가 없습니다.</td></tr>';
+    return;
+  }
+  
+  tbody.innerHTML = users.map(u => `
+    <tr>
+      <td class="fw-bold text-dark" style="padding-left: 20px;">${u.user_id}</td>
+      <td>${u.name}</td>
+      <td>${u.email}</td>
+      <td>
+        ${parsePermissionBadges(u.admin_permission)}
+      </td>
+      <td>${u.create_dt ? new Date(u.create_dt).toLocaleString('ko-KR') : '—'}</td>
+      <td class="text-center">
+        <button class="btn btn-xs btn-outline-primary me-1" onclick="openEditPermissionModal('${u.user_id}', '${u.admin_permission || ''}')">
+          <i class="fas fa-edit me-1"></i>권한수정
+        </button>
+        <button class="btn btn-xs btn-outline-danger" onclick="openResetAdminPasswordModal('${u.user_id}')">
+          <i class="fas fa-key me-1"></i>비번재설정
+        </button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function renderGeneralUsers(users) {
+  const tbody = document.getElementById('generalUsersTableBody');
+  if (users.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="9" class="text-center py-4 text-muted">가입된 회원이 없습니다.</td></tr>';
+    return;
+  }
+  
+  tbody.innerHTML = users.map(u => `
+    <tr>
+      <td class="fw-bold text-dark" style="padding-left: 20px;">${u.user_id}</td>
+      <td>${u.name || '—'}</td>
+      <td>${u.email || '—'}</td>
+      <td>
+        <span class="badge ${u.provider === 'kakao' ? 'bg-warning text-dark' : (u.provider === 'naver' ? 'bg-success text-white' : 'bg-secondary text-white')}" style="font-size:0.7rem;">
+          ${u.provider}
+        </span>
+      </td>
+      <td>${u.create_dt ? new Date(u.create_dt).toLocaleDateString('ko-KR') : '—'}</td>
+      <td class="text-center fw-bold text-primary">${u.total_search_count || 0}회</td>
+      <td class="text-muted" style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+        ${u.recent_keywords ? u.recent_keywords.split(', ').map(k => `<span class="badge bg-light text-dark border me-1">${k}</span>`).join('') : '—'}
+      </td>
+      <td>${u.last_search_dt ? new Date(u.last_search_dt).toLocaleString('ko-KR') : '—'}</td>
+      <td class="text-center">
+        ${u.provider === 'email' ? `
+          <button class="btn btn-xs btn-outline-warning" onclick="resetUserPassword('${u.user_id}')">
+            <i class="fas fa-undo me-1"></i>초기화
+          </button>
+        ` : `<span class="text-muted small">소셜 로그인</span>`}
+      </td>
+    </tr>
+  `).join('');
+}
+
+function renderNonLoginUsers(users) {
+  const tbody = document.getElementById('nonloginUsersTableBody');
+  if (users.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-muted">비로그인 활동 로그가 없습니다.</td></tr>';
+    return;
+  }
+  
+  tbody.innerHTML = users.map(u => `
+    <tr>
+      <td class="fw-bold text-info" style="padding-left: 20px;">${u.ip_address}</td>
+      <td class="text-muted small" style="max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${u.user_agent || ''}">
+        ${u.user_agent || '—'}
+      </td>
+      <td class="text-center fw-bold text-secondary">${u.total_search_count || 0}회</td>
+      <td>
+        ${u.recent_keywords ? u.recent_keywords.split(', ').map(k => `<span class="badge bg-light text-dark border me-1">${k}</span>`).join('') : '—'}
+      </td>
+      <td>${u.last_search_dt ? new Date(u.last_search_dt).toLocaleString('ko-KR') : '—'}</td>
+    </tr>
+  `).join('');
+}
+
+function toggleSuperAdminCheck(chk) {
+  const perms = document.querySelectorAll('.new-admin-perm');
+  perms.forEach(p => {
+    p.disabled = chk.checked;
+    if (chk.checked) p.checked = true;
+  });
+}
+
+function toggleEditSuperAdminCheck(chk) {
+  const perms = document.querySelectorAll('.edit-admin-perm');
+  perms.forEach(p => {
+    p.disabled = chk.checked;
+    if (chk.checked) p.checked = true;
+  });
+}
+
+async function submitCreateAdmin() {
+  const username = document.getElementById('newAdminUsername').value.trim();
+  const name = document.getElementById('newAdminName').value.trim();
+  const email = document.getElementById('newAdminEmail').value.trim();
+  const password = document.getElementById('newAdminPassword').value;
+  
+  if (!username || !name || !email || !password) {
+    alert('모든 필드를 채워주세요.');
+    return;
+  }
+  
+  let permission = '';
+  const isSuper = document.getElementById('permSuperAdmin').checked;
+  if (isSuper) {
+    permission = 'SUPER_ADMIN';
+  } else {
+    const selected = [];
+    document.querySelectorAll('.new-admin-perm:checked').forEach(p => {
+      selected.push(p.value);
+    });
+    permission = selected.join(',');
+  }
+  
+  try {
+    const res = await fetch('/api/admin/users/create-admin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, name, email, password, permission })
+    });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      alert(data.message || '신규 어드민 등록 완료!');
+      document.getElementById('createAdminForm').reset();
+      
+      // 비활성화 체크박스 복구
+      document.querySelectorAll('.new-admin-perm').forEach(p => p.disabled = false);
+      
+      // 모달 닫기
+      const modalEl = document.getElementById('createAdminModal');
+      const modal = bootstrap.Modal.getInstance(modalEl);
+      if (modal) modal.hide();
+      
+      loadUsersData();
+    } else {
+      alert(`등록 실패: ${data.detail || '서버 오류'}`);
+    }
+  } catch (err) {
+    alert(`네트워크 오류: ${err.message}`);
+  }
+}
+
+function openEditPermissionModal(username, permission) {
+  document.getElementById('editPermissionTarget').value = username;
+  document.getElementById('editPermissionTargetLabel').textContent = `대상 관리자: ${username}`;
+  
+  const isSuper = permission === 'SUPER_ADMIN';
+  const superChk = document.getElementById('editPermSuperAdmin');
+  superChk.checked = isSuper;
+  
+  const perms = document.querySelectorAll('.edit-admin-perm');
+  const allowedList = permission.split(',').map(p => p.trim());
+  
+  perms.forEach(p => {
+    p.disabled = isSuper;
+    p.checked = isSuper || allowedList.includes(p.value);
+  });
+  
+  const modal = new bootstrap.Modal(document.getElementById('editAdminPermissionModal'));
+  modal.show();
+}
+
+async function submitUpdatePermission() {
+  const username = document.getElementById('editPermissionTarget').value;
+  const isSuper = document.getElementById('editPermSuperAdmin').checked;
+  
+  let permission = '';
+  if (isSuper) {
+    permission = 'SUPER_ADMIN';
+  } else {
+    const selected = [];
+    document.querySelectorAll('.edit-admin-perm:checked').forEach(p => {
+      selected.push(p.value);
+    });
+    permission = selected.join(',');
+  }
+  
+  try {
+    const res = await fetch('/api/admin/users/update-permission', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, permission })
+    });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      alert(data.message || '권한 정보가 성공적으로 업데이트되었습니다.');
+      
+      const modalEl = document.getElementById('editAdminPermissionModal');
+      const modal = bootstrap.Modal.getInstance(modalEl);
+      if (modal) modal.hide();
+      
+      loadUsersData();
+    } else {
+      alert(`업데이트 실패: ${data.detail || '서버 권한 제한'}`);
+    }
+  } catch (err) {
+    alert(`네트워크 오류: ${err.message}`);
+  }
+}
+
+function openResetAdminPasswordModal(username) {
+  document.getElementById('resetAdminPasswordTarget').value = username;
+  document.getElementById('resetPasswordTargetLabel').textContent = `대상 관리자: ${username}`;
+  document.getElementById('resetAdminNewPassword').value = '';
+  
+  const modal = new bootstrap.Modal(document.getElementById('resetAdminPasswordModal'));
+  modal.show();
+}
+
+async function submitResetAdminPassword() {
+  const username = document.getElementById('resetAdminPasswordTarget').value;
+  const new_password = document.getElementById('resetAdminNewPassword').value;
+  
+  if (!new_password || new_password.length < 4) {
+    alert('비밀번호는 최소 4자 이상이어야 합니다.');
+    return;
+  }
+  
+  try {
+    const res = await fetch('/api/admin/users/reset-admin-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, new_password })
+    });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      alert(data.message || '비밀번호 강제 변경 성공!');
+      
+      const modalEl = document.getElementById('resetAdminPasswordModal');
+      const modal = bootstrap.Modal.getInstance(modalEl);
+      if (modal) modal.hide();
+    } else {
+      alert(`재설정 실패: ${data.detail || '서버 권한 제한'}`);
+    }
+  } catch (err) {
+    alert(`네트워크 오류: ${err.message}`);
+  }
+}
+
+async function resetUserPassword(userId) {
+  if (!confirm(`'${userId}' 사용자의 패스워드를 1회용 임시 비밀번호로 즉시 초기화하시겠습니까?`)) {
+    return;
+  }
+  
+  try {
+    const res = await fetch('/api/admin/users/reset-user-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: userId })
+    });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      alert(`[비밀번호 초기화 성공]\n\n해당 사용자의 임시 비밀번호가 발급되었습니다.\n아래 비밀번호를 복사하여 회원에게 직접 안전하게 전달해 주세요.\n\n임시 비밀번호: ${data.temp_password}`);
+      loadUsersData();
+    } else {
+      alert(`초기화 실패: ${data.detail || '서버 오류'}`);
+    }
+  } catch (err) {
+    alert(`네트워크 오류: ${err.message}`);
+  }
+}
+</script>
+{% endraw %}
+{% endblock %}

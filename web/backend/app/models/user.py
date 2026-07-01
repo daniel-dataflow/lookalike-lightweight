@@ -16,6 +16,21 @@ class UserRegisterRequest(BaseModel):
     password: str = Field(..., min_length=4, max_length=255, description="비밀번호")
     password_confirm: str = Field(..., description="비밀번호 확인")
     name: str = Field(..., min_length=1, max_length=50, description="이름")
+    security_question: str = Field(..., description="보안 질문 (비밀번호 찾기용)")
+    security_answer: str = Field(..., description="보안 답변 (비밀번호 찾기용)")
+
+
+class ForgotPasswordRequest(BaseModel):
+    """비밀번호 찾기(보안질문 대조) 요청"""
+    email: EmailStr = Field(..., description="이메일 주소")
+    security_question: str = Field(..., description="보안 질문")
+    security_answer: str = Field(..., description="보안 답변")
+
+
+class ChangePasswordRequest(BaseModel):
+    """비밀번호 필수 변경 요청"""
+    new_password: str = Field(..., min_length=4, max_length=255, description="새 비밀번호")
+
 
 
 class UserLoginRequest(BaseModel):
@@ -59,6 +74,8 @@ class LoginResponse(BaseModel):
     success: bool
     message: str
     user: Optional[UserResponse] = None
+    require_password_change: Optional[bool] = False
+
 
 
 class OAuthConfigResponse(BaseModel):

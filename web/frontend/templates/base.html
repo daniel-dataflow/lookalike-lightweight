@@ -158,15 +158,18 @@
                                     <div class="form-error" id="loginEmailError"></div>
                                 </div>
                                 <div class="mb-3">
-                                    <div class="input-group">
-                                        <input type="password" class="form-control border-end-0" id="loginPassword"
+                                    <div class="password-group">
+                                        <input type="password" class="form-control" id="loginPassword"
                                             placeholder="비밀번호" required autocomplete="current-password">
-                                        <button class="btn btn-outline-secondary border-start-0 bg-white" type="button"
+                                        <button class="btn-password-toggle" type="button"
                                             onclick="togglePassword('loginPassword', this)">
                                             <i class="far fa-eye"></i>
                                         </button>
                                     </div>
                                     <div class="form-error" id="loginPasswordError"></div>
+                                </div>
+                                <div class="mb-3 text-end">
+                                    <a href="/forgot-password" class="text-decoration-none small text-muted" style="font-size:0.78rem;"><i class="fas fa-question-circle me-1"></i>비밀번호를 잊으셨나요?</a>
                                 </div>
                                 <div class="form-error text-center mb-2" id="loginError"></div>
                                 <button type="submit" class="btn btn-dark w-100 btn-submit" id="loginSubmitBtn">
@@ -190,10 +193,10 @@
                                     <div class="form-error" id="signupEmailError"></div>
                                 </div>
                                 <div class="mb-3">
-                                    <div class="input-group">
-                                        <input type="password" class="form-control border-end-0" id="signupPassword"
+                                    <div class="password-group">
+                                        <input type="password" class="form-control" id="signupPassword"
                                             placeholder="비밀번호 (4자리 이상)" required autocomplete="new-password">
-                                        <button class="btn btn-outline-secondary border-start-0 bg-white" type="button"
+                                        <button class="btn-password-toggle" type="button"
                                             onclick="togglePassword('signupPassword', this)">
                                             <i class="far fa-eye"></i>
                                         </button>
@@ -202,16 +205,31 @@
                                     <div class="form-error" id="signupPasswordError"></div>
                                 </div>
                                 <div class="mb-3">
-                                    <div class="input-group">
-                                        <input type="password" class="form-control border-end-0"
+                                    <div class="password-group">
+                                        <input type="password" class="form-control"
                                             id="signupPasswordConfirm" placeholder="비밀번호 확인" required
                                             autocomplete="new-password">
-                                        <button class="btn btn-outline-secondary border-start-0 bg-white" type="button"
+                                        <button class="btn-password-toggle" type="button"
                                             onclick="togglePassword('signupPasswordConfirm', this)">
                                             <i class="far fa-eye"></i>
                                         </button>
                                     </div>
                                     <div class="form-error" id="signupPasswordConfirmError"></div>
+                                </div>
+                                <div class="mb-3">
+                                    <select class="form-select" id="signupSecurityQuestion" required>
+                                        <option value="" disabled selected>본인 확인 보안 질문 선택</option>
+                                        <option value="가장 기억에 남는 여행지는?">가장 기억에 남는 여행지는?</option>
+                                        <option value="나의 첫 반려동물 이름은?">나의 첫 반려동물 이름은?</option>
+                                        <option value="가장 좋아하는 책 또는 영화는?">가장 좋아하는 책 또는 영화는?</option>
+                                        <option value="유년시절 가장 살고 싶었던 도시는?">유년시절 가장 살고 싶었던 도시는?</option>
+                                        <option value="기억에 남는 첫 번째 선생님 이름은?">기억에 남는 첫 번째 선생님 이름은?</option>
+                                    </select>
+                                    <div class="form-error" id="signupSecurityQuestionError"></div>
+                                </div>
+                                <div class="mb-3">
+                                    <input type="text" class="form-control" id="signupSecurityAnswer" placeholder="보안 질문 답변 입력" required>
+                                    <div class="form-error" id="signupSecurityAnswerError"></div>
                                 </div>
                                 <div class="form-error text-center mb-2" id="signupError"></div>
                                 <button type="submit" class="btn btn-dark w-100 btn-submit" id="signupSubmitBtn">
@@ -221,6 +239,36 @@
                             </form>
                         </div>
                     </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 임시 비밀번호 변경 필수 모달 (닫기 불가 구조) -->
+    <div class="modal fade" id="forcePasswordChangeModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow-lg">
+                <div class="modal-header bg-warning text-dark border-0 pb-0">
+                    <h5 class="modal-title fw-bold"><i class="fas fa-exclamation-triangle me-1"></i>비밀번호 필수 변경 안내</h5>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted mb-3" style="font-size: 0.88rem;">
+                        임시 비밀번호로 로그인되었습니다. 계정 보안을 위해 반드시 새로운 비밀번호를 설정해 주세요.
+                    </p>
+                    <form id="forceChangePasswordForm" novalidate>
+                        <div class="mb-3">
+                            <input type="password" class="form-control" id="forceNewPassword" placeholder="새로운 비밀번호 (4자 이상)" required autocomplete="new-password">
+                            <div class="form-error" id="forceNewPasswordError" style="color:red; font-size:0.75rem;"></div>
+                        </div>
+                        <div class="mb-3">
+                            <input type="password" class="form-control" id="forceNewPasswordConfirm" placeholder="새 비밀번호 확인" required autocomplete="new-password">
+                            <div class="form-error" id="forceNewPasswordConfirmError" style="color:red; font-size:0.75rem;"></div>
+                        </div>
+                        <div class="form-error text-center mb-2" id="forceChangePasswordError" style="color:red; font-size:0.75rem;"></div>
+                        <button type="submit" class="btn btn-dark w-100 btn-submit" id="forceChangePasswordSubmitBtn">
+                            <span class="btn-text">비밀번호 변경 완료</span>
+                        </button>
+                    </form>
                 </div>
             </div>
         </div>
