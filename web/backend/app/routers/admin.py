@@ -9,7 +9,7 @@ import asyncio
 import time
 from datetime import datetime, timedelta, timezone
 from typing import Optional
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 
 from ..config.admin import SYSTEM_CACHE_TTL, DB_CACHE_TTL, INFRA_CACHE_TTL
 from ..config import get_settings
@@ -2600,6 +2600,43 @@ async def reset_user_password(request: Request, req: ResetUserPasswordRequest):
         }
     except Exception as e:
         logger.error(f"일반 유저 비밀번호 초기화 실패: {e}")
+        return {"success": False, "detail": str(e)}
+
+
+@router.get("/debug/memory-clear")
+async def clear_memory_and_check(request: Request):
+    """
+    가비지 컬렉션(GC)을 수동 기동하여 메모리를 소거하고,
+    FastAPI 서버 프로세스의 RSS 메모리 점유량을 KST 실시간으로 측정해 반환합니다. (어드민 전용)
+    """
+    # 일반 관리자 이상 권한 검증
+    _verify_any_admin(request)
+    
+    import gc
+    import os
+    import psutil
+    
+    try:
+        process = psutil.Process(os.getpid())
+        before_mem = process.memory_info().rss / (1024 * 1024)
+        
+        # 1. 파이썬 가비지 컬렉션 수동 기동
+        gc.collect()
+        
+        after_mem = process.memory_info().rss / (1024 * 1024)
+        diff_mem = before_mem - after_mem
+        
+        logger.info(f"⚡ [Memory Clear API] GC 수동 실행 완료 - RAM: {before_mem:.2f}MB -> {after_mem:.2f}MB (절약: {diff_mem:.2f}MB)")
+        
+        return {
+            "success": True,
+            "status": "Garbage Collection Completed",
+            "before_mem_mb": round(before_mem, 2),
+            "after_mem_mb": round(after_mem, 2),
+            "freed_mem_mb": round(diff_mem, 2)
+        }
+    except Exception as e:
+        logger.error(f"메모리 정리 오류: {e}")
         return {"success": False, "detail": str(e)}
 
 
