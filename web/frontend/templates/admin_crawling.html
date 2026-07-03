@@ -189,6 +189,9 @@
       </div>
       <div class="d-flex gap-2 align-items-center">
         <span class="refresh-indicator" id="lastRefreshTimeManual">마지막 새로고침: —</span>
+        <button class="btn btn-sm btn-outline-success fw-bold" id="toggleFilterBtnManual" onclick="toggleEmptyBrandsFilter()">
+          <i class="fas fa-eye-slash me-1"></i>데이터 없는 브랜드 숨김 중
+        </button>
         <button class="btn btn-sm btn-outline-danger" onclick="clearCrawlingHistory('manual')">
           <i class="fas fa-trash-alt me-1"></i>히스토리 초기화
         </button>
@@ -338,6 +341,9 @@
       </div>
       <div class="d-flex gap-2 align-items-center">
         <span class="text-muted" style="font-size: 0.75rem;" id="lastRefreshTimeAuto">마지막 새로고침: —</span>
+        <button class="btn btn-sm btn-outline-success fw-bold" id="toggleFilterBtnAuto" onclick="toggleEmptyBrandsFilter()">
+          <i class="fas fa-eye-slash me-1"></i>데이터 없는 브랜드 숨김 중
+        </button>
         <button class="btn btn-sm btn-outline-danger" onclick="clearCrawlingHistory('auto')">
           <i class="fas fa-trash-alt me-1"></i>히스토리 초기화
         </button>
@@ -937,6 +943,10 @@ async function fetchStagingStatus() {
     
     let html = '';
     data.brands.forEach(b => {
+      // 데이터 없는 브랜드 기본 숨김 처리 (상품이 하나도 수집되거나 운영 등록되지 않은 경우)
+      const isEmpty = b.staging_count === 0 && b.prod_count === 0;
+      if (window.hideEmptyBrands && isEmpty) return;
+
       totalEmbed += b.embed_count;
       totalNaver += b.naver_count;
       
@@ -1027,31 +1037,44 @@ async function fetchStagingStatus() {
             </div>
 
             <div class="row g-2 mb-3">
-              <div class="col-6">
-                <div class="metric-label">대기 상품 수</div>
-                <div class="metric-value">${b.staging_count.toLocaleString()}</div>
+              <!-- 상품 수 -->
+              <div class="col-6 border-end">
+                <div class="metric-label text-primary"><i class="fas fa-hourglass-start me-1"></i>대기 상품 수</div>
+                <div class="metric-value text-primary">${b.staging_count.toLocaleString()}</div>
               </div>
-              <div class="col-6">
-                <div class="metric-label">운영 상품 수</div>
-                <div class="metric-value text-secondary">${b.prod_count.toLocaleString()}</div>
+              <div class="col-6 ps-2">
+                <div class="metric-label text-success"><i class="fas fa-check-circle me-1"></i>운영 상품 수</div>
+                <div class="metric-value text-success">${b.prod_count.toLocaleString()}</div>
               </div>
-              <div class="col-6">
-                <div class="metric-label">대기 임베딩 수</div>
-                <div class="fw-semibold">${b.embed_count.toLocaleString()} <span class="text-muted" style="font-size:.75rem;">개</span></div>
+              
+              <!-- 임베딩 수 -->
+              <div class="col-6 border-end">
+                <div class="metric-label"><i class="fas fa-calculator me-1"></i>대기 임베딩</div>
+                <div class="fw-semibold text-secondary" style="font-size:0.9rem; ${getMetricStyle(b.embed_count, b.staging_count)}">${b.embed_count.toLocaleString()} <span class="text-muted" style="font-size:.7rem;">개</span></div>
               </div>
-              <div class="col-6">
-                <div class="metric-label">대기 최저가 수</div>
-                <div class="fw-semibold">${b.naver_count.toLocaleString()} <span class="text-muted" style="font-size:.75rem;">개</span></div>
+              <div class="col-6 ps-2">
+                <div class="metric-label"><i class="fas fa-brain me-1 text-success"></i>운영 임베딩</div>
+                <div class="fw-bold text-success" style="font-size:0.95rem; ${getMetricStyle(b.prod_embed_count, b.prod_count)}">${b.prod_embed_count.toLocaleString()} <span class="text-muted" style="font-size:.7rem;">개</span></div>
               </div>
-              <div class="col-12">
-                <div class="metric-label">이미지 업로드</div>
-                <div class="progress mt-1" style="height: 6px;">
-                  <div class="progress-bar bg-success" role="progressbar" style="width: ${b.staging_count > 0 ? (b.img_count / b.staging_count * 100) : 0}%"></div>
-                </div>
-                <small class="text-muted d-flex justify-content-between mt-1" style="font-size:.7rem;">
-                  <span>업로드율: ${b.staging_count > 0 ? Math.round(b.img_count / b.staging_count * 100) : 0}%</span>
-                  <span>(${b.img_count}/${b.staging_count})</span>
-                </small>
+              
+              <!-- 최저가 가격 수 -->
+              <div class="col-6 border-end">
+                <div class="metric-label"><i class="fas fa-tag me-1"></i>대기 최저가</div>
+                <div class="fw-semibold text-secondary" style="font-size:0.9rem; ${getMetricStyle(b.naver_count, b.staging_count * 5)}">${b.naver_count.toLocaleString()} <span class="text-muted" style="font-size:.7rem;">개</span></div>
+              </div>
+              <div class="col-6 ps-2">
+                <div class="metric-label"><i class="fas fa-tags me-1 text-success"></i>운영 최저가</div>
+                <div class="fw-bold text-success" style="font-size:0.95rem; ${getMetricStyle(b.prod_naver_count, b.prod_count * 5)}">${b.prod_naver_count.toLocaleString()} <span class="text-muted" style="font-size:.7rem;">개</span></div>
+              </div>
+
+              <!-- 이미지 수 -->
+              <div class="col-6 border-end">
+                <div class="metric-label"><i class="fas fa-image me-1"></i>대기 이미지</div>
+                <div class="fw-semibold text-secondary" style="font-size:0.9rem; ${getMetricStyle(b.img_count, b.staging_count)}">${b.img_count.toLocaleString()} / ${b.staging_count.toLocaleString()} <span class="text-muted" style="font-size:.7rem;">개</span></div>
+              </div>
+              <div class="col-6 ps-2">
+                <div class="metric-label"><i class="fas fa-images me-1 text-success"></i>운영 이미지</div>
+                <div class="fw-bold text-success" style="font-size:0.95rem; ${getMetricStyle(b.prod_img_count, b.prod_count)}">${b.prod_img_count.toLocaleString()} / ${b.prod_count.toLocaleString()} <span class="text-muted" style="font-size:.7rem;">개</span></div>
               </div>
             </div>
 
@@ -1125,6 +1148,9 @@ async function fetchStagingStatus() {
       </div>`;
     });
 
+    if (html === '') {
+      html = `<div class="col-12 text-center text-muted py-5"><i class="fas fa-info-circle me-1"></i>현재 표시할 수집 활성 데이터가 존재하지 않습니다. 상단의 '전체 브랜드 보기'를 클릭해 주세요.</div>`;
+    }
     grid.innerHTML = html;
     document.getElementById('totalEmbeddingCount').textContent = totalEmbed.toLocaleString();
     document.getElementById('totalNaverCount').textContent = totalNaver.toLocaleString();
@@ -1451,6 +1477,10 @@ async function fetchAutoBrandStatus() {
 
     let html = '';
     data.brands.forEach(b => {
+      // 데이터 없는 브랜드 기본 숨김 처리 (상품이 하나도 수집되거나 운영 등록되지 않은 경우)
+      const isEmpty = b.staging_count === 0 && b.prod_count === 0;
+      if (window.hideEmptyBrands && isEmpty) return;
+
       const statusBadge = getStatusBadge(b.integrity_status);
       const targetCount = b.staging_count === 0 ? 0 : (b.target_count || b.staging_count || 1);
       const progressPercent = targetCount === 0 ? 0 : Math.min(100, Math.round((b.staging_count / targetCount) * 100));
@@ -1510,32 +1540,44 @@ async function fetchAutoBrandStatus() {
 
             <!-- 4개 지표 격자 -->
             <div class="row g-2 mb-3">
-              <div class="col-6">
-                <div class="metric-label">수집 상품 수</div>
-                <div class="metric-value">${b.staging_count.toLocaleString()}</div>
+              <!-- 상품 수 -->
+              <div class="col-6 border-end">
+                <div class="metric-label text-primary"><i class="fas fa-hourglass-start me-1"></i>대기 상품 수</div>
+                <div class="metric-value text-primary">${b.staging_count.toLocaleString()}</div>
               </div>
-              <div class="col-6">
-                <div class="metric-label">운영 상품 수</div>
-                <div class="metric-value text-secondary">${b.prod_count.toLocaleString()}</div>
+              <div class="col-6 ps-2">
+                <div class="metric-label text-success"><i class="fas fa-check-circle me-1"></i>운영 상품 수</div>
+                <div class="metric-value text-success">${b.prod_count.toLocaleString()}</div>
               </div>
-              <div class="col-6">
-                <div class="metric-label">임베딩 수</div>
-                <div class="fw-semibold">${b.embed_count.toLocaleString()} <span class="text-muted" style="font-size:.75rem;">개</span></div>
+              
+              <!-- 임베딩 수 -->
+              <div class="col-6 border-end">
+                <div class="metric-label"><i class="fas fa-calculator me-1"></i>대기 임베딩</div>
+                <div class="fw-semibold text-secondary" style="font-size:0.9rem; ${getMetricStyle(b.embed_count, b.staging_count)}">${b.embed_count.toLocaleString()} <span class="text-muted" style="font-size:.7rem;">개</span></div>
               </div>
-              <div class="col-6">
-                <div class="metric-label">최저가 수</div>
-                <div class="fw-semibold">${b.naver_count.toLocaleString()} <span class="text-muted" style="font-size:.75rem;">개</span></div>
+              <div class="col-6 ps-2">
+                <div class="metric-label"><i class="fas fa-brain me-1 text-success"></i>운영 임베딩</div>
+                <div class="fw-bold text-success" style="font-size:0.95rem; ${getMetricStyle(b.prod_embed_count, b.prod_count)}">${b.prod_embed_count.toLocaleString()} <span class="text-muted" style="font-size:.7rem;">개</span></div>
               </div>
-              <div class="col-12">
-                <div class="metric-label">이미지 업로드</div>
-                <div class="progress mt-1" style="height: 6px;">
-                  <div class="progress-bar bg-success" role="progressbar"
-                       style="width: ${b.staging_count > 0 ? Math.round(b.img_count / b.staging_count * 100) : 0}%"></div>
-                </div>
-                <small class="text-muted d-flex justify-content-between mt-1" style="font-size:.7rem;">
-                  <span>업로드율: ${b.staging_count > 0 ? Math.round(b.img_count / b.staging_count * 100) : 0}%</span>
-                  <span>(${b.img_count}/${b.staging_count})</span>
-                </small>
+              
+              <!-- 최저가 가격 수 -->
+              <div class="col-6 border-end">
+                <div class="metric-label"><i class="fas fa-tag me-1"></i>대기 최저가</div>
+                <div class="fw-semibold text-secondary" style="font-size:0.9rem; ${getMetricStyle(b.naver_count, b.staging_count * 5)}">${b.naver_count.toLocaleString()} <span class="text-muted" style="font-size:.7rem;">개</span></div>
+              </div>
+              <div class="col-6 ps-2">
+                <div class="metric-label"><i class="fas fa-tags me-1 text-success"></i>운영 최저가</div>
+                <div class="fw-bold text-success" style="font-size:0.95rem; ${getMetricStyle(b.prod_naver_count, b.prod_count * 5)}">${b.prod_naver_count.toLocaleString()} <span class="text-muted" style="font-size:.7rem;">개</span></div>
+              </div>
+
+              <!-- 이미지 수 -->
+              <div class="col-6 border-end">
+                <div class="metric-label"><i class="fas fa-image me-1"></i>대기 이미지</div>
+                <div class="fw-semibold text-secondary" style="font-size:0.9rem; ${getMetricStyle(b.img_count, b.staging_count)}">${b.img_count.toLocaleString()} / ${b.staging_count.toLocaleString()} <span class="text-muted" style="font-size:.7rem;">개</span></div>
+              </div>
+              <div class="col-6 ps-2">
+                <div class="metric-label"><i class="fas fa-images me-1 text-success"></i>운영 이미지</div>
+                <div class="fw-bold text-success" style="font-size:0.95rem; ${getMetricStyle(b.prod_img_count, b.prod_count)}">${b.prod_img_count.toLocaleString()} / ${b.prod_count.toLocaleString()} <span class="text-muted" style="font-size:.7rem;">개</span></div>
               </div>
             </div>
 
@@ -1575,6 +1617,9 @@ async function fetchAutoBrandStatus() {
       </div>`;
     });
 
+    if (html === '') {
+      html = `<div class="col-12 text-center text-muted py-5"><i class="fas fa-info-circle me-1"></i>현재 표시할 수집 활성 데이터가 존재하지 않습니다. 상단의 '전체 브랜드 보기'를 클릭해 주세요.</div>`;
+    }
     grid.innerHTML = html;
   } catch (err) {
     grid.innerHTML = `<div class="col-12 text-center text-danger py-4">서버 오류: ${err.message}</div>`;
@@ -1674,6 +1719,21 @@ function copyStackTrace() {
   }).catch(err => {
     alert("복사에 실패했습니다: " + err);
   });
+}
+
+function getMetricStyle(value, total) {
+  if (total <= 0) return '';
+  const diff = total - value;
+  if (diff <= 0) return '';
+  
+  const diffRate = (diff / total) * 100;
+  if (diffRate >= 20) {
+    // 20% 이상 누락 (심각한 경고: 옅은 빨간색 배경 배지 + 진한 빨강 폰트)
+    return 'color: #b91c1c !important; font-weight: 800; background-color: #fee2e2 !important; border: 1px solid #fca5a5 !important; padding: 1px 5px; border-radius: 4px; display: inline-block;';
+  } else {
+    // 20% 미만 누락 (경미한 경고: 진한 주황색 폰트만 강조)
+    return 'color: #ea580c !important; font-weight: 800;';
+  }
 }
 
 function getStatusBadge(status) {
@@ -2421,6 +2481,32 @@ async function retrySingleProductInError(productId) {
   } catch (err) {
     alert(`네트워크 통신 중 오류: ${err.message}`);
   }
+}
+
+// ─── 데이터 없는 브랜드 필터링 전역 상태 및 제어 함수 ───
+window.hideEmptyBrands = true; // 기본값: 수집 데이터가 없는 브랜드는 숨김
+
+function toggleEmptyBrandsFilter() {
+  window.hideEmptyBrands = !window.hideEmptyBrands;
+  
+  const manualBtn = document.getElementById('toggleFilterBtnManual');
+  const autoBtn = document.getElementById('toggleFilterBtnAuto');
+  
+  const btns = [manualBtn, autoBtn];
+  btns.forEach(btn => {
+    if (!btn) return;
+    if (window.hideEmptyBrands) {
+      btn.className = "btn btn-sm btn-outline-success fw-bold";
+      btn.innerHTML = `<i class="fas fa-eye-slash me-1"></i>데이터 없는 브랜드 숨김 중`;
+    } else {
+      btn.className = "btn btn-sm btn-outline-secondary fw-bold";
+      btn.innerHTML = `<i class="fas fa-eye me-1"></i>전체 브랜드 보기 중`;
+    }
+  });
+
+  // 두 탭의 카드 그리드 리로드 호출
+  fetchStagingStatus();
+  fetchAutoBrandStatus();
 }
 
 

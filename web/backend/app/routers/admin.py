@@ -795,7 +795,7 @@ def get_crawling_staging():
         settings = get_settings()
         
         # 1. 지원 브랜드 목록 정의 (DB에 저장되는 규격에 맞게 대문자로 통일)
-        brands = ["UNIQLO", "TOPTEN", "SPAO", "POLHAM", "8SECONDS", "GIORDANO"]
+        brands = ["UNIQLO", "TOPTEN", "SPAO", "POLHAM", "8SECONDS", "GIORDANO", "MUSINSA", "ZARA"]
         brand_stats = []
         total_staging = 0
         
@@ -974,8 +974,12 @@ def get_crawling_staging():
                 target_count = 0
                 
             # (2) Active Core DB에서 운영 데이터 집계
+            prod_embed_count = 0
+            prod_naver_count = 0
+            prod_img_count = 0
             try:
                 with get_prod_cursor() as cur:
+                    # 상품 수
                     cur.execute(
                         "SELECT count(*) as cnt FROM products WHERE brand_name = %s;",
                         (brand,)
@@ -983,6 +987,41 @@ def get_crawling_staging():
                     r = cur.fetchone()
                     if r:
                         prod_count = r["cnt"] or 0
+                    
+                    # 임베딩 수
+                    cur.execute(
+                        """
+                        SELECT count(*) as cnt FROM product_embeddings pe
+                        JOIN products p ON pe.product_id = p.product_id
+                        WHERE p.brand_name = %s;
+                        """,
+                        (brand,)
+                    )
+                    r = cur.fetchone()
+                    if r:
+                        prod_embed_count = r["cnt"] or 0
+                        
+                    # 최저가격 수
+                    cur.execute(
+                        """
+                        SELECT count(*) as cnt FROM naver_prices np
+                        JOIN products p ON np.product_id = p.product_id
+                        WHERE p.brand_name = %s;
+                        """,
+                        (brand,)
+                    )
+                    r = cur.fetchone()
+                    if r:
+                        prod_naver_count = r["cnt"] or 0
+                        
+                    # 이미지 업로드 수
+                    cur.execute(
+                        "SELECT count(*) as cnt FROM products WHERE brand_name = %s AND img_url LIKE '%%cloudinary.com%%';",
+                        (brand,)
+                    )
+                    r = cur.fetchone()
+                    if r:
+                        prod_img_count = r["cnt"] or 0
             except Exception as prod_err:
                 logger.error(f"PROD {brand} 조회 실패: {prod_err}")
                 
@@ -1007,6 +1046,9 @@ def get_crawling_staging():
                 "staging_count": staging_count,
                 "target_count": target_count,
                 "prod_count": prod_count,
+                "prod_embed_count": prod_embed_count,
+                "prod_naver_count": prod_naver_count,
+                "prod_img_count": prod_img_count,
                 "embed_count": embed_count,
                 "naver_count": naver_count,
                 "img_count": img_count,
