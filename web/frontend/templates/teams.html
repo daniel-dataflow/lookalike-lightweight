@@ -4,50 +4,6 @@
 
 {% block content %}
 <link rel="stylesheet" href="/static/css/teams.css?v={{ range(1, 999999) | random }}">
-<style>
-/* ── MAIN TAB (상단 대형 메인 탭) ── */
-.main-tab-wrap { margin-bottom: 38px; }
-.main-tabs {
-  display: inline-flex; gap: 12px;
-  background: var(--surface, #f7f5f0); border: 2px solid var(--border, #e0dbd4);
-  border-radius: 50px; padding: 6px;
-}
-.main-tab {
-  display: flex; align-items: center; gap: 10px;
-  padding: 12px 30px; border-radius: 40px; border: none;
-  background: transparent; cursor: pointer; font-size: 14.5px; font-weight: 700;
-  color: var(--muted, #888); font-family: 'Noto Sans KR', sans-serif;
-  transition: all .3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-.main-tab small { display: block; font-size: 10.5px; font-weight: 400; margin-top: 2px; opacity: 0.8; }
-.main-tab-active {
-  background: #fff; color: var(--accent, #d4522a);
-  box-shadow: 0 4px 15px rgba(0,0,0,.1);
-}
-.main-panel { display: block; animation: panelIn .4s ease; }
-.main-panel-hidden { display: none !important; }
-
-/* ── SOLO PHASE CARD ── */
-.phase-card-solo {
-  border: 2px solid var(--accent, #d4522a);
-  background: linear-gradient(135deg, #fff8f4 0%, #fff 100%);
-  position: relative; overflow: hidden;
-}
-.phase-num-solo { color: var(--accent, #d4522a) !important; }
-.phase-solo-badge {
-  display: inline-block; margin-top: 12px;
-  font-size: 10px; font-weight: 800; letter-spacing: .15em; text-transform: uppercase;
-  background: var(--accent, #d4522a); color: #fff;
-  padding: 3px 10px; border-radius: 20px;
-}
-
-/* ── SOLO PHASE CARD WIDTH EXPANSION (2 columns) ── */
-@media (min-width: 992px) {
-  .phase-card-solo {
-    grid-column: span 2 !important;
-  }
-}
-</style>
 
 <div class="teams-wrapper">
   <div class="lk-particles" id="lkParticles"></div>
@@ -1271,37 +1227,5 @@
 
 </div>
 
-<script>
-(function() {
-  // ── 메인 탭 전환 (현재 경량 / 레거시 분산) ──
-  document.querySelectorAll('.main-tab').forEach(function(btn) {
-    btn.addEventListener('click', function() {
-      document.querySelectorAll('.main-tab').forEach(function(b) { b.classList.remove('main-tab-active'); });
-      document.getElementById('main-panel-current').classList.add('main-panel-hidden');
-      document.getElementById('main-panel-legacy').classList.add('main-panel-hidden');
-      
-      btn.classList.add('main-tab-active');
-      var targetId = 'main-panel-' + btn.dataset.mainTab;
-      var target = document.getElementById(targetId);
-      if (target) target.classList.remove('main-panel-hidden');
-    });
-  });
-
-  // ── 파이프라인 내부 탭 전환 (useCapture 캡처링 단계에서 전역 common.js 오작동 강제 차단) ──
-  document.querySelectorAll('.pipe-tabs .pipe-tab').forEach(function(btn) {
-    btn.addEventListener('click', function(e) {
-      e.stopImmediatePropagation(); // common.js 전역 리스너의 실행 자체를 원천 중단!
-      
-      var parentPanel = btn.closest('.main-panel');
-      parentPanel.querySelectorAll('.pipe-tab').forEach(function(b) { b.classList.remove('active'); });
-      parentPanel.querySelectorAll('.pipe-panel').forEach(function(p) { p.classList.add('hidden'); });
-      
-      btn.classList.add('active');
-      var tabId = 'tab-' + btn.dataset.tab;
-      var target = parentPanel.querySelector('#' + tabId);
-      if (target) target.classList.remove('hidden');
-    }, true); // useCapture = true: 버블링 단계 전에 가로채기 적용
-  });
-})();
-</script>
+<script src='/static/js/teams.js?v={{ range(1, 999999) | random }}'></script>
 {% endblock %}

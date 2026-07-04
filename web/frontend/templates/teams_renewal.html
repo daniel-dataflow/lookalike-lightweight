@@ -4,28 +4,7 @@
 
 {% block content %}
 <link rel="stylesheet" href="/static/css/teams.css?v={{ range(1, 999999) | random }}">
-<style>
-/* ── SOLO PHASE CARD ── */
-.phase-card-solo {
-  border: 2px solid var(--accent, #d4522a);
-  background: linear-gradient(135deg, #fff8f4 0%, #fff 100%);
-  position: relative; overflow: hidden;
-}
-.phase-num-solo { color: var(--accent, #d4522a) !important; }
-.phase-solo-badge {
-  display: inline-block; margin-top: 12px;
-  font-size: 10px; font-weight: 800; letter-spacing: .15em; text-transform: uppercase;
-  background: var(--accent, #d4522a); color: #fff;
-  padding: 3px 10px; border-radius: 20px;
-}
-
-/* ── SOLO PHASE CARD WIDTH EXPANSION (2 columns) ── */
-@media (min-width: 992px) {
-  .phase-card-solo {
-    grid-column: span 2 !important;
-  }
-}
-</style>
+<link rel='stylesheet' href='/static/css/teams_renewal.css?v={{ range(1, 999999) | random }}'>
 
 <div class="teams-wrapper">
   <div class="lk-particles" id="lkParticles"></div>
@@ -523,23 +502,5 @@
 
 </div>
 
-<script>
-(function() {
-  // ── 파이프라인 내부 탭 전환 ──
-  document.querySelectorAll('.pipe-tabs .pipe-tab').forEach(function(btn) {
-    btn.addEventListener('click', function(e) {
-      e.stopImmediatePropagation(); // common.js 전역 리스너 오작동 차단
-      
-      var wrapper = btn.closest('#lk-pipeline-current-wrapper');
-      wrapper.querySelectorAll('.pipe-tab').forEach(function(b) { b.classList.remove('active'); });
-      wrapper.querySelectorAll('.pipe-panel').forEach(function(p) { p.classList.add('hidden'); });
-      
-      btn.classList.add('active');
-      var tabId = 'tab-' + btn.dataset.tab;
-      var target = wrapper.querySelector('#' + tabId);
-      if (target) target.classList.remove('hidden');
-    }, true);
-  });
-})();
-</script>
+<script src='/static/js/teams_renewal.js?v={{ range(1, 999999) | random }}'></script>
 {% endblock %}

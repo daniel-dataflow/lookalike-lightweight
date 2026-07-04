@@ -1,0 +1,7 @@
+.pulse-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.dot-active   { background: #10b981; }
+.dot-inactive { background: #9ca3af; }
