@@ -570,11 +570,14 @@ async function fetchStats() {
         if (count > 0) {
             document.getElementById('avgCpu').innerText = (totalCpu / count).toFixed(1) + '%';
             document.getElementById('avgMem').innerText = (totalMem / count).toFixed(1) + '%';
-            document.getElementById('maxMemVal').innerText = maxMem.toFixed(0) + ' MB';
-            document.getElementById('maxMemDetail').innerText = '사용 1위: ' + maxMemService;
+            // [단위 변환] 메가(MB) 표시 말고 기가(GB) 표시로 1024 변환 적용
+            const maxMemGB = maxMem / 1024;
+            document.getElementById('maxMemVal').innerText = maxMemGB.toFixed(1) + ' GB';
+            // [영역 압축] '사용 1위: '에서 '사용 '을 제거하여 가로폭을 확보, 카드 클리핑 방지
+            document.getElementById('maxMemDetail').innerText = '1위: ' + maxMemService;
             if (document.getElementById('maxCpuVal')) {
                 document.getElementById('maxCpuVal').innerText = maxCpu.toFixed(1) + '%';
-                document.getElementById('maxCpuDetail').innerText = '사용 1위: ' + maxCpuService;
+                document.getElementById('maxCpuDetail').innerText = '1위: ' + maxCpuService;
             }
         }
     } catch (e) {

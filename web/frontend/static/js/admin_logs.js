@@ -349,6 +349,16 @@ function renderCurrentLogs() {
 function renderPagingControls(totalPages, container) {
     container.innerHTML = '';
 
+    const showFirstLast = totalPages > 10;
+
+    // 0. 맨 처음 (<<) 버튼 - 전체 10페이지 초과 시에만 노출
+    if (showFirstLast) {
+        const firstLi = document.createElement('li');
+        firstLi.className = `page-item ${currentPage === 1 ? 'disabled' : ''}`;
+        firstLi.innerHTML = `<a class="page-link" href="#" onclick="changeLogPage(1); return false;" aria-label="First"><i class="fas fa-angle-double-left"></i></a>`;
+        container.appendChild(firstLi);
+    }
+
     // 1. [이전] 버튼
     const prevLi = document.createElement('li');
     prevLi.className = `page-item ${currentPage === 1 ? 'disabled' : ''}`;
@@ -397,6 +407,14 @@ function renderPagingControls(totalPages, container) {
     nextLi.className = `page-item ${currentPage === totalPages ? 'disabled' : ''}`;
     nextLi.innerHTML = `<a class="page-link" href="#" onclick="changeLogPage(${currentPage + 1}); return false;"><i class="fas fa-chevron-right"></i></a>`;
     container.appendChild(nextLi);
+
+    // 4. 맨 끝 (>>) 버튼 - 전체 10페이지 초과 시에만 노출
+    if (showFirstLast) {
+        const lastLi = document.createElement('li');
+        lastLi.className = `page-item ${currentPage === totalPages ? 'disabled' : ''}`;
+        lastLi.innerHTML = `<a class="page-link" href="#" onclick="changeLogPage(${totalPages}); return false;" aria-label="Last"><i class="fas fa-angle-double-right"></i></a>`;
+        container.appendChild(lastLi);
+    }
 }
 
 /**
