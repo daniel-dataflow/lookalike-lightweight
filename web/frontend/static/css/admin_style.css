@@ -942,3 +942,142 @@
         border-right: none;
     }
 }
+
+/* =========================================================================
+   [추가] 모바일 반응형 겹침 및 찌그러짐 방지 핫픽스 (전수 검수 반영)
+   ========================================================================= */
+
+/* 1. 모바일 탑바 (Top Bar) 1층 앱바 & 2층 액션바 분리 정렬 시스템 */
+@media (max-width: 768px) {
+    /* 탑바 메인 컨테이너 (relative 기준점 확보) */
+    .main-content > .d-flex.justify-content-between.align-items-center.mb-4 {
+        position: relative !important;
+        flex-direction: column !important;
+        align-items: stretch !important;
+        gap: 0 !important;
+        padding: 8px 12px !important;
+        background: #ffffff !important;
+        border-radius: 12px !important;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05) !important;
+    }
+
+    /* 1층: 햄버거 메뉴 + 페이지 타이틀 (1층 자체가 relative 기준점 부여) */
+    .main-content .topbar-first-floor {
+        display: flex !important;
+        justify-content: flex-start !important;
+        align-items: center !important;
+        width: 100% !important;
+        height: 48px !important;
+        position: relative !important;
+    }
+
+    /* 1층 내 타이틀 폰트 조율 및 프로필 분리 */
+    .main-content .dashboard-title {
+        font-size: 1.05rem !important;
+        font-weight: 700 !important;
+        margin-left: 4px !important;
+        white-space: nowrap !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+        max-width: calc(100% - 80px) !important;
+    }
+
+    /* 모바일 프로필 아이콘을 1층 우측 끝으로 강제 고정 (1층 topbar-first-floor 자식으로 강착시켜서 상하좌우 이탈 완벽 차단) */
+    .mobile-profile-wrap {
+        position: absolute !important;
+        right: 0 !important;
+        top: 50% !important;
+        transform: translateY(-50%) !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        margin: 0 !important;
+        z-index: 10 !important;
+    }
+
+    /* 2층: Header Actions Block (액션 컨트롤러 그룹 - 값이 존재할 때만 동적 렌더) */
+    .main-content > .d-flex.justify-content-between.align-items-center.mb-4 > .d-flex:last-child {
+        display: flex !important;
+        flex-direction: row !important;
+        align-items: center !important;
+        justify-content: space-between !important;
+        width: 100% !important;
+        border-top: 1px solid #f3f4f6 !important;
+        margin-top: 8px !important;
+        padding-top: 10px !important;
+        padding-bottom: 4px !important;
+    }
+
+    /* 2층 액션 영역 내부의 모든 컨트롤러 가로 정렬 강제 (동일한 12px 여유 간격으로 왼쪽 정렬) */
+    .topbar-second-floor,
+    .topbar-second-floor > div,
+    .topbar-second-floor .d-flex.align-items-center {
+        display: flex !important;
+        flex-direction: row !important;
+        align-items: center !important;
+        justify-content: flex-start !important;
+        gap: 12px !important; /* 갱신시각 - 스위치 - 새로고침 버튼 전체를 균일하게 12px 띄움 */
+        width: auto !important; /* 가로폭을 채우지 않고 컨텐츠 크기만큼만 왼쪽 정렬 */
+        flex-wrap: nowrap !important;
+        padding-bottom: 2px !important;
+    }
+
+    /* 2층 내부 갱신시간 텍스트 정렬 */
+    .timestamp-responsive {
+        font-size: 0.8rem !important;
+        white-space: nowrap !important;
+        color: #6b7280 !important;
+        margin-right: 0 !important; /* 극단적 벌어짐 제거 */
+        padding-right: 0 !important;
+    }
+
+    /* 2층 내부 스위치 및 버튼 겹침/세로 쪼개짐 차단 */
+    .form-check.form-switch {
+        display: inline-flex !important;
+        align-items: center !important;
+        gap: 6px !important;
+        margin: 0 !important;
+        padding-left: 2.5em !important;
+        white-space: nowrap !important;
+    }
+    .form-check-label {
+        white-space: nowrap !important;
+        font-size: 0.82rem !important;
+        display: inline-block !important;
+    }
+    .main-content .btn-sm {
+        white-space: nowrap !important;
+        padding: 5px 10px !important;
+        font-size: 0.8rem !important;
+        flex-shrink: 0 !important;
+    }
+
+    /* 3. 본문 헤더 섹션 제목 및 원형 새로고침 버튼 겹침 패치 */
+    .main-content .d-flex.justify-content-between.align-items-center.mb-4:not(.bg-white) {
+        flex-direction: column !important;
+        align-items: flex-start !important;
+        gap: 12px !important;
+        width: 100% !important;
+    }
+    .main-content .d-flex.justify-content-between.align-items-center.mb-4:not(.bg-white) > div:first-child {
+        width: 100% !important;
+    }
+    .main-content .d-flex.justify-content-between.align-items-center.mb-4:not(.bg-white) > div:last-child {
+        width: 100% !important;
+        display: flex !important;
+        justify-content: flex-start !important;
+        gap: 8px !important;
+    }
+}
+
+/* 2. 어드민 공통 테이블 반응형 가로 스크롤 가드 */
+.table-responsive {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+}
+.table-responsive table {
+    min-width: 780px !important; /* 모바일에서 찌그러지지 않고 독립된 형태를 유지 */
+}
+.table th, .table td {
+    white-space: nowrap !important; /* 한 글자씩 세로로 쪼개지는 랩 현상 방지 */
+}

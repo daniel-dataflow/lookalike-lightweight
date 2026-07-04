@@ -42,6 +42,194 @@
 
 <link rel='stylesheet' href='/static/css/admin_visitors.css?v={{ range(1, 999999) | random }}'>
 
+<!-- 상단 세그먼트 필터 (전체 / 일반유저 / OWNER) -->
+<div class="d-flex justify-content-between align-items-center flex-wrap mb-2">
+    <div class="dashboard-segment-bar" role="group">
+        <button type="button" class="segment-btn active" id="segAll" onclick="changeSegment('all')">
+            <i class="fas fa-globe me-1"></i>전체 대상
+        </button>
+        <button type="button" class="segment-btn" id="segGeneral" onclick="changeSegment('general')">
+            <i class="fas fa-user me-1"></i>일반 사용자
+        </button>
+        <button type="button" class="segment-btn" id="segOwner" onclick="changeSegment('owner')">
+            <i class="fas fa-user-shield me-1"></i>관리자 (OWNER)
+        </button>
+    </div>
+    
+    <div id="loadingSpinner" class="spinner-border spinner-border-sm text-primary d-none" role="status">
+        <span class="visually-hidden">로딩 중...</span>
+    </div>
+</div>
+
+<!-- 대시보드 탭 네비게이션 -->
+<ul class="nav nav-tabs nav-tabs-premium mb-4" id="visitorTabs" role="tablist">
+    <li class="nav-item" role="presentation">
+        <button class="nav-link active" id="overview-tab" data-bs-toggle="tab" data-bs-target="#overview" type="button" role="tab" aria-controls="overview" aria-selected="true">
+            <i class="fas fa-th-large me-1"></i>개요
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="sessions-tab" data-bs-toggle="tab" data-bs-target="#sessions" type="button" role="tab" aria-controls="sessions" aria-selected="false">
+            <i class="fas fa-shoe-prints me-1"></i>세션 분석
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="realtime-tab" data-bs-toggle="tab" data-bs-target="#realtime" type="button" role="tab" aria-controls="realtime" aria-selected="false">
+            <span class="realtime-indicator me-1"></span>실시간 로그
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="map-tab" data-bs-toggle="tab" data-bs-target="#map" type="button" role="tab" aria-controls="map" aria-selected="false" onclick="invalidateMapSize()">
+            <i class="fas fa-map-marked-alt me-1"></i>지도 분석
+        </button>
+    </li>
+</ul>
+
+<!-- 탭 콘텐츠 영역 -->
+<div class="tab-content" id="visitorTabsContent">
+    
+    <!-- 1. 개요 (Overview) 탭 -->
+    <div class="tab-pane fade show active" id="overview" role="tabpanel" aria-labelledby="overview-tab">
+        <!-- 핵심 요약 메트릭 카드 -->
+        <div class="row g-3 mb-4">
+            <div class="col-md-6 col-lg-3">
+                <div class="metric-card">
+                    <div class="metric-icon icon-visits">
+                        <i class="fas fa-mouse-pointer"></i>
+                    </div>
+                    <div class="text-muted small fw-semibold">총 검색/방문 수</div>
+                    <h3 class="mt-2 mb-0 fw-bold" id="metricTotalVisits">-</h3>
+                </div>
+            </div>
+            <div class="col-md-6 col-lg-3">
+                <div class="metric-card">
+                    <div class="metric-icon icon-users">
+                        <i class="fas fa-users"></i>
+                    </div>
+                    <div class="text-muted small fw-semibold">고유 방문자 수 (IP)</div>
+                    <h3 class="mt-2 mb-0 fw-bold" id="metricUniqueUsers">-</h3>
+                </div>
+            </div>
+            <div class="col-md-6 col-lg-3">
+                <div class="metric-card">
+                    <div class="metric-icon icon-sessions">
+                        <i class="fas fa-clock"></i>
+                    </div>
+                    <div class="text-muted small fw-semibold">활성 세션</div>
+                    <h3 class="mt-2 mb-0 fw-bold" id="metricActiveSessions">-</h3>
+                </div>
+            </div>
+            <div class="col-md-6 col-lg-3">
+                <div class="metric-card">
+                    <div class="metric-icon icon-pvs">
+                        <i class="fas fa-pager"></i>
+                    </div>
+                    <div class="text-muted small fw-semibold">평균 페이지뷰 (검색)</div>
+                    <h3 class="mt-2 mb-0 fw-bold" id="metricAvgPageviews">-</h3>
+                </div>
+            </div>
+        </div>
+
+        <div class="row g-4 mb-4">
+            <!-- 브라우저 점유율 차트 -->
+            <div class="col-lg-6">
+                <div class="chart-box">
+                    <h6 class="fw-bold mb-3"><i class="fas fa-chart-pie me-2 text-primary"></i>접속 브라우저 분포</h6>
+                    <div style="position: relative; height:240px;">
+                        <canvas id="browserChart"></canvas>
+                    </div>
+                </div>
+            </div>
+            <!-- OS 점유율 차트 -->
+            <div class="col-lg-6">
+                <div class="chart-box">
+                    <h6 class="fw-bold mb-3"><i class="fas fa-chart-pie me-2 text-info"></i>접속 운영체제(OS) 분포</h6>
+                    <div style="position: relative; height:240px;">
+                        <canvas id="osChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 인기 검색 유입 경로 -->
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header bg-white fw-bold border-0 py-3">
+                <i class="fas fa-compass me-2 text-primary"></i>주요 검색 유입 경로 (인기 타겟)
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover table-premium mb-0">
+                        <thead>
+                            <tr>
+                                <th style="width: 80px;" class="text-center">순위</th>
+                                <th>유입 경로 / 검색 패턴</th>
+                                <th style="width: 140px;" class="text-end">방문 수</th>
+                                <th style="width: 180px;">점유율</th>
+                            </tr>
+                        </thead>
+                        <tbody id="popularPagesTableBody">
+                            <tr>
+                                <td colspan="4" class="text-center py-4 text-muted">데이터를 로딩 중입니다...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 2. 세션 분석 (Sessions) 탭 -->
+    <div class="tab-pane fade" id="sessions" role="tabpanel" aria-labelledby="sessions-tab">
+        <div class="row g-3">
+            <!-- 좌측: 세션 목록 -->
+            <div class="col-lg-7">
+                <div class="card border-0 shadow-sm">
+                    <div class="card-header bg-white border-0 py-3 d-flex justify-content-between align-items-center">
+                        <span class="fw-bold"><i class="fas fa-list me-2 text-primary"></i>활성 유저 세션 목록</span>
+                        <div style="width: 200px;">
+                            <input type="text" class="form-control form-control-sm" id="sessionSearchInput" placeholder="IP 주소 검색..." onkeyup="filterSessions()">
+                        </div>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive" style="max-height: 600px; overflow-y: auto;">
+                            <table class="table table-hover table-premium mb-0 align-middle">
+                                <thead>
+                                    <tr>
+                                        <th>IP 주소</th>
+                                        <th>기기 정보</th>
+                                        <th>위치 / ISP</th>
+                                        <th class="text-center">이동 횟수</th>
+                                        <th>마지막 활동</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="sessionsTableBody">
+                                    <tr>
+                                        <td colspan="5" class="text-center py-4 text-muted">데이터를 로딩 중입니다...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 우측: 선택된 세션 상세 이동 타임라인 -->
+            <div class="col-lg-5">
+                <div class="card border-0 shadow-sm h-100 session-timeline-card">
+                    <div class="card-header bg-white border-0 py-3">
+                        <h6 class="m-0 fw-bold text-primary"><i class="fas fa-route me-2"></i>세션 행동 경로 타임라인</h6>
+                    </div>
+                    <div class="card-body" id="timelineContainer">
+                        <div class="text-center text-muted py-5">
+                            <i class="fas fa-info-circle fa-2x mb-3 text-secondary"></i>
+                            <p class="mb-0">왼쪽 목록에서 세션 IP를 클릭하면<br>자세한 사용자 이동 경로가 표시됩니다.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- 3. 실시간 로그 (Realtime) 탭 -->
     <div class="tab-pane fade" id="realtime" role="tabpanel" aria-labelledby="realtime-tab">
         <div class="card border-0 shadow-sm">

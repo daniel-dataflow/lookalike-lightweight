@@ -146,3 +146,70 @@
   text-align: right;
   font-weight: 600;
 }
+
+/* =========================================================================
+   [추가] 크롤링 모니터링 대시보드 모바일 반응형 핫픽스 (전수 검수 반영)
+   ========================================================================= */
+
+/* 1. 탭 네비게이션 가로 슬라이딩 가드 */
+@media (max-width: 768px) {
+  #crawlingTabs {
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    padding-bottom: 4px !important;
+    border-bottom: 2px solid #e5e7eb !important;
+  }
+  #crawlingTabs .nav-item {
+    flex-shrink: 0 !important;
+  }
+  #crawlingTabs .nav-link {
+    padding: 10px 14px !important;
+    font-size: 0.85rem !important;
+    white-space: nowrap !important;
+  }
+}
+
+/* 2. 헤더 액션 타이틀 및 버튼 겹침/세로 찌그러짐 방지 */
+@media (max-width: 768px) {
+  /* 수동 크롤링 & 스테이징 현황 헤더 */
+  .tab-pane .d-flex.justify-content-between.align-items-center.mb-4 {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 14px !important;
+  }
+  
+  /* 우측 버튼 그룹 컨테이너 */
+  .tab-pane .d-flex.justify-content-between.align-items-center.mb-4 > .d-flex.gap-2 {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    align-items: center !important;
+    gap: 8px !important;
+    width: 100% !important;
+  }
+  
+  /* 버튼 내부 텍스트 쪼개짐 차단 */
+  .tab-pane .d-flex.justify-content-between.align-items-center.mb-4 button {
+    white-space: nowrap !important;
+    flex: 1 1 auto !important; /* 모바일에서 고르게 너비를 나눠가지며 배치 */
+    font-size: 0.8rem !important;
+    padding: 6px 10px !important;
+  }
+  
+  /* 마지막 새로고침 타임스탬프 단독 줄 배치 또는 마진 조절 */
+  .refresh-indicator {
+    display: block !important;
+    width: 100% !important;
+    margin-bottom: 4px !important;
+    font-size: 0.78rem !important;
+  }
+}
+
+/* 3. 데이터 테이블 반응형 가로 스크롤 가드 */
+.table-responsive table {
+  min-width: 780px !important; /* 모바일에서 컬럼 찌그러짐 방지 */
+}
+.table-responsive th, .table-responsive td {
+  white-space: nowrap !important;
+}

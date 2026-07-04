@@ -248,7 +248,8 @@
     <div class="main-content" id="adminMainContent"> <!-- 초기 display 스타일 제거 -->
         <!-- Top Bar -->
         <div class="d-flex justify-content-between align-items-center mb-4 bg-white p-3 rounded shadow-sm">
-            <div class="d-flex align-items-center">
+            <!-- 1층: 햄버거 + 제목 + 우측 모바일 프로필 (position-relative 부여) -->
+            <div class="d-flex align-items-center position-relative w-100 topbar-first-floor">
                 <!-- [추가] 모바일 햄버거 메뉴 버튼 -->
                 <button class="btn btn-link text-dark p-0 me-3 d-md-none" type="button" data-bs-toggle="offcanvas"
                     data-bs-target="#mobileSidebar">
@@ -256,16 +257,17 @@
                 </button>
                 <h5 class="m-0 fw-bold text-nowrap dashboard-title">{% block page_title
                     %}Dashboard{% endblock %}</h5>
+                <!-- 모바일용 간단 프로필 아이콘 (1층 우측에 물리적 귀속) -->
+                <div class="d-md-none mobile-profile-wrap">
+                    <i class="fas fa-user-circle fs-4 text-secondary"></i>
+                </div>
             </div>
 
-            <div class="d-flex align-items-center">
+            <!-- 2층: 액션 버튼 그룹 (1층과 완전히 공간 분리) -->
+            <div class="d-flex align-items-center topbar-second-floor">
                 <!-- Header Actions Block -->
                 <div class="me-1 me-md-3">
                     {% block header_actions %}{% endblock %}
-                </div>
-                <!-- 모바일용 간단 프로필 아이콘 -->
-                <div class="d-md-none">
-                    <i class="fas fa-user-circle fs-4 text-secondary"></i>
                 </div>
             </div>
         </div>

@@ -185,3 +185,49 @@
 .session-timeline-card {
     border-left: 4px solid #0d6efd;
 }
+
+/* =========================================================================
+   [추가] 방문자 분석 대시보드 모바일 반응형 핫픽스
+   ========================================================================= */
+
+/* 1. 세그먼트 필터 바 모바일 가로 스크롤 & white-space 찌그러짐 해제 */
+@media (max-width: 768px) {
+    .dashboard-segment-bar {
+        display: flex !important;
+        overflow-x: auto !important;
+        white-space: nowrap !important;
+        max-width: 100% !important;
+        -webkit-overflow-scrolling: touch !important;
+        padding: 4px !important;
+        border-radius: 8px !important;
+    }
+    .segment-btn {
+        padding: 6px 12px !important;
+        font-size: 0.8rem !important;
+        white-space: nowrap !important;
+        flex-shrink: 0 !important;
+    }
+    /* 탭 버튼 자체도 가로 슬라이드가 되게 유연하게 처리 */
+    .nav-tabs-premium {
+        display: flex !important;
+        flex-wrap: nowrap !important;
+        overflow-x: auto !important;
+        -webkit-overflow-scrolling: touch !important;
+        padding-bottom: 4px !important;
+    }
+    .nav-tabs-premium .nav-item {
+        flex-shrink: 0 !important;
+    }
+    .nav-tabs-premium .nav-link {
+        padding: 10px 14px !important;
+        font-size: 0.85rem !important;
+    }
+}
+
+/* 2. 테이블 텍스트 세로 한글자 쪼개짐 방지 및 강제 스크롤 적용 */
+.table-premium th, .table-premium td {
+    white-space: nowrap !important;
+}
+.tab-content .table-responsive table {
+    min-width: 750px !important; /* 모바일에서 쪼개지지 않고 깔끔하게 우측 스크롤 */
+}
