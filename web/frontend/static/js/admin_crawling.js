@@ -1256,21 +1256,43 @@ function renderPaginationHTML(containerId, currentPage, totalPages, clickHandler
   const container = document.getElementById(containerId);
   if (!container) return;
 
+  const isMobile = window.innerWidth <= 768;
+  const showFirstLast = totalPages > 10;
   let html = '';
   
-  // 이전 버튼
+  // 0. 맨 처음 (<<) 버튼 - 전체 10페이지 초과 시에만 노출
+  if (showFirstLast) {
+    const firstDisabled = currentPage <= 1 ? 'disabled' : '';
+    const firstClick = currentPage <= 1 ? '' : `onclick="${clickHandlerName}(1)"`;
+    html += `<li class="page-item ${firstDisabled}">
+      <a class="page-link" href="javascript:void(0)" ${firstClick} aria-label="First" style="font-size: 0.72rem; padding: 4px 8px;">
+        <span>&laquo;&laquo;</span>
+      </a>
+    </li>`;
+  }
+
+  // 1. 이전 버튼
   const prevDisabled = currentPage <= 1 ? 'disabled' : '';
   const prevClick = currentPage <= 1 ? '' : `onclick="${clickHandlerName}(${currentPage - 1})"`;
+  const prevText = isMobile ? '<' : '&laquo; 이전';
   html += `<li class="page-item ${prevDisabled}">
     <a class="page-link" href="javascript:void(0)" ${prevClick} aria-label="Previous" style="font-size: 0.72rem; padding: 4px 8px;">
-      <span aria-hidden="true">&laquo; 이전</span>
+      <span>${prevText}</span>
     </a>
   </li>`;
 
-  // 10개 단위 슬라이딩 페이지 표시
-  const pageGroup = Math.ceil(currentPage / 10);
-  const startPage = (pageGroup - 1) * 10 + 1;
-  const endPage = Math.min(totalPages, pageGroup * 10);
+  // 2. 페이지 번호들 (로그 페이징과의 통일성을 위해 스마트 슬라이딩 윈도우 적용!)
+  const startPage = Math.max(1, currentPage - 2);
+  const endPage = Math.min(totalPages, currentPage + 2);
+
+  if (startPage > 1) {
+    html += `<li class="page-item">
+      <a class="page-link" href="javascript:void(0)" onclick="${clickHandlerName}(1)" style="font-size: 0.72rem; padding: 4px 8px;">1</a>
+    </li>`;
+    if (startPage > 2) {
+      html += `<li class="page-item disabled"><span class="page-link" style="font-size: 0.72rem; padding: 4px 8px;">...</span></li>`;
+    }
+  }
 
   for (let i = startPage; i <= endPage; i++) {
     const activeClass = i === currentPage ? 'active' : '';
@@ -1279,14 +1301,35 @@ function renderPaginationHTML(containerId, currentPage, totalPages, clickHandler
     </li>`;
   }
 
-  // 다음 버튼
+  if (endPage < totalPages) {
+    if (endPage < totalPages - 1) {
+      html += `<li class="page-item disabled"><span class="page-link" style="font-size: 0.72rem; padding: 4px 8px;">...</span></li>`;
+    }
+    html += `<li class="page-item">
+      <a class="page-link" href="javascript:void(0)" onclick="${clickHandlerName}(${totalPages})" style="font-size: 0.72rem; padding: 4px 8px;">${totalPages}</a>
+    </li>`;
+  }
+
+  // 3. 다음 버튼
   const nextDisabled = currentPage >= totalPages ? 'disabled' : '';
   const nextClick = currentPage >= totalPages ? '' : `onclick="${clickHandlerName}(${currentPage + 1})"`;
+  const nextText = isMobile ? '>' : '다음 &raquo;';
   html += `<li class="page-item ${nextDisabled}">
     <a class="page-link" href="javascript:void(0)" ${nextClick} aria-label="Next" style="font-size: 0.72rem; padding: 4px 8px;">
-      <span>다음 &raquo;</span>
+      <span>${nextText}</span>
     </a>
   </li>`;
+
+  // 4. 맨 끝 (>>) 버튼 - 전체 10페이지 초과 시에만 노출
+  if (showFirstLast) {
+    const lastDisabled = currentPage >= totalPages ? 'disabled' : '';
+    const lastClick = currentPage >= totalPages ? '' : `onclick="${clickHandlerName}(${totalPages})"`;
+    html += `<li class="page-item ${lastDisabled}">
+      <a class="page-link" href="javascript:void(0)" ${lastClick} aria-label="Last" style="font-size: 0.72rem; padding: 4px 8px;">
+        <span>&raquo;&raquo;</span>
+      </a>
+    </li>`;
+  }
 
   container.innerHTML = html;
 }
@@ -1644,28 +1687,77 @@ function renderErrorPagination(total, currentPage, limit) {
   if (!pagination) return;
   
   pagination.innerHTML = '';
-  
   if (totalPages <= 1) return;
-  
-  // Previous button
-  const prevLi = document.createElement('li');
-  prevLi.className = `page-item ${currentPage === 1 ? 'disabled' : ''}`;
-  prevLi.innerHTML = `<a class="page-link" href="#" onclick="loadErrorProducts(${currentPage - 1}); return false;">이전</a>`;
-  pagination.appendChild(prevLi);
-  
-  // Pages
-  for (let i = 1; i <= totalPages; i++) {
-    const li = document.createElement('li');
-    li.className = `page-item ${currentPage === i ? 'active' : ''}`;
-    li.innerHTML = `<a class="page-link" href="#" onclick="loadErrorProducts(${i}); return false;">${i}</a>`;
-    pagination.appendChild(li);
+
+  const isMobile = window.innerWidth <= 768;
+  const showFirstLast = totalPages > 10;
+
+  // 0. 맨 처음 (<<) 버튼
+  if (showFirstLast) {
+    const firstLi = document.createElement('li');
+    firstLi.className = `page-item ${currentPage === 1 ? 'disabled' : ''}`;
+    firstLi.innerHTML = `<a class="page-link" href="#" onclick="loadErrorProducts(1); return false;" aria-label="First" style="font-size: 0.72rem; padding: 4px 8px;">&laquo;&laquo;</a>`;
+    pagination.appendChild(firstLi);
   }
   
-  // Next button
+  // 1. Previous button
+  const prevLi = document.createElement('li');
+  prevLi.className = `page-item ${currentPage === 1 ? 'disabled' : ''}`;
+  const prevText = isMobile ? '<' : '이전';
+  prevLi.innerHTML = `<a class="page-link" href="#" onclick="loadErrorProducts(${currentPage - 1}); return false;" aria-label="Previous" style="font-size: 0.72rem; padding: 4px 8px;">${prevText}</a>`;
+  pagination.appendChild(prevLi);
+  
+  // 2. Pages (스마트 슬라이딩 윈도우 및 생략 기호 적용)
+  const startPage = Math.max(1, currentPage - 2);
+  const endPage = Math.min(totalPages, currentPage + 2);
+
+  if (startPage > 1) {
+    const firstNumLi = document.createElement('li');
+    firstNumLi.className = 'page-item';
+    firstNumLi.innerHTML = `<a class="page-link" href="#" onclick="loadErrorProducts(1); return false;" style="font-size: 0.72rem; padding: 4px 8px;">1</a>`;
+    pagination.appendChild(firstNumLi);
+    if (startPage > 2) {
+      const dotLi = document.createElement('li');
+      dotLi.className = 'page-item disabled';
+      dotLi.innerHTML = `<span class="page-link" style="font-size: 0.72rem; padding: 4px 8px;">...</span>`;
+      pagination.appendChild(dotLi);
+    }
+  }
+
+  for (let i = startPage; i <= endPage; i++) {
+    const li = document.createElement('li');
+    li.className = `page-item ${currentPage === i ? 'active' : ''}`;
+    li.innerHTML = `<a class="page-link" href="#" onclick="loadErrorProducts(${i}); return false;" style="font-size: 0.72rem; padding: 4px 8px;">${i}</a>`;
+    pagination.appendChild(li);
+  }
+
+  if (endPage < totalPages) {
+    if (endPage < totalPages - 1) {
+      const dotLi = document.createElement('li');
+      dotLi.className = 'page-item disabled';
+      dotLi.innerHTML = `<span class="page-link" style="font-size: 0.72rem; padding: 4px 8px;">...</span>`;
+      pagination.appendChild(dotLi);
+    }
+    const lastNumLi = document.createElement('li');
+    lastNumLi.className = 'page-item';
+    lastNumLi.innerHTML = `<a class="page-link" href="#" onclick="loadErrorProducts(${totalPages}); return false;" style="font-size: 0.72rem; padding: 4px 8px;">${totalPages}</a>`;
+    pagination.appendChild(lastNumLi);
+  }
+  
+  // 3. Next button
   const nextLi = document.createElement('li');
   nextLi.className = `page-item ${currentPage === totalPages ? 'disabled' : ''}`;
-  nextLi.innerHTML = `<a class="page-link" href="#" onclick="loadErrorProducts(${currentPage + 1}); return false;">다음</a>`;
+  const nextText = isMobile ? '>' : '다음';
+  nextLi.innerHTML = `<a class="page-link" href="#" onclick="loadErrorProducts(${currentPage + 1}); return false;" aria-label="Next" style="font-size: 0.72rem; padding: 4px 8px;">${nextText}</a>`;
   pagination.appendChild(nextLi);
+
+  // 4. 맨 끝 (>>) button
+  if (showFirstLast) {
+    const lastLi = document.createElement('li');
+    lastLi.className = `page-item ${currentPage === totalPages ? 'disabled' : ''}`;
+    lastLi.innerHTML = `<a class="page-link" href="#" onclick="loadErrorProducts(${totalPages}); return false;" aria-label="Last" style="font-size: 0.72rem; padding: 4px 8px;">&raquo;&raquo;</a>`;
+    pagination.appendChild(lastLi);
+  }
 }
 
 async function resolveSelectedErrors(action) {
