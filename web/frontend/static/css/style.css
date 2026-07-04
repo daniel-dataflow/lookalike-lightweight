@@ -1979,3 +1979,88 @@ body {
     -webkit-box-shadow: 0 0 0 1000px #ffffff inset !important;
     box-shadow: 0 0 0 1000px #ffffff inset !important;
 }
+
+/* =========================================================================
+   [추가] 팀 소개 페이지 (teams.html) 시스템 아키텍처 & 흐름도 모바일 반응형 최적화
+   ========================================================================= */
+@media (max-width: 768px) {
+    /* 1. 아키텍처 다이어그램 모바일 수직 적층 및 찌그러짐 방지 */
+    .arch-wrap {
+        padding: 16px !important; /* 모바일 여백 슬림화 */
+        overflow-x: hidden !important; /* 가로 스크롤 제거 (수직으로 다 들어가므로) */
+    }
+    .arch-diagram {
+        min-width: auto !important; /* 강제 600px 해제 */
+        width: 100% !important;
+        gap: 8px !important;
+    }
+    /* 가로 행들을 세로로 분할 적층 */
+    .arch-diagram .arch-row {
+        flex-direction: column !important;
+        align-items: center !important;
+        width: 100% !important;
+        gap: 6px !important;
+    }
+    .arch-diagram .arch-node {
+        width: 100% !important; /* 모바일에서 가로폭 꽉 채우기 */
+        white-space: normal !important; /* 좁은 화면에서 글자 줄바꿈 허용 */
+        font-size: 11.5px !important;
+        padding: 10px 12px !important;
+    }
+    /* 사선 화살표 ↙ ↘ 를 모바일에서는 깔끔하게 수직 ↓ 화살표 한 개로 일원화 */
+    .arch-arr {
+        margin: 0 !important;
+        font-size: 14px !important;
+    }
+    .arch-diagram .arch-row:nth-child(4) .arch-arr:first-child {
+        margin-right: 0 !important;
+    }
+    .arch-diagram .arch-row:nth-child(4) .arch-arr:last-child {
+        display: none !important; /* 사선 화살표 두 개 중 하나는 숨김 */
+    }
+    .arch-diagram .arch-row:nth-child(4) .arch-arr:first-child::before {
+        content: "↓" !important; /* 사선을 수직 화살표로 치환 */
+    }
+    .arch-diagram .arch-row:nth-child(4) .arch-arr {
+        font-size: 0 !important; /* 원본 ↙ 숨김 */
+    }
+    .arch-diagram .arch-row:nth-child(4) .arch-arr::before {
+        font-size: 16px !important;
+    }
+    
+    /* ⟷ 화살표도 모바일에서는 수직 ↕ 화살표로 치환 */
+    .arch-diagram .arch-row:nth-child(6) .arch-arr::before {
+        content: "↕" !important;
+    }
+    .arch-diagram .arch-row:nth-child(6) .arch-arr {
+        font-size: 0 !important;
+    }
+    .arch-diagram .arch-row:nth-child(6) .arch-arr::before {
+        font-size: 16px !important;
+    }
+
+    /* 2. 파이프라인 브랜치 흐름도 가로 2~3열 ➔ 세로 1열(Vertical Stack) 강제 변환 */
+    .pipe-branch-wrap {
+        grid-template-columns: 1fr !important; /* 무조건 세로 1열 배치 */
+        gap: 12px !important;
+    }
+    .pipe-branch-wrap:has(.branch-a),
+    .pipe-branch-wrap:has(.branch-img) {
+        grid-template-columns: 1fr !important; /* 미디어 쿼리 덮어쓰기 */
+    }
+    .pipe-branch {
+        width: 100% !important;
+        padding: 14px !important;
+    }
+    .branch-flow {
+        gap: 8px !important;
+    }
+    .branch-node {
+        white-space: normal !important; /* 모바일 줄바꿈 허용 */
+        font-size: 11.5px !important;
+        padding: 8px 10px !important;
+    }
+    .branch-arrow {
+        transform: rotate(0deg) !important;
+    }
+}
