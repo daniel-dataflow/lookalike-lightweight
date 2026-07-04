@@ -2,6 +2,11 @@ let autoRefreshInterval = null;
 let logModal = null;
 let trendChart = null;
 
+// [로컬 페이징] 모바일/데스크탑 스크롤 압박 해소를 위한 프론트엔드 페이징 변수
+let allFetchedLogs = [];
+let currentPage = 1;
+const LOGS_PAGE_SIZE = 10; // 10개씩 페이징 노출
+
 document.addEventListener('DOMContentLoaded', () => {
     logModal = new bootstrap.Modal(document.getElementById('logDetailModal'));
     initTrendChart();
@@ -292,16 +297,114 @@ async function fetchLogs(showLoading = true) {
         const data = await resp.json();
 
         if (!data.logs || data.logs.length === 0) {
+            allFetchedLogs = [];
             tableBody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-muted">검색 결과가 없습니다.</td></tr>';
             mobileList.innerHTML = '<div class="text-center py-5 text-muted">검색 결과가 없습니다.</div>';
+            document.getElementById('logsPaginationContainer').classList.add('d-none');
             return;
         }
-        renderTable(data.logs, tableBody);
-        renderMobileCards(data.logs, mobileList);
+        
+        // 데이터 수신 및 로컬 페이징 파라미터 셋업
+        allFetchedLogs = data.logs;
+        currentPage = 1;
+        
+        // 화면 렌더링 호출
+        renderCurrentLogs();
     } catch (e) {
         console.error("Log load failed", e);
         tableBody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-danger">실패</td></tr>';
+        document.getElementById('logsPaginationContainer').classList.add('d-none');
     }
+}
+
+/**
+ * allFetchedLogs 데이터 배열로부터 현재 페이지에 해당하는 10개 영역을 잘라내어 화면에 그리는 로컬 렌더링 함수.
+ */
+function renderCurrentLogs() {
+    const tableBody = document.getElementById('logTableBody');
+    const mobileList = document.getElementById('mobileLogList');
+    const paginatorContainer = document.getElementById('logsPaginationContainer');
+    const paginator = document.getElementById('logsPagination');
+
+    const startIndex = (currentPage - 1) * LOGS_PAGE_SIZE;
+    const endIndex = startIndex + LOGS_PAGE_SIZE;
+    const slicedLogs = allFetchedLogs.slice(startIndex, endIndex);
+
+    renderTable(slicedLogs, tableBody);
+    renderMobileCards(slicedLogs, mobileList);
+
+    // 페이지네이션 활성 제어
+    const totalPages = Math.ceil(allFetchedLogs.length / LOGS_PAGE_SIZE);
+    if (totalPages > 1) {
+        paginatorContainer.classList.remove('d-none');
+        renderPagingControls(totalPages, paginator);
+    } else {
+        paginatorContainer.classList.add('d-none');
+    }
+}
+
+/**
+ * 번호 기반 페이지네이션의 조작용 컨트롤러를 렌더링함.
+ */
+function renderPagingControls(totalPages, container) {
+    container.innerHTML = '';
+
+    // 1. [이전] 버튼
+    const prevLi = document.createElement('li');
+    prevLi.className = `page-item ${currentPage === 1 ? 'disabled' : ''}`;
+    prevLi.innerHTML = `<a class="page-link" href="#" onclick="changeLogPage(${currentPage - 1}); return false;"><i class="fas fa-chevron-left"></i></a>`;
+    container.appendChild(prevLi);
+
+    // 2. 페이지 번호들 (현재 페이지 기준으로 앞뒤 2개씩 스마트 슬라이딩 노출)
+    const startPage = Math.max(1, currentPage - 2);
+    const endPage = Math.min(totalPages, currentPage + 2);
+
+    if (startPage > 1) {
+        const firstLi = document.createElement('li');
+        firstLi.className = 'page-item';
+        firstLi.innerHTML = `<a class="page-link" href="#" onclick="changeLogPage(1); return false;">1</a>`;
+        container.appendChild(firstLi);
+        if (startPage > 2) {
+            const dotLi = document.createElement('li');
+            dotLi.className = 'page-item disabled';
+            dotLi.innerHTML = `<span class="page-link">...</span>`;
+            container.appendChild(dotLi);
+        }
+    }
+
+    for (let i = startPage; i <= endPage; i++) {
+        const li = document.createElement('li');
+        li.className = `page-item ${i === currentPage ? 'active' : ''}`;
+        li.innerHTML = `<a class="page-link" href="#" onclick="changeLogPage(${i}); return false;">${i}</a>`;
+        container.appendChild(li);
+    }
+
+    if (endPage < totalPages) {
+        if (endPage < totalPages - 1) {
+            const dotLi = document.createElement('li');
+            dotLi.className = 'page-item disabled';
+            dotLi.innerHTML = `<span class="page-link">...</span>`;
+            container.appendChild(dotLi);
+        }
+        const lastLi = document.createElement('li');
+        lastLi.className = 'page-item';
+        lastLi.innerHTML = `<a class="page-link" href="#" onclick="changeLogPage(${totalPages}); return false;">${totalPages}</a>`;
+        container.appendChild(lastLi);
+    }
+
+    // 3. [다음] 버튼
+    const nextLi = document.createElement('li');
+    nextLi.className = `page-item ${currentPage === totalPages ? 'disabled' : ''}`;
+    nextLi.innerHTML = `<a class="page-link" href="#" onclick="changeLogPage(${currentPage + 1}); return false;"><i class="fas fa-chevron-right"></i></a>`;
+    container.appendChild(nextLi);
+}
+
+/**
+ * 사용자가 페이지 번호를 클릭했을 때 실행되는 페이지 전환 콜백 함수.
+ */
+function changeLogPage(pageNum) {
+    currentPage = pageNum;
+    renderCurrentLogs();
 }
 
 function renderTable(logs, tbody) {

@@ -1081,3 +1081,22 @@
 .table th, .table td {
     white-space: nowrap !important; /* 한 글자씩 세로로 쪼개지는 랩 현상 방지 */
 }
+
+/* 3. [추가] PC 환경 스크롤바 찌그러짐 및 조작 곤란 패치 (프리엄 웹 스타일 스크롤바) */
+.table-responsive::-webkit-scrollbar {
+    height: 10px !important; /* 가로 스크롤바 두께 10px로 키워 조작성 확보 */
+    width: 10px !important;
+}
+.table-responsive::-webkit-scrollbar-track {
+    background: #f1f5f9 !important; /* 트랙 배경색 연한 그레이 */
+    border-radius: 6px !important;
+}
+.table-responsive::-webkit-scrollbar-thumb {
+    background: #cbd5e1 !important; /* 드래그 바 색상 */
+    border: 2px solid #f1f5f9 !important; /* 트랙과의 내부 여백 효과 */
+    border-radius: 6px !important;
+}
+.table-responsive::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8 !important; /* 마우스 오버 시 진해짐 */
+    cursor: pointer !important;
+}
