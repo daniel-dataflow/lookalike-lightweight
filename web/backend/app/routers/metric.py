@@ -162,6 +162,28 @@ async def get_metric_stats():
     except Exception:
         cur_cpu, cur_mem = 0.0, 0.0
 
+    # cgroups 메모리 한도를 감지하여 가상 컨테이너 실제 리미트 기반 램 연산 보장 (Render 0.5GB 지원)
+    import os
+    memory_limit = None
+    if os.path.exists("/sys/fs/cgroup/memory.max"):
+        try:
+            with open("/sys/fs/cgroup/memory.max", "r") as f:
+                val = f.read().strip()
+                if val != "max":
+                    memory_limit = int(val)
+        except Exception:
+            pass
+    elif os.path.exists("/sys/fs/cgroup/memory/memory.limit_in_bytes"):
+        try:
+            with open("/sys/fs/cgroup/memory/memory.limit_in_bytes", "r") as f:
+                val = int(f.read().strip())
+                if val < 9223372036854771712:
+                    memory_limit = val
+        except Exception:
+            pass
+
+    total_mem = memory_limit if (memory_limit is not None and memory_limit > 0) else psutil.virtual_memory().total
+
     # DB 에 쌓인 최근 1시간 평균
     try:
         def _agg():
@@ -180,10 +202,10 @@ async def get_metric_stats():
         avg_cpu = round(row["avg_cpu"] or cur_cpu, 2)
         avg_mem = round(row["avg_mem"] or cur_mem, 2)
         max_mem_pct = row["max_mem"] or cur_mem
-        max_mem_mb = round((psutil.virtual_memory().total * (max_mem_pct / 100.0)) / 1024 / 1024, 2)
+        max_mem_mb = round((total_mem * (max_mem_pct / 100.0)) / 1024 / 1024, 2)
     except Exception:
         avg_cpu, avg_mem = cur_cpu, cur_mem
-        max_mem_mb = round((psutil.virtual_memory().total * (cur_mem / 100.0)) / 1024 / 1024, 2)
+        max_mem_mb = round((total_mem * (cur_mem / 100.0)) / 1024 / 1024, 2)
 
     return {
         "FastAPI": {
