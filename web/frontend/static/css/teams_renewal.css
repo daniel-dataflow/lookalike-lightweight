@@ -1,0 +1,20 @@
+/* ── SOLO PHASE CARD ── */
+.phase-card-solo {
+  border: 2px solid var(--accent, #d4522a);
+  background: linear-gradient(135deg, #fff8f4 0%, #fff 100%);
+  position: relative; overflow: hidden;
+}
+.phase-num-solo { color: var(--accent, #d4522a) !important; }
+.phase-solo-badge {
+  display: inline-block; margin-top: 12px;
+  font-size: 10px; font-weight: 800; letter-spacing: .15em; text-transform: uppercase;
+  background: var(--accent, #d4522a); color: #fff;
+  padding: 3px 10px; border-radius: 20px;
+}
+
+/* ── SOLO PHASE CARD WIDTH EXPANSION (2 columns) ── */
+@media (min-width: 992px) {
+  .phase-card-solo {
+    grid-column: span 2 !important;
+  }
+}

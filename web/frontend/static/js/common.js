@@ -476,12 +476,16 @@ function isValidEmail(email) {
 function togglePassword(inputId, btn) {
     const input = document.getElementById(inputId);
     const icon = btn.querySelector('i');
+
+    if (!input || !icon) return;
     if (input.type === 'password') {
         input.type = 'text';
-        icon.classList.replace('fa-eye', 'fa-eye-slash');
+        icon.classList.remove('fa-eye-slash');
+        icon.classList.add('fa-eye');
     } else {
         input.type = 'password';
-        icon.classList.replace('fa-eye-slash', 'fa-eye');
+        icon.classList.remove('fa-eye');
+        icon.classList.add('fa-eye-slash');
     }
 }
 
@@ -608,21 +612,7 @@ document.addEventListener('DOMContentLoaded', async function () {
    [mypage.js]
 ========================================================================= */
 
-function togglePassword(inputId, btn) {
-    const input = document.getElementById(inputId);
-    const icon = btn.querySelector('i');
 
-    if (!input || !icon) return;
-    if (input.type === 'password') {
-        input.type = 'text';
-        icon.classList.remove('fa-eye-slash');
-        icon.classList.add('fa-eye');
-    } else {
-        input.type = 'password';
-        icon.classList.remove('fa-eye');
-        icon.classList.add('fa-eye-slash');
-    }
-}
 
 document.addEventListener('DOMContentLoaded', async function () {
     const modal = document.getElementById('editProfileModal');
@@ -792,51 +782,3 @@ document.addEventListener('DOMContentLoaded', async function () {
     }
 });
 
-/* =========================================================================
-   [teams.js]
-========================================================================= */
-
-/* particles */
-(function () {
-    const wrap = document.getElementById('lkParticles');
-    if (!wrap) return;
-    const colors = ['#d4522a', '#2563a8', '#2d8a5e', '#b07d2c', '#e8824a'];
-    for (let i = 0; i < 18; i++) {
-        const el = document.createElement('div');
-        el.className = 'lk-particle';
-        const s = Math.random() * 8 + 3;
-        el.style.cssText = `width:${s}px;height:${s}px;left:${Math.random() * 100}%;background:${colors[i % colors.length]};--d:${Math.random() * 13 + 9}s;--dl:${Math.random() * 9}s;`;
-        wrap.appendChild(el);
-    }
-})();
-
-/* scroll reveal */
-const io = new IntersectionObserver(en => { en.forEach(e => { if (e.isIntersecting) e.target.classList.add('on'); }); }, { threshold: .08 });
-document.querySelectorAll('.rv,.rvl,.rvr').forEach(el => io.observe(el));
-
-/* tab switching */
-document.querySelectorAll('.pipe-tab').forEach(btn => {
-    btn.addEventListener('click', () => {
-        document.querySelectorAll('.pipe-tab').forEach(b => b.classList.remove('active'));
-        document.querySelectorAll('.pipe-panel').forEach(p => p.classList.add('hidden'));
-        btn.classList.add('active');
-        const panel = document.getElementById('tab-' + btn.dataset.tab);
-        if (panel) panel.classList.remove('hidden');
-    });
-});
-
-const so = new IntersectionObserver(en => {
-    en.forEach(e => {
-        if (e.isIntersecting) {
-            e.target.querySelectorAll('.stat-num').forEach((n, i) => {
-                setTimeout(() => {
-                    n.style.transition = 'transform .38s cubic-bezier(.34,1.56,.64,1)';
-                    n.style.transform = 'scale(1.16)';
-                    setTimeout(() => { n.style.transform = 'scale(1)'; }, 380);
-                }, i * 90);
-            });
-            so.unobserve(e.target);
-        }
-    });
-}, { threshold: .5 });
-document.querySelectorAll('.stat-strip').forEach(el => so.observe(el));

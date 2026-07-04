@@ -1,0 +1,187 @@
+/* 대시보드 전용 커스텀 스타일 (Rich Aesthetics & Premium Feel) */
+.dashboard-segment-bar {
+    background: rgba(248, 249, 250, 0.8);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(222, 226, 230, 0.5);
+    border-radius: 12px;
+    padding: 6px;
+    margin-bottom: 20px;
+    display: inline-flex;
+}
+.segment-btn {
+    border: none;
+    background: transparent;
+    color: #6c757d;
+    padding: 8px 18px;
+    font-weight: 600;
+    font-size: 0.9rem;
+    border-radius: 8px;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.segment-btn.active {
+    background: #ffffff;
+    color: #0d6efd;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+.metric-card {
+    background: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    border-radius: 16px;
+    padding: 24px;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.04);
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}
+.metric-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 4px;
+    background: linear-gradient(90deg, #0d6efd, #0dcaf0);
+    opacity: 0;
+    transition: opacity 0.3s;
+}
+.metric-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.08);
+}
+.metric-card:hover::before {
+    opacity: 1;
+}
+.metric-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.4rem;
+    margin-bottom: 16px;
+}
+.icon-visits { background: rgba(13, 110, 253, 0.1); color: #0d6efd; }
+.icon-users { background: rgba(25, 135, 84, 0.1); color: #198754; }
+.icon-sessions { background: rgba(255, 193, 7, 0.15); color: #ffc107; }
+.icon-pvs { background: rgba(13, 202, 240, 0.1); color: #0dcaf0; }
+
+.nav-tabs-premium {
+    border-bottom: 2px solid rgba(222, 226, 230, 0.5);
+    gap: 10px;
+}
+.nav-tabs-premium .nav-link {
+    border: none;
+    color: #6c757d;
+    font-weight: 600;
+    padding: 12px 20px;
+    border-radius: 8px 8px 0 0;
+    position: relative;
+    background: transparent;
+    transition: all 0.3s;
+}
+.nav-tabs-premium .nav-link::after {
+    content: '';
+    position: absolute;
+    bottom: -2px;
+    left: 0;
+    width: 100%;
+    height: 3px;
+    background: #0d6efd;
+    transform: scaleX(0);
+    transition: transform 0.3s;
+}
+.nav-tabs-premium .nav-link.active {
+    color: #0d6efd;
+    background: transparent;
+}
+.nav-tabs-premium .nav-link.active::after {
+    transform: scaleX(1);
+}
+
+/* 테이블 스타일링 */
+.table-container {
+    background: #ffffff;
+    border-radius: 16px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.02);
+    overflow: hidden;
+    border: 1px solid rgba(222, 226, 230, 0.5);
+}
+.table-premium thead {
+    background-color: #f8f9fa;
+}
+.table-premium th {
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.8rem;
+    letter-spacing: 0.5px;
+    color: #495057;
+    padding: 14px 16px;
+    border-bottom: 1px solid rgba(222, 226, 230, 0.5);
+}
+.table-premium td {
+    padding: 14px 16px;
+    vertical-align: middle;
+    border-bottom: 1px solid rgba(222, 226, 230, 0.3);
+}
+
+/* 실시간 로그 애니메이션 */
+@keyframes pulse-green {
+    0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(25, 135, 84, 0.7); }
+    70% { transform: scale(1); box-shadow: 0 0 0 8px rgba(25, 135, 84, 0); }
+    100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(25, 135, 84, 0); }
+}
+.realtime-indicator {
+    width: 10px;
+    height: 10px;
+    background-color: #198754;
+    border-radius: 50%;
+    display: inline-block;
+    animation: pulse-green 2s infinite;
+}
+
+/* 지도 및 차트 높이 */
+#visitorMap {
+    height: 520px;
+    border-radius: 16px;
+    border: 1px solid rgba(222, 226, 230, 0.5);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.02);
+    z-index: 1;
+}
+.chart-box {
+    background: #ffffff;
+    border-radius: 16px;
+    border: 1px solid rgba(222, 226, 230, 0.5);
+    padding: 20px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.02);
+}
+
+/* 타임라인 스타일 */
+.timeline-path {
+    position: relative;
+    padding-left: 24px;
+    border-left: 2px dashed #dee2e6;
+    margin-left: 10px;
+}
+.timeline-item-node {
+    position: absolute;
+    left: -7px;
+    top: 4px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background-color: #0d6efd;
+    border: 2px solid #fff;
+}
+.timeline-item-node.start {
+    background-color: #198754;
+}
+.timeline-item-node.end {
+    background-color: #dc3545;
+}
+
+/* 세션 상세 사이드바/패널 */
+.session-timeline-card {
+    border-left: 4px solid #0d6efd;
+}
