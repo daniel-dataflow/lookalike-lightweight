@@ -335,29 +335,42 @@
 <!-- 로그 테이블 / 모바일 카드 -->
 <div class="card bg-transparent border-0">
     <div class="card-body p-0">
-        <div class="d-none d-md-block table-responsive bg-white rounded shadow-sm"
+        <!-- 바깥 래퍼: 세로 최대 높이 제한 및 세로 스크롤 전용 -->
+        <div class="d-none d-md-block bg-white rounded shadow-sm"
             style="max-height: 600px; overflow-y: auto;">
-            <table class="table table-hover table-sm mb-0" style="font-size: 0.9rem;">
-                <thead class="table-light sticky-top">
-                    <tr>
-                        <th style="width: 160px;">Timestamp</th>
-                        <th style="width: 100px;">Level</th>
-                        <th style="width: 120px;">Service</th>
-                        <th style="width: 180px;">Container</th>
-                        <th>Message</th>
-                    </tr>
-                </thead>
-                <tbody id="logTableBody">
-                    <tr>
-                        <td colspan="5" class="text-center py-4 text-muted">Loading...</td>
-                    </tr>
-                </tbody>
-            </table>
+            <!-- 안쪽 래퍼: 오직 테이블 가로 횡스크롤만 독립적으로 담당 -->
+            <div class="table-responsive" style="overflow-x: auto; padding-bottom: 12px; width: 100%;">
+                <table class="table table-hover table-sm mb-0" style="font-size: 0.9rem;">
+                    <thead class="table-light sticky-top">
+                        <tr>
+                            <th style="width: 160px;">Timestamp</th>
+                            <th style="width: 100px;">Level</th>
+                            <th style="width: 120px;">Service</th>
+                            <th style="width: 180px;">Container</th>
+                            <th>Message</th>
+                        </tr>
+                    </thead>
+                    <tbody id="logTableBody">
+                        <tr>
+                            <td colspan="5" class="text-center py-4 text-muted">Loading...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
         </div>
         <div class="d-md-none" id="mobileLogList">
             <div class="text-center py-5 text-muted"><i class="fas fa-spinner fa-spin fa-2x"></i></div>
         </div>
     </div>
+</div>
+
+<!-- [추가] 로그 페이징 처리를 위한 번호 기반 페이지네이션 컨트롤러 -->
+<div class="d-flex justify-content-center mt-3 mb-4 d-none" id="logsPaginationContainer">
+    <nav aria-label="Logs navigation">
+        <ul class="pagination pagination-sm mb-0 shadow-sm" id="logsPagination" style="border-radius: 20px; overflow: hidden;">
+            <!-- JS 동적 렌더링 -->
+        </ul>
+    </nav>
 </div>
 
 <!-- 로그 상세 모달 -->
