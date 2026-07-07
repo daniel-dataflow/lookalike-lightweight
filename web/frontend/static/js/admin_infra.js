@@ -1,4 +1,5 @@
-let autoRefreshInterval = null;
+let systemRefreshInterval = null;
+let dbCloudRefreshInterval = null;
 let cpuChart = null;
 let memChart = null;
 const CHART_COLORS = [
@@ -9,32 +10,72 @@ const CHART_COLORS = [
 
 document.addEventListener('DOMContentLoaded', () => {
     initCharts();
-    refreshData();
+    
+    // 초기 로딩 시 전체 한 번 패치
+    fetchSystemHealth();
+    fetchStats();
+    fetchStream();
+    fetchDbStatus();
 
-    // Auto refresh
-    const switchEl = document.getElementById('autoRefreshSwitch');
-    const manualBtn = document.getElementById('btnManualRefresh');
-    if (switchEl.checked) startAutoRefresh();
+    // 개별 자동 갱신 스위치 요소 획득
+    const systemSwitch = document.getElementById('systemRefreshSwitch');
+    const dbCloudSwitch = document.getElementById('dbCloudRefreshSwitch');
 
-    switchEl.addEventListener('change', (e) => {
+    if (systemSwitch.checked) startSystemRefresh();
+    if (dbCloudSwitch.checked) startDbCloudRefresh();
+    updateManualBtnState();
+
+    systemSwitch.addEventListener('change', (e) => {
         if (e.target.checked) {
-            startAutoRefresh();
-            manualBtn.disabled = true;
+            startSystemRefresh();
         } else {
-            stopAutoRefresh();
-            manualBtn.disabled = false;
+            stopSystemRefresh();
         }
+        updateManualBtnState();
+    });
+
+    dbCloudSwitch.addEventListener('change', (e) => {
+        if (e.target.checked) {
+            startDbCloudRefresh();
+        } else {
+            stopDbCloudRefresh();
+        }
+        updateManualBtnState();
     });
 });
 
-function startAutoRefresh() {
-    if (autoRefreshInterval) clearInterval(autoRefreshInterval);
-    autoRefreshInterval = setInterval(refreshData, 10000); // 10초마다
+function startSystemRefresh() {
+    if (systemRefreshInterval) clearInterval(systemRefreshInterval);
+    systemRefreshInterval = setInterval(refreshSystemData, 10000); // 10초마다
 }
 
-function stopAutoRefresh() {
-    if (autoRefreshInterval) clearInterval(autoRefreshInterval);
-    autoRefreshInterval = null;
+function stopSystemRefresh() {
+    if (systemRefreshInterval) clearInterval(systemRefreshInterval);
+    systemRefreshInterval = null;
+}
+
+function startDbCloudRefresh() {
+    if (dbCloudRefreshInterval) clearInterval(dbCloudRefreshInterval);
+    dbCloudRefreshInterval = setInterval(refreshDbCloudData, 600000); // 10분마다 (과도한 쿼리 방지)
+}
+
+function stopDbCloudRefresh() {
+    if (dbCloudRefreshInterval) clearInterval(dbCloudRefreshInterval);
+    dbCloudRefreshInterval = null;
+}
+
+function updateManualBtnState() {
+    const systemSwitch = document.getElementById('systemRefreshSwitch');
+    const dbCloudSwitch = document.getElementById('dbCloudRefreshSwitch');
+    const manualBtn = document.getElementById('btnManualRefresh');
+    if (!manualBtn) return;
+    
+    // 둘 다 자동갱신이 켜져있을 때만 수동 새로고침 버튼을 비활성화
+    if (systemSwitch && dbCloudSwitch && systemSwitch.checked && dbCloudSwitch.checked) {
+        manualBtn.disabled = true;
+    } else {
+        manualBtn.disabled = false;
+    }
 }
 
 function getProgressColor(percent) {
@@ -167,19 +208,45 @@ function initCharts() {
 }
 
 /**
- * 메인 갱신 함수: 시스템 리소스 + 메트릭 데이터를 병렬 수신하여 UI 업데이트.
- * Neon DB 링 버퍼(스트림) + psutil 요약(stats) + 어드민 시스템 헬스를 병렬 호치.
+ * 서버 시스템 지표만 단독 갱신 (10초 주기)
  */
-async function refreshData() {
-    await Promise.all([
-        fetchSystemHealth(),   // 시스템 상태 (CPU/Mem/Disk/Uptime) — psutil realtime
-        fetchStats(),          // 요약 카드 (1시간 평균) — Neon DB stats
-        fetchStream()          // 시계열 차트   — Neon DB stream
-    ]);
+async function refreshSystemData() {
+    await fetchSystemHealth();
     document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString('ko-KR');
+}
 
-    // 데이터베이스 상태는 어드민 API 사용
-    fetchDbStatus();
+/**
+ * 무거운 DB 통계 및 Cloudinary, HuggingFace Space 지표 갱신 (10분 주기)
+ */
+async function refreshDbCloudData() {
+    await Promise.all([
+        fetchStats(),
+        fetchStream()
+    ]);
+    await fetchDbStatus();
+    document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString('ko-KR');
+}
+
+/**
+ * 수동 전체 새로고침
+ */
+async function refreshDataManual() {
+    const manualBtn = document.getElementById('btnManualRefresh');
+    if (manualBtn) manualBtn.disabled = true;
+    
+    try {
+        await Promise.all([
+            fetchSystemHealth(),
+            fetchStats(),
+            fetchStream()
+        ]);
+        await fetchDbStatus();
+        document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString('ko-KR');
+    } catch (e) {
+        console.error('수동 새로고침 실패:', e);
+    } finally {
+        updateManualBtnState();
+    }
 }
 
 // 시스템 상태 (psutil realtime)
@@ -690,5 +757,6 @@ function updateTable(logs) {
 
 // 페이지 언로드 시 인터벌 정리
 window.addEventListener('beforeunload', () => {
-    if (autoRefreshInterval) clearInterval(autoRefreshInterval);
+    if (systemRefreshInterval) clearInterval(systemRefreshInterval);
+    if (dbCloudRefreshInterval) clearInterval(dbCloudRefreshInterval);
 });
