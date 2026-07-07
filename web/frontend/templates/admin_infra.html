@@ -5,16 +5,20 @@
 {% block page_title %}인프라 모니터링{% endblock %}
 
 {% block header_actions %}
-<div class="d-flex align-items-center">
+<div class="d-flex align-items-center flex-wrap gap-2">
     <span class="text-muted me-2 timestamp-responsive">
         <i class="fas fa-sync-alt me-1 d-none d-md-inline"></i>
         <span id="lastUpdate">-</span>
     </span>
-    <div class="form-check form-switch me-3">
-        <input class="form-check-input" type="checkbox" id="autoRefreshSwitch" checked>
-        <label class="form-check-label small" for="autoRefreshSwitch">자동갱신</label>
+    <div class="form-check form-switch me-2">
+        <input class="form-check-input" type="checkbox" id="systemRefreshSwitch" checked>
+        <label class="form-check-label small" for="systemRefreshSwitch">서버 자동갱신 (10초)</label>
     </div>
-    <button id="btnManualRefresh" class="btn btn-refresh btn-sm btn-md-normal" onclick="refreshData()" disabled
+    <div class="form-check form-switch me-2">
+        <input class="form-check-input" type="checkbox" id="dbCloudRefreshSwitch" checked>
+        <label class="form-check-label small" for="dbCloudRefreshSwitch">DB/클라우드 자동갱신 (10분)</label>
+    </div>
+    <button id="btnManualRefresh" class="btn btn-refresh btn-sm btn-md-normal" onclick="refreshDataManual()" disabled
         title="자동갱신 OFF 시 사용 가능">
         <i class="fas fa-redo me-1"></i><span class="d-none d-md-inline">새로고침</span>
     </button>
