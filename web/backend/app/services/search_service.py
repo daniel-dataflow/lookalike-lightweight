@@ -13,15 +13,10 @@ from typing import Optional
 
 from ..database import get_pg_cursor
 from ..config import get_settings
-from .local_ml_service import local_ml_service
 
 logger = logging.getLogger(__name__)
 
 settings = get_settings()
-
-# Fashion-CLIP 모델 메모리 누수 방지용 전역 싱글톤 캐시
-_fashion_clip_model = None
-_fashion_clip_processor = None
 
 # HF Space Client 싱글톤 캐시 (메모리 및 스레드 누수 방지)
 _hf_client = None
@@ -40,62 +35,6 @@ class SearchService:
     유사 상품 검색 비즈니스 로직.
     HuggingFace Space → 임베딩 수신 → pgvector HNSW 검색.
     """
-
-    # ─────────────────────────────────────
-    # 로컬 Fashion CLIP 임베딩 (새로 추가)
-    # ─────────────────────────────────────
-    async def generate_fashion_clip_embedding(self, image_bytes: bytes) -> Optional[list[float]]:
-        """
-        로컬 Fashion CLIP 모델로 이미지 임베딩 생성 (512d)
-        패션 특화 CLIP 모델 사용 → 정확도 향상
-        (메모리 누수 방지 및 512MB RAM OOM 방어 처리가 적용됨)
-        """
-        # USE_LOCAL_ML이 비활성화 상태면 대형 로컬 모델 로딩 자체를 원천 차단 (Render OOM 방어)
-        if not settings.USE_LOCAL_ML:
-            logger.info("ℹ️ 로컬 ML 비활성화 모드 -> 로컬 Fashion-CLIP 모델 로드 스킵 (원격 HF Space 우선)")
-            return None
-
-        global _fashion_clip_model, _fashion_clip_processor
-        try:
-            from PIL import Image
-            import torch
-            from transformers import CLIPModel, CLIPProcessor
-            
-            # 이미지 로드
-            pil_img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-            
-            # 싱글톤 캐시 로드
-            if _fashion_clip_model is None or _fashion_clip_processor is None:
-                logger.info("🔄 [Singleton] Fashion-CLIP 모델 최초 로딩 중...")
-                _fashion_clip_model = CLIPModel.from_pretrained("patrickjohncyh/fashion-clip")
-                _fashion_clip_processor = CLIPProcessor.from_pretrained("patrickjohncyh/fashion-clip")
-                _fashion_clip_model.eval()
-                
-                # GPU 사용 가능 시 자동 전환
-                device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-                _fashion_clip_model = _fashion_clip_model.to(device)
-                logger.info(f"✅ [Singleton] Fashion-CLIP 모델 메모리 적재 완료 (디바이스: {device})")
-            
-            device = _fashion_clip_model.device
-            
-            # 이미지 전처리 및 임베딩 생성
-            inputs = _fashion_clip_processor(images=pil_img, return_tensors="pt").to(device)
-            with torch.no_grad():
-                features = _fashion_clip_model.get_image_features(**inputs)
-            
-            # L2 정규화 (코사인 유사도 매칭 최적화)
-            embedding = torch.nn.functional.normalize(features, p=2, dim=1)
-            embedding_list = embedding[0].cpu().tolist()
-            
-            logger.info(f"✅ Fashion-CLIP 임베딩 생성: dim={len(embedding_list)}")
-            return embedding_list
-            
-        except ImportError:
-            logger.warning("❌ torch/transformers 미설치 (로컬 ML 추론 스킵)")
-            return None
-        except Exception as e:
-            logger.error(f"❌ Fashion-CLIP 임베딩 생성 실패: {e}")
-            return None
 
     # ──────────────────────────────────────
     # 공개 검색 진입점
@@ -167,25 +106,7 @@ class SearchService:
                 "status":    "success" | "error",
             }
         """
-        # ── 1. 로컬 ML 추론 시도 ────────────────────────────────────
-        if settings.USE_LOCAL_ML:
-            try:
-                yolo_path = os.path.join(BASE_DIR, settings.LOCAL_YOLO_PATH)
-                
-                # 싱글톤 모델 로딩 및 준비 상태 검증
-                if not local_ml_service.is_ready:
-                    local_ml_service.load_models(yolo_path)
-
-                if local_ml_service.is_ready:
-                    logger.info("⚡ 로컬 ML 추론 실행 (YOLOv8 + Fashion-CLIP)")
-                    local_res = await local_ml_service.predict_local(image_bytes)
-                    return local_res
-                else:
-                    logger.warning("⚠️ 로컬 ML 서비스 로드 실패 → 외부 HuggingFace Space 호출 진행")
-            except Exception as e:
-                logger.error(f"❌ 로컬 ML 추론 중 예외 발생, 외부 HF Space로 Fallback: {e}", exc_info=True)
-
-        # ── 2. 원격 HF Space 호출 (Fallback) ───────────────────────────
+        # ── 원격 HF Space 호출 ───────────────────────────
         if not HF_SPACE_BASE:
             logger.warning("HF_SPACE_URL 미설정 → 이미지 임베딩 불가")
             return {"embedding": None, "boxes": [], "label": "unknown", "category": None}
