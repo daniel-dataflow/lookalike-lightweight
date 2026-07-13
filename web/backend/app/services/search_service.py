@@ -23,6 +23,9 @@ settings = get_settings()
 _fashion_clip_model = None
 _fashion_clip_processor = None
 
+# HF Space Client 싱글톤 캐시 (메모리 및 스레드 누수 방지)
+_hf_client = None
+
 # 프로젝트 루트 경로 (ml-models/backup/best.pt 절대경로 탐색용)
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", ".."))
 
@@ -210,8 +213,12 @@ class SearchService:
                 # handle_file(): gradio_client v1.x 표준 이미지 전달 방식
                 # HF Space 콜드스타트 대비 타임아웃을 넉넉히 설정
                 def _predict():
-                    client = Client(HF_SPACE_BASE)
-                    return client.predict(
+                    global _hf_client
+                    if _hf_client is None:
+                        logger.info("🔄 [Singleton] HF Space Client 최초 연결 생성 중...")
+                        _hf_client = Client(HF_SPACE_BASE)
+                    
+                    return _hf_client.predict(
                         image=handle_file(tmp_path),
                         api_name="/predict",
                     )

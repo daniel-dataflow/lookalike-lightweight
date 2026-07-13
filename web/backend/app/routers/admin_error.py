@@ -150,21 +150,20 @@ async def resolve_errors(req: ResolveRequest = Body(...)):
                     return None
 
             async def get_image_vector(img_url):
-                from gradio_client import Client, handle_file
                 try:
-                    def _predict():
-                        client = Client("https://daniel0708-lookalike-yolo.hf.space")
-                        with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp:
-                            urllib.request.urlretrieve(img_url, tmp.name)
-                            tmp_path = tmp.name
-                        try:
-                            res = client.predict(image=handle_file(tmp_path), api_name="/predict")
-                            return res.get("embedding")
-                        finally:
-                            if os.path.exists(tmp_path):
-                                os.remove(tmp_path)
-                    return await asyncio.to_thread(_predict)
-                except Exception:
+                    async with httpx.AsyncClient(timeout=15.0) as client:
+                        resp = await client.get(img_url)
+                        resp.raise_for_status()
+                        img_bytes = resp.content
+                    
+                    from ..services.search_service import search_service
+                    res = await search_service.call_hf_space_predict(img_bytes)
+                    if isinstance(res, dict):
+                        return res.get("embedding")
+                    return None
+                except Exception as e:
+                    import logging
+                    logging.getLogger(__name__).warning(f"get_image_vector 실패: {e}")
                     return None
 
             for p in products:
