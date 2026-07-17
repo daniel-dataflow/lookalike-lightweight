@@ -2,6 +2,9 @@ let systemRefreshInterval = null;
 let dbCloudRefreshInterval = null;
 let cpuChart = null;
 let memChart = null;
+let systemAutoDisableTimer = null;
+let dbAutoDisableTimer = null;
+const AUTO_DISABLE_MS = 60 * 60 * 1000; // 1 hour
 const CHART_COLORS = [
     '#3366CC', '#22B573', '#FF8C1A', '#E63946', '#8E44AD', '#0EA5A0', '#D63384'
 ];
@@ -21,8 +24,38 @@ document.addEventListener('DOMContentLoaded', () => {
     const systemSwitch = document.getElementById('systemRefreshSwitch');
     const dbCloudSwitch = document.getElementById('dbCloudRefreshSwitch');
 
-    if (systemSwitch.checked) startSystemRefresh();
-    if (dbCloudSwitch.checked) startDbCloudRefresh();
+    // 자동 새로고침 기본값 비활성화
+    // 단, 사용자가 활성화한 경우 로컬스토리지에 저장된 활성화 시각이 1시간 이내면 복원
+    const SYS_KEY = 'systemRefreshEnabledAt';
+    const DB_KEY = 'dbCloudRefreshEnabledAt';
+    function isStillEnabled(key) {
+        try {
+            const ts = localStorage.getItem(key);
+            if (!ts) return false;
+            const t = parseInt(ts, 10);
+            if (isNaN(t)) { localStorage.removeItem(key); return false; }
+            if (Date.now() - t < AUTO_DISABLE_MS) return true;
+            localStorage.removeItem(key);
+            return false;
+        } catch (e) {
+            return false;
+        }
+    }
+
+    if (isStillEnabled(SYS_KEY)) {
+        systemSwitch.checked = true;
+        startSystemRefresh();
+    } else {
+        systemSwitch.checked = false;
+    }
+
+    if (isStillEnabled(DB_KEY)) {
+        dbCloudSwitch.checked = true;
+        startDbCloudRefresh();
+    } else {
+        dbCloudSwitch.checked = false;
+    }
+
     updateManualBtnState();
 
     systemSwitch.addEventListener('change', (e) => {
@@ -47,21 +80,43 @@ document.addEventListener('DOMContentLoaded', () => {
 function startSystemRefresh() {
     if (systemRefreshInterval) clearInterval(systemRefreshInterval);
     systemRefreshInterval = setInterval(refreshSystemData, 10000); // 10초마다
+    try { localStorage.setItem('systemRefreshEnabledAt', Date.now().toString()); } catch (e) {}
+    if (systemAutoDisableTimer) clearTimeout(systemAutoDisableTimer);
+    systemAutoDisableTimer = setTimeout(() => {
+        const sw = document.getElementById('systemRefreshSwitch');
+        if (sw) sw.checked = false;
+        stopSystemRefresh();
+        try { localStorage.removeItem('systemRefreshEnabledAt'); } catch (e) {}
+        updateManualBtnState();
+    }, AUTO_DISABLE_MS);
 }
 
 function stopSystemRefresh() {
     if (systemRefreshInterval) clearInterval(systemRefreshInterval);
     systemRefreshInterval = null;
+    if (systemAutoDisableTimer) { clearTimeout(systemAutoDisableTimer); systemAutoDisableTimer = null; }
+    try { localStorage.removeItem('systemRefreshEnabledAt'); } catch (e) {}
 }
 
 function startDbCloudRefresh() {
     if (dbCloudRefreshInterval) clearInterval(dbCloudRefreshInterval);
     dbCloudRefreshInterval = setInterval(refreshDbCloudData, 600000); // 10분마다 (과도한 쿼리 방지)
+    try { localStorage.setItem('dbCloudRefreshEnabledAt', Date.now().toString()); } catch (e) {}
+    if (dbAutoDisableTimer) clearTimeout(dbAutoDisableTimer);
+    dbAutoDisableTimer = setTimeout(() => {
+        const sw = document.getElementById('dbCloudRefreshSwitch');
+        if (sw) sw.checked = false;
+        stopDbCloudRefresh();
+        try { localStorage.removeItem('dbCloudRefreshEnabledAt'); } catch (e) {}
+        updateManualBtnState();
+    }, AUTO_DISABLE_MS);
 }
 
 function stopDbCloudRefresh() {
     if (dbCloudRefreshInterval) clearInterval(dbCloudRefreshInterval);
     dbCloudRefreshInterval = null;
+    if (dbAutoDisableTimer) { clearTimeout(dbAutoDisableTimer); dbAutoDisableTimer = null; }
+    try { localStorage.removeItem('dbCloudRefreshEnabledAt'); } catch (e) {}
 }
 
 function updateManualBtnState() {
