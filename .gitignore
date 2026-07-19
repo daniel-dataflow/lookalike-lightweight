@@ -257,3 +257,11 @@ scratch/
 supabase/
 start_local_server.bat
 scratch_*.py
+
+# --- Neon DB 복제 (neon_db_replicate.sh) ---
+neon_dump_*/
+
+# --- Cloudinary 이미지 복제 (migrate_cloudinary.sh) ---
+progress.json
+failed.csv
+log.txt
