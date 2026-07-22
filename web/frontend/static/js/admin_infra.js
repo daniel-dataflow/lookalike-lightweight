@@ -523,14 +523,12 @@ async function fetchDbStatus() {
 
 
 
-        // 운영체제 표시 동적 반영 (백엔드 실제 감지 운영체제 바인딩, 하드코딩 제거)
+        // 운영체제 표시 동적 반영 (백엔드 실제 파싱 운영체제 명칭 바인딩 및 툴팁 제공)
         const dynamicOs = (data && data.os_name) || (metrics && metrics.length > 0 && metrics[0].os_name) || null;
-        if (dynamicOs) {
-            document.getElementById('osName').textContent = dynamicOs;
-        } else if (data.environment === 'local' || data.environment === 'dev') {
-            document.getElementById('osName').textContent = 'Local OS';
-        } else {
-            document.getElementById('osName').textContent = 'Linux (Render)';
+        const osEl = document.getElementById('osName');
+        if (osEl && dynamicOs) {
+            osEl.textContent = dynamicOs;
+            osEl.setAttribute('title', dynamicOs);
         }
 
         // Cloudinary 상태 및 리소스 반영

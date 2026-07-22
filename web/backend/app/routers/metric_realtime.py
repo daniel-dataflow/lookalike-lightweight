@@ -23,35 +23,36 @@ _START_TIME = time.time()
 
 def get_os_name() -> str:
     """
-    운영체제 명칭 및 버전 동적 수집 (하드코딩 방지)
-    - Windows: Windows 10, Windows 11 등
-    - macOS: macOS 14.5 등
-    - Linux (Render): Linux (Render)
-    - Linux (Local): Ubuntu 22.04 LTS 등 /etc/os-release 상세명
+    실제 운영체제(OS) 배포판 명칭 및 버전을 정밀 동적 파싱
+    (예: Linux (Ubuntu 22.04.4 LTS), Linux (Debian 12), macOS (14.5), Windows (10.0.19045) 등)
     """
-    import platform, os
-    sys_name = platform.system()
-    if sys_name == "Windows":
-        release = platform.release()
-        return f"Windows {release}" if release else "Windows"
-    elif sys_name == "Darwin":
-        mac_ver = platform.mac_ver()[0]
-        return f"macOS {mac_ver}" if mac_ver else "macOS"
-    elif sys_name == "Linux":
-        is_render = bool(os.getenv("RENDER") or os.getenv("RENDER_SERVICE_ID"))
-        if is_render:
-            return "Linux (Render)"
-        if os.path.exists("/etc/os-release"):
-            try:
-                with open("/etc/os-release", "r") as f:
-                    for line in f:
-                        if line.startswith("PRETTY_NAME="):
-                            return line.split("=", 1)[1].strip().strip('"')
-            except Exception:
-                pass
-        rel = platform.release()
-        return f"Linux ({rel})" if rel else "Linux"
-    return sys_name or "Unknown OS"
+    try:
+        import platform, os
+        if os.path.exists('/etc/os-release'):
+            os_data = {}
+            with open('/etc/os-release', 'r') as f:
+                for line in f:
+                    if '=' in line:
+                        k, v = line.strip().split('=', 1)
+                        os_data[k] = v.strip('"\'')
+            pretty_name = os_data.get('PRETTY_NAME') or os_data.get('NAME')
+            if pretty_name:
+                return f"Linux ({pretty_name})"
+
+        sys_name = platform.system()
+        rel_ver = platform.release()
+
+        if sys_name == "Linux":
+            return f"Linux ({rel_ver})"
+        elif sys_name == "Darwin":
+            return f"macOS ({platform.mac_ver()[0] or rel_ver})"
+        elif sys_name == "Windows":
+            return f"Windows ({platform.version() or rel_ver})"
+
+        return f"{sys_name} {rel_ver}".strip()
+    except Exception:
+        import platform
+        return platform.system() or "Linux"
 
 
 @router.get("/realtime")
