@@ -76,6 +76,7 @@ class SystemHealthResponse(BaseModel):
     db_size_mb: float = 0.0
     app_version: str = ""
     environment: str = ""
+    os_name: str = ""
     # Neon DB 상세 모니터링 필드 추가
     db_dev_size_mb: Optional[float] = 0.0
     db_dev_dw_size_mb: Optional[float] = 0.0

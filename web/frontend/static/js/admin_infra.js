@@ -336,6 +336,7 @@ async function fetchSystemHealth() {
             cpuInfo.push(`${curGHz}GHz`);
         }
 
+        // CPU 할당 정보 표기 (클라우드/컨테이너 제한이 있는 경우만 '0.15 CPU' 표기, 로컬 100% 할당 시 생략)
         if (m.cpu_limit !== undefined && m.cpu_limit !== null && m.cpu_limit > 0) {
             cpuInfo.push(`${m.cpu_limit} CPU`);
         }
@@ -522,9 +523,12 @@ async function fetchDbStatus() {
 
 
 
-        // 운영체제 표시 동적 반영
-        if (data.environment === 'local' || data.environment === 'dev') {
-            document.getElementById('osName').textContent = 'Windows';
+        // 운영체제 표시 동적 반영 (백엔드 실제 감지 운영체제 바인딩, 하드코딩 제거)
+        const dynamicOs = (data && data.os_name) || (metrics && metrics.length > 0 && metrics[0].os_name) || null;
+        if (dynamicOs) {
+            document.getElementById('osName').textContent = dynamicOs;
+        } else if (data.environment === 'local' || data.environment === 'dev') {
+            document.getElementById('osName').textContent = 'Local OS';
         } else {
             document.getElementById('osName').textContent = 'Linux (Render)';
         }
