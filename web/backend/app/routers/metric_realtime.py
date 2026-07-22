@@ -120,16 +120,16 @@ async def get_realtime_metrics():
                     import re
                     with open("/proc/cpuinfo", "r") as f:
                         content = f.read()
-                        match = re.search(r"model name.*@\s*([\d\.]+)GHz", content, re.IGNORECASE)
+                        match = re.search(r"model name.*@\s*([\d\.]+)\s*GHz", content, re.IGNORECASE)
                         if not match:
-                            match = re.search(r"model name.*?\b([\d\.]+)GHz", content, re.IGNORECASE)
+                            match = re.search(r"model name.*?\b([\d\.]+)\s*GHz", content, re.IGNORECASE)
                         if match:
                             freq_base = float(match.group(1)) * 1000.0
                 except Exception:
                     pass
 
             # Linux sysfs cpufreq 항목 탐색 (base_frequency, cpuinfo_max_freq, scaling_max_freq)
-            if freq_base <= 0 and freq_max <= 0:
+            if freq_base <= 0:
                 for sys_path in [
                     "/sys/devices/system/cpu/cpu0/cpufreq/base_frequency",
                     "/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq",
@@ -146,7 +146,7 @@ async def get_realtime_metrics():
                             pass
 
             # lscpu 명령어 fallback
-            if freq_base <= 0 and freq_max <= 0:
+            if freq_base <= 0:
                 try:
                     import subprocess, re
                     out = subprocess.check_output(["lscpu"], stderr=subprocess.DEVNULL, timeout=1).decode("utf-8")
@@ -157,6 +157,10 @@ async def get_realtime_metrics():
                             freq_base = mhz_val
                 except Exception:
                     pass
+
+            # psutil freq_max fallback
+            if freq_base <= 0 and freq_max > 0:
+                freq_base = freq_max
             
             # 메모리 수집 및 cgroups 기반 한도 동적 계산
             memory_limit = None
