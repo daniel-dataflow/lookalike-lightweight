@@ -14,6 +14,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from ..config.admin import SYSTEM_CACHE_TTL, DB_CACHE_TTL, INFRA_CACHE_TTL
 from ..config import get_settings
 from ..database import get_pg_cursor, get_dw_cursor
+from .metric_realtime import get_os_name
 from ..models.admin import (
     PipelineRunResponse,
     PipelineStatusResponse,
@@ -545,6 +546,7 @@ def _get_system_health_raw() -> SystemHealthResponse:
         db_size_mb=round(db_size / 1024 / 1024, 2),
         app_version=settings.APP_VERSION,
         environment=settings.APP_ENV,
+        os_name=get_os_name(),
         db_dev_size_mb=db_dev_size_mb,
         db_dev_dw_size_mb=db_dev_dw_size_mb,
         db_dev_total_size_mb=db_dev_total_size_mb,

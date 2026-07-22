@@ -21,6 +21,39 @@ router = APIRouter(
 _START_TIME = time.time()
 
 
+def get_os_name() -> str:
+    """
+    운영체제 명칭 및 버전 동적 수집 (하드코딩 방지)
+    - Windows: Windows 10, Windows 11 등
+    - macOS: macOS 14.5 등
+    - Linux (Render): Linux (Render)
+    - Linux (Local): Ubuntu 22.04 LTS 등 /etc/os-release 상세명
+    """
+    import platform, os
+    sys_name = platform.system()
+    if sys_name == "Windows":
+        release = platform.release()
+        return f"Windows {release}" if release else "Windows"
+    elif sys_name == "Darwin":
+        mac_ver = platform.mac_ver()[0]
+        return f"macOS {mac_ver}" if mac_ver else "macOS"
+    elif sys_name == "Linux":
+        is_render = bool(os.getenv("RENDER") or os.getenv("RENDER_SERVICE_ID"))
+        if is_render:
+            return "Linux (Render)"
+        if os.path.exists("/etc/os-release"):
+            try:
+                with open("/etc/os-release", "r") as f:
+                    for line in f:
+                        if line.startswith("PRETTY_NAME="):
+                            return line.split("=", 1)[1].strip().strip('"')
+            except Exception:
+                pass
+        rel = platform.release()
+        return f"Linux ({rel})" if rel else "Linux"
+    return sys_name or "Unknown OS"
+
+
 @router.get("/realtime")
 async def get_realtime_metrics():
     """
@@ -65,6 +98,13 @@ async def get_realtime_metrics():
                 except Exception:
                     pass
 
+            # CPU 할당 퍼센트 계산 (1 vCPU = 100%, 0.15 vCPU = 15%)
+            cpu_limit_percent = round(cpu_limit * 100, 1) if cpu_limit else 100.0
+            # 할당량 대비 현재 점유율 %
+            cpu_quota_usage_percent = (
+                round((cpu / (cpu_limit * 100)) * 100, 1) if (cpu_limit and cpu_limit > 0) else round(cpu, 1)
+            )
+
             # 호스트 물리 하드웨어 코어 및 주파수 수집
             physical_cores = psutil.cpu_count(logical=False) or 0
             logical_cores = psutil.cpu_count(logical=True) or 0
@@ -73,15 +113,47 @@ async def get_realtime_metrics():
             freq_max = freq.max if freq else 0.0
             freq_base = 0.0
 
-            # /proc/cpuinfo 모델명에서 정식 베이스 클록(예: 1.60GHz) 파싱 시도
+            # /proc/cpuinfo 모델명, sysfs, lscpu에서 정식 베이스/최대 클록 파싱 시도
             if os.path.exists("/proc/cpuinfo"):
                 try:
                     import re
                     with open("/proc/cpuinfo", "r") as f:
                         content = f.read()
                         match = re.search(r"model name.*@\s*([\d\.]+)GHz", content, re.IGNORECASE)
+                        if not match:
+                            match = re.search(r"model name.*?\b([\d\.]+)GHz", content, re.IGNORECASE)
                         if match:
                             freq_base = float(match.group(1)) * 1000.0
+                except Exception:
+                    pass
+
+            # Linux sysfs cpufreq 항목 탐색 (base_frequency, cpuinfo_max_freq, scaling_max_freq)
+            if freq_base <= 0 and freq_max <= 0:
+                for sys_path in [
+                    "/sys/devices/system/cpu/cpu0/cpufreq/base_frequency",
+                    "/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq",
+                    "/sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq"
+                ]:
+                    if os.path.exists(sys_path):
+                        try:
+                            with open(sys_path, "r") as sf:
+                                khz = float(sf.read().strip())
+                                if khz > 0:
+                                    freq_base = khz / 1000.0
+                                    break
+                        except Exception:
+                            pass
+
+            # lscpu 명령어 fallback
+            if freq_base <= 0 and freq_max <= 0:
+                try:
+                    import subprocess, re
+                    out = subprocess.check_output(["lscpu"], stderr=subprocess.DEVNULL, timeout=1).decode("utf-8")
+                    mhz_match = re.search(r"CPU (?:base|max) MHz\s*:\s*([\d\.]+)", out, re.IGNORECASE)
+                    if mhz_match:
+                        mhz_val = float(mhz_match.group(1))
+                        if mhz_val > 0:
+                            freq_base = mhz_val
                 except Exception:
                     pass
             
@@ -148,23 +220,26 @@ async def get_realtime_metrics():
             uptime = time.time() - _START_TIME
 
             return {
-                "container":      "fastapi",
-                "service":        "FastAPI",
-                "cpu_percent":    round(cpu, 2),
-                "cpu_limit":      cpu_limit,
-                "cpu_cores_physical": physical_cores,
-                "cpu_cores_logical":  logical_cores,
-                "cpu_freq_current":   round(freq_current, 2),
-                "cpu_freq_max":       round(freq_max, 2),
-                "cpu_freq_base":      round(freq_base, 2),
-                "memory_usage":   memory_usage,
-                "memory_percent": memory_percent,
-                "memory_limit":   memory_limit,
-                "disk_used":      disk_used,
-                "disk_total":     disk_total,
-                "disk_percent":   disk_percent,
-                "uptime_seconds": round(uptime, 2),
-                "status":         "running",
+                "container":               "fastapi",
+                "service":                 "FastAPI",
+                "cpu_percent":             round(cpu, 2),
+                "cpu_limit":               cpu_limit,
+                "cpu_limit_percent":       cpu_limit_percent,
+                "cpu_quota_usage_percent": cpu_quota_usage_percent,
+                "cpu_cores_physical":      physical_cores,
+                "cpu_cores_logical":       logical_cores,
+                "cpu_freq_current":        round(freq_current, 2),
+                "cpu_freq_max":            round(freq_max, 2),
+                "cpu_freq_base":           round(freq_base, 2),
+                "memory_usage":            memory_usage,
+                "memory_percent":          memory_percent,
+                "memory_limit":            memory_limit,
+                "disk_used":               disk_used,
+                "disk_total":              disk_total,
+                "disk_percent":            disk_percent,
+                "uptime_seconds":          round(uptime, 2),
+                "os_name":                 get_os_name(),
+                "status":                  "running",
             }
 
         snap = await asyncio.to_thread(_snap)
