@@ -343,7 +343,12 @@ async function fetchSystemHealth() {
         if (m.cpu_cores_physical > 0 && m.cpu_cores_logical > 0) {
             cpuInfo.push(`(${m.cpu_cores_physical}C/${m.cpu_cores_logical}T)`);
         }
-        document.getElementById('cpuDetail').textContent = cpuInfo.join(' | ').replace(' | (', ' (') || 'CPU 정보 없음';
+        const cpuText = cpuInfo.join(' | ').replace(' | (', ' (') || 'CPU 정보 없음';
+        const cpuDetailEl = document.getElementById('cpuDetail');
+        if (cpuDetailEl) {
+            cpuDetailEl.textContent = cpuText;
+            cpuDetailEl.setAttribute('title', cpuText);
+        }
 
         // 메모리 카드
         const memUsedGB = (m.memory_usage / 1024 / 1024 / 1024).toFixed(1);
