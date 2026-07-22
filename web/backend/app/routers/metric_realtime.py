@@ -158,6 +158,40 @@ async def get_realtime_metrics():
                 except Exception:
                     pass
 
+            # 서버/클라우드 CPU 모델명 기반 기본 정격 클럭 파싱 fallback (Render 등 가상화 컨테이너용)
+            if freq_base <= 0 and os.path.exists("/proc/cpuinfo"):
+                try:
+                    import re
+                    with open("/proc/cpuinfo", "r") as f:
+                        cpu_content = f.read()
+                    
+                    model_match = re.search(r"model name\s*:\s*(.+)", cpu_content, re.IGNORECASE)
+                    if model_match:
+                        model_str = model_match.group(1).strip()
+                        ghz_match = re.search(r"([\d\.]+)\s*GHz", model_str, re.IGNORECASE)
+                        if ghz_match:
+                            freq_base = float(ghz_match.group(1)) * 1000.0
+                        else:
+                            known_models = {
+                                "EPYC 7763": 2450.0,
+                                "EPYC 7B12": 2250.0,
+                                "EPYC 7571": 2200.0,
+                                "EPYC 7R32": 2800.0,
+                                "EPYC": 2400.0,
+                                "Haswell": 2400.0,
+                                "Broadwell": 2400.0,
+                                "Skylake": 2500.0,
+                                "Cascadelake": 2500.0,
+                                "Ice Lake": 2600.0,
+                                "Xeon": 2400.0,
+                            }
+                            for key, base_mhz in known_models.items():
+                                if key.lower() in model_str.lower():
+                                    freq_base = base_mhz
+                                    break
+                except Exception:
+                    pass
+
             # psutil freq_max fallback
             if freq_base <= 0 and freq_max > 0:
                 freq_base = freq_max
