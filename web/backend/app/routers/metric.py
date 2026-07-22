@@ -55,7 +55,7 @@ def _collect_and_store() -> dict:
 # ──────────────────────────────────────
 async def start_metric_collector():
     """앱 수명 동안 5분마다 메트릭 수집. Render 무료 플랜 RAM 부담 최소화."""
-    # 첫 측정 시 cpu_percent 기준값 초기화 (interval=None 사용 전 1회 예열)
+    # 첫 측정 시 cpu_percent 기준값 초기화 (interval=0.1 사용 전 1회 예열)
     psutil.cpu_percent(interval=0.1)
     logger.info("📊 infra 메트릭 수집기 시작 (5분 주기)")
 
