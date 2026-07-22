@@ -114,7 +114,7 @@ async def get_realtime_metrics():
             freq_max = freq.max if freq else 0.0
             freq_base = 0.0
 
-            # /proc/cpuinfo 모델명, sysfs, lscpu에서 정식 베이스/최대 클록 파싱 시도
+            # 1단계: /proc/cpuinfo 명시적 수치 파싱 (@ 3.60GHz)
             if os.path.exists("/proc/cpuinfo"):
                 try:
                     import re
@@ -128,10 +128,11 @@ async def get_realtime_metrics():
                 except Exception:
                     pass
 
-            # Linux sysfs cpufreq 항목 탐색 (base_frequency, cpuinfo_max_freq, scaling_max_freq)
+            # 2단계: Linux 커널 sysfs 직접 파싱 (base_frequency, bios_limit, cpuinfo_max_freq, scaling_max_freq)
             if freq_base <= 0:
                 for sys_path in [
                     "/sys/devices/system/cpu/cpu0/cpufreq/base_frequency",
+                    "/sys/devices/system/cpu/cpu0/cpufreq/bios_limit",
                     "/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq",
                     "/sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq"
                 ]:
@@ -145,12 +146,12 @@ async def get_realtime_metrics():
                         except Exception:
                             pass
 
-            # lscpu 명령어 fallback
+            # 3단계: lscpu CLI 명령어 파싱 (CPU max MHz / CPU base MHz)
             if freq_base <= 0:
                 try:
                     import subprocess, re
-                    out = subprocess.check_output(["lscpu"], stderr=subprocess.DEVNULL, timeout=1).decode("utf-8")
-                    mhz_match = re.search(r"CPU (?:base|max) MHz\s*:\s*([\d\.]+)", out, re.IGNORECASE)
+                    out = subprocess.check_output(["lscpu"], stderr=subprocess.DEVNULL, timeout=1).decode("utf-8", errors="ignore")
+                    mhz_match = re.search(r"CPU (?:max|base) MHz\s*:\s*([\d\.]+)", out, re.IGNORECASE)
                     if mhz_match:
                         mhz_val = float(mhz_match.group(1))
                         if mhz_val > 0:
@@ -158,7 +159,11 @@ async def get_realtime_metrics():
                 except Exception:
                     pass
 
-            # 서버/클라우드 CPU 모델명 기반 기본 정격 클럭 파싱 fallback (Render 등 가상화 컨테이너용)
+            # 4단계: psutil.cpu_freq().max 커널 시스템 콜
+            if freq_base <= 0 and freq_max > 0:
+                freq_base = freq_max
+
+            # 5단계: 클라우드 CPU 모델명 딕셔너리 매핑 DB (known_models) (시스템 파싱 전면 차단 시 차선책)
             if freq_base <= 0 and os.path.exists("/proc/cpuinfo"):
                 try:
                     import re
@@ -183,7 +188,13 @@ async def get_realtime_metrics():
                                 "Skylake": 2500.0,
                                 "Cascadelake": 2500.0,
                                 "Ice Lake": 2600.0,
+                                "Sapphire": 2500.0,
                                 "Xeon": 2400.0,
+                                "Graviton": 2500.0,
+                                "Ampere": 2800.0,
+                                "Core": 2500.0,
+                                "Ryzen": 3600.0,
+                                "Apple": 3200.0,
                             }
                             for key, base_mhz in known_models.items():
                                 if key.lower() in model_str.lower():
@@ -192,9 +203,9 @@ async def get_realtime_metrics():
                 except Exception:
                     pass
 
-            # psutil freq_max fallback
-            if freq_base <= 0 and freq_max > 0:
-                freq_base = freq_max
+            # 6단계: 최종 기본값 Safety Fallback (2.40GHz 보장)
+            if freq_base <= 0:
+                freq_base = 2400.0
             
             # 메모리 수집 및 cgroups 기반 한도 동적 계산
             memory_limit = None
