@@ -65,17 +65,25 @@ async def get_realtime_metrics():
                 except Exception:
                     pass
 
-            if cpu_limit is not None and cpu_limit > 0:
-                # 격리된 가상 환경: cgroup으로 감지된 정확한 vCPU 수 설정 (예: Render 0.1 CPU)
-                physical_cores = max(1, int(cpu_limit))
-                logical_cores = cpu_limit
-                freq_current = 0.0
-            else:
-                # 일반 호스트 환경: 실제 물리 하드웨어 조회
-                physical_cores = psutil.cpu_count(logical=False) or 0
-                logical_cores = psutil.cpu_count(logical=True) or 0
-                freq = psutil.cpu_freq()
-                freq_current = freq.current if freq else 0.0
+            # 호스트 물리 하드웨어 코어 및 주파수 수집
+            physical_cores = psutil.cpu_count(logical=False) or 0
+            logical_cores = psutil.cpu_count(logical=True) or 0
+            freq = psutil.cpu_freq()
+            freq_current = freq.current if freq else 0.0
+            freq_max = freq.max if freq else 0.0
+            freq_base = 0.0
+
+            # /proc/cpuinfo 모델명에서 정식 베이스 클록(예: 1.60GHz) 파싱 시도
+            if os.path.exists("/proc/cpuinfo"):
+                try:
+                    import re
+                    with open("/proc/cpuinfo", "r") as f:
+                        content = f.read()
+                        match = re.search(r"model name.*@\s*([\d\.]+)GHz", content, re.IGNORECASE)
+                        if match:
+                            freq_base = float(match.group(1)) * 1000.0
+                except Exception:
+                    pass
             
             # 메모리 수집 및 cgroups 기반 한도 동적 계산
             memory_limit = None
@@ -143,9 +151,12 @@ async def get_realtime_metrics():
                 "container":      "fastapi",
                 "service":        "FastAPI",
                 "cpu_percent":    round(cpu, 2),
+                "cpu_limit":      cpu_limit,
                 "cpu_cores_physical": physical_cores,
                 "cpu_cores_logical":  logical_cores,
                 "cpu_freq_current":   round(freq_current, 2),
+                "cpu_freq_max":       round(freq_max, 2),
+                "cpu_freq_base":      round(freq_base, 2),
                 "memory_usage":   memory_usage,
                 "memory_percent": memory_percent,
                 "memory_limit":   memory_limit,

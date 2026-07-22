@@ -317,13 +317,32 @@ async function fetchSystemHealth() {
         document.getElementById('cpuProgress').style.width = `${m.cpu_percent}%`;
         document.getElementById('cpuProgress').className = `progress-bar ${getProgressColor(m.cpu_percent)}`;
 
-        // CPU 코어 및 사양 정보 출력
+        // CPU 코어 및 사양 정보 출력: [실제 스펙 기준 클록] | [실시간 작동클록] | (코어/스레드)
         const cpuInfo = [];
-        if (m.cpu_freq_current > 0) cpuInfo.push(`${(m.cpu_freq_current / 1000).toFixed(2)}GHz`);
-        if (m.cpu_cores_physical > 0 && m.cpu_cores_logical > 0) {
-            cpuInfo.push(`${m.cpu_cores_physical}C/${m.cpu_cores_logical}T`);
+        
+        const curGHz = m.cpu_freq_current > 0 ? (m.cpu_freq_current / 1000).toFixed(2) : null;
+        const baseGHz = m.cpu_freq_base > 0 ? (m.cpu_freq_base / 1000).toFixed(2) : null;
+        const maxGHz = m.cpu_freq_max > 0 ? (m.cpu_freq_max / 1000).toFixed(2) : null;
+
+        // 정식 스펙 클록 (예: 1.60GHz)
+        const specGHz = baseGHz || maxGHz;
+        if (specGHz) {
+            if (curGHz && curGHz !== specGHz) {
+                cpuInfo.push(`${curGHz} / ${specGHz}GHz`);
+            } else {
+                cpuInfo.push(`${specGHz}GHz`);
+            }
+        } else if (curGHz) {
+            cpuInfo.push(`${curGHz}GHz`);
         }
-        document.getElementById('cpuDetail').textContent = cpuInfo.join(' | ') || 'CPU 정보 없음';
+
+        if (m.cpu_limit !== undefined && m.cpu_limit !== null && m.cpu_limit > 0) {
+            cpuInfo.push(`${m.cpu_limit} CPU`);
+        }
+        if (m.cpu_cores_physical > 0 && m.cpu_cores_logical > 0) {
+            cpuInfo.push(`(${m.cpu_cores_physical}C/${m.cpu_cores_logical}T)`);
+        }
+        document.getElementById('cpuDetail').textContent = cpuInfo.join(' | ').replace(' | (', ' (') || 'CPU 정보 없음';
 
         // 메모리 카드
         const memUsedGB = (m.memory_usage / 1024 / 1024 / 1024).toFixed(1);
