@@ -3,6 +3,7 @@
 > **"Similar style, better price"** — Upload one image to find visually similar fashion items and compare prices across stores instantly.
 
 **Boot camp team project (top award) → Solo refactor → $0/month, always-on service**
+**URL : [lookalike-ml.onrender.com](https://lookalike-ml.onrender.com)**
 
 **[🇰🇷 한국어 버전 →](./README.md)**
 
@@ -109,7 +110,7 @@ Each stage was driven by a real constraint. Here's how each one was solved.
 
 ---
 
-### 📍 Stage 4 — Extreme Lightweight Architecture ⭐ Current (Jun 2026~)
+### 📍 Stage 4 — Extreme Lightweight Architecture ⭐ Current (Jun - Jul 2026)
 
 > **Hard constraint**: Render free plan — 512MB RAM, $0/month  
 > **Core problem**: YOLO + Fashion-CLIP alone require ~3GB RAM
