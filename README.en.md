@@ -2,7 +2,7 @@
 
 > **"Similar style, better price"** — Upload one image to find visually similar fashion items and compare prices across stores instantly.
 
-**Boot camp team project (top award) → Solo refactor → $0/month, always-on service**
+**Boot camp team project (top award) → Solo refactor → $0/month, always-on service**  
 **URL : [lookalike-ml.onrender.com](https://lookalike-ml.onrender.com)**
 
 **[🇰🇷 한국어 버전 →](./README.md)**
