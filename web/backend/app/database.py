@@ -527,7 +527,29 @@ def _ensure_all_dw_tables():
                 );
             """)
 
-            # 7. brand_sequences 테이블
+            # 7. staging_product_embeddings 테이블 (pgvector)
+            try:
+                cur.execute("CREATE EXTENSION IF NOT EXISTS vector;")
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS staging_product_embeddings (
+                        product_id VARCHAR(20) PRIMARY KEY,
+                        image_vector vector(512),
+                        text_vector vector(512),
+                        brand VARCHAR(50),
+                        category VARCHAR(50),
+                        gender VARCHAR(10),
+                        image_path VARCHAR(512),
+                        create_dt TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+                    );
+                """)
+                cur.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_staging_product_embeddings_brand 
+                        ON staging_product_embeddings(brand);
+                """)
+            except Exception as vec_err:
+                logger.warning(f"staging_product_embeddings 생성 중 경고: {vec_err}")
+
+            # 8. brand_sequences 테이블
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS brand_sequences (
                     brand_name VARCHAR(50) PRIMARY KEY,
@@ -545,7 +567,8 @@ def _ensure_all_dw_tables():
                     ON pipeline_errors(created_at DESC);
             """)
 
-        logger.info("✅ DW DB 모든 필수 테이블 (pipeline_runs, pipeline_errors, staging_products, staging_naver_prices, brand_sequences, app_logs, infra_metrics) 생성/확인 완료")
+        logger.info("✅ DW DB 모든 필수 테이블 (pipeline_runs, pipeline_errors, staging_products, staging_naver_prices, staging_product_embeddings, brand_sequences, app_logs, infra_metrics) 생성/확인 완료")
+
     except Exception as e:
         logger.error(f"❌ DW DB 필수 테이블 생성 실패: {e}")
 

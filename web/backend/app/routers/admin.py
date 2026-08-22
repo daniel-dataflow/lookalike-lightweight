@@ -801,9 +801,14 @@ def get_crawling_staging():
             latest_dt = None
             hours_elapsed = 999
             pipeline_error_count = 0
+            target_count = 0
+            target_counts_map = {}
+            last_duration_sec = None
+            categories = []
             
             # (1) DW DB에서 스테이징 데이터 집계
             try:
+
                 with get_dw_cursor() as cur:
                     cur.execute(
                         "SELECT count(*) as cnt, max(create_dt) as max_dt FROM staging_products WHERE brand_name = %s;",
