@@ -199,18 +199,8 @@ def _get_system_health_raw() -> SystemHealthResponse:
         "PROD_DW_DATABASE_URL": settings.PROD_DW_DATABASE_URL,
     }
 
-    for name, url in db_urls_map.items():
-        if not url:
-            db_urls_neon_status[name] = "None"
-            continue
-        
-        # Neon DB 판단 로직: 도메인에 .neon.tech 가 포함되는지 확인
-        is_neon = "neon.tech" in url
-        db_urls_neon_status[name] = "Neon" if is_neon else "Other"
-
     # HTTP API 호출을 위한 헬퍼 정의
     # Neon DB API v2: GET https://api.neon.tech/api/v2/projects/{project_id}
-    # Response JSON에서 projects.consumption_metrics.storage_bytes 혹은 logical_size_bytes 정보 수집
     import httpx
     
     def get_neon_project_metrics(project_id: str, account_key_ref: str) -> dict:
@@ -243,7 +233,6 @@ def _get_system_health_raw() -> SystemHealthResponse:
                 size_mb = round(float(storage_bytes) / 1024 / 1024, 2) if storage_bytes is not None else 0.0
                 
                 # Compute 시간 파싱 (seconds -> CU-hours)
-                # Neon 무료 플랜은 1 CU 기준이므로 compute_time_seconds / 3600.0가 CU-hours와 동일함
                 compute_seconds = p_data.get("compute_time_seconds") or 0.0
                 compute_hours = round(float(compute_seconds) / 3600.0, 2)
                 
@@ -260,26 +249,52 @@ def _get_system_health_raw() -> SystemHealthResponse:
             logger.warning(f"Neon API 조회 실패 (project: {project_id}): {e}")
         return default_res
 
+    # 4세대: 현재 활성화된 DW DB 타겟에 따라 프로젝트 ID 동적 바인딩
+    from ..database import get_active_dw_target, get_active_dw_label, switch_to_secondary_dw, switch_to_primary_dw
+    current_dw_target = get_active_dw_target()
+
+    prod_dw_proj_id = (
+        settings.NEON_PROD_DW_PROJECT_ID_2
+        if (current_dw_target == "secondary" and settings.NEON_PROD_DW_PROJECT_ID_2)
+        else settings.NEON_PROD_DW_PROJECT_ID
+    )
+    prod_dw_api_key = (
+        settings.NEON_PROD_DW_API_KEY_2
+        if (current_dw_target == "secondary" and settings.NEON_PROD_DW_API_KEY_2)
+        else settings.NEON_PROD_DW_API_KEY
+    )
+
+    dev_dw_proj_id = (
+        settings.NEON_DEV_DW_PROJECT_ID_2
+        if (current_dw_target == "secondary" and settings.NEON_DEV_DW_PROJECT_ID_2)
+        else settings.NEON_DEV_DW_PROJECT_ID
+    )
+    dev_dw_api_key = (
+        settings.NEON_DEV_DW_API_KEY_2
+        if (current_dw_target == "secondary" and settings.NEON_DEV_DW_API_KEY_2)
+        else settings.NEON_DEV_DW_API_KEY
+    )
+
     # 각 데이터베이스 프로젝트에 매핑된 Neon DB 용량 API 및 DB 쿼리 병행 처리
-    # 맵핑 사전 빌드
     neon_projects_info = {
         "DEV_DATABASE_URL": {
             "project_id": settings.NEON_DEV_PROJECT_ID,
             "api_key_ref": settings.NEON_DEV_API_KEY
         },
         "DEV_DW_DATABASE_URL": {
-            "project_id": settings.NEON_DEV_DW_PROJECT_ID,
-            "api_key_ref": settings.NEON_DEV_DW_API_KEY
+            "project_id": dev_dw_proj_id,
+            "api_key_ref": dev_dw_api_key
         },
         "PROD_DATABASE_URL": {
             "project_id": settings.NEON_PROD_PROJECT_ID,
             "api_key_ref": settings.NEON_PROD_API_KEY
         },
         "PROD_DW_DATABASE_URL": {
-            "project_id": settings.NEON_PROD_DW_PROJECT_ID,
-            "api_key_ref": settings.NEON_PROD_DW_API_KEY
+            "project_id": prod_dw_proj_id,
+            "api_key_ref": prod_dw_api_key
         }
     }
+
 
     # 소비 정보 기본값 초기화
     db_dev_compute_hours = 0.0
