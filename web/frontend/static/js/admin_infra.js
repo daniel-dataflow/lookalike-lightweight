@@ -431,7 +431,30 @@ async function fetchDbStatus() {
         updateNeonBadge('neonProdDbBadge', neonStatus.PROD_DATABASE_URL);
         updateNeonBadge('neonProdDwDbBadge', neonStatus.PROD_DW_DATABASE_URL);
 
+        // DW DB 스위칭 상태 UI 바인딩 (DEV_DW_DB_2 또는 PROD_DW_DB_2 전환 인지 표시)
+        const isDwSecondary = data.active_dw_target === 'secondary';
+        const activeLabel = data.active_dw_label || (isDwSecondary ? 'DW_DB_2' : 'DW_DB');
+        
+        const devDwLabelEl = document.getElementById('neonDevDwDbLabel');
+        if (devDwLabelEl) {
+            if (isDwSecondary) {
+                devDwLabelEl.innerHTML = `<span class="text-warning fw-bold">${activeLabel}</span> <span class="badge bg-warning text-dark ms-1" style="font-size: 0.65rem;">DW_2 전환됨</span>`;
+            } else {
+                devDwLabelEl.textContent = 'DEV_DW_DB';
+            }
+        }
+
+        const prodDwLabelEl = document.getElementById('neonProdDwDbLabel');
+        if (prodDwLabelEl) {
+            if (isDwSecondary) {
+                prodDwLabelEl.innerHTML = `<span class="text-warning fw-bold">${activeLabel}</span> <span class="badge bg-warning text-dark ms-1" style="font-size: 0.65rem;">DW_2 전환됨</span>`;
+            } else {
+                prodDwLabelEl.textContent = 'PROD_DW_DB';
+            }
+        }
+
         const setElText = (id, text) => {
+
             const el = document.getElementById(id);
             if (el) el.textContent = text;
         };

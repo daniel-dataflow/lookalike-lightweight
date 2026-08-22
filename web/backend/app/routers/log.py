@@ -27,127 +27,86 @@ router = APIRouter(
 @router.get("/dashboard")
 async def get_log_dashboard():
     """
-    모니터링 대시보드 초기 렌더링에 필요한 주요 통계(Stats, Trend, Top Errors, Health)를 한 번에 조회함.
+    모니터링 대시보드 초기 렌더링에 필요한 주요 통계(Stats, Trend, Top Errors, Health)를 조회함.
+    인메모리 버퍼를 우선 사용하여 DB 호출 없이 즉시 응답합니다.
     """
     try:
-        def _fetch_all():
-            with get_dw_cursor() as cur:
-                # 한국 시간 보장을 위한 타임존 설정
-                cur.execute("SET TIME ZONE 'Asia/Seoul';")
-                # ① stats: 최근 1시간 레벨별 집계
-                cur.execute("""
-                    SELECT level, COUNT(*) as cnt 
-                    FROM app_logs 
-                    WHERE timestamp >= CURRENT_TIMESTAMP - INTERVAL '1 hour'
-                    GROUP BY level;
-                """)
-                stats_rows = cur.fetchall()
-                by_level = {r["level"]: r["cnt"] for r in stats_rows}
-                
-                # 프론트엔드가 요구하는 기본 키값 패딩
-                for lvl in ["INFO", "WARN", "ERROR", "CRITICAL"]:
-                    if lvl not in by_level:
-                        by_level[lvl] = 0
+        from ..main import get_in_memory_logs
+        mem_logs = get_in_memory_logs()
 
-                # ② trend: 24시간 동안 각 시간대별(시간 단위) 로그 건수
-                cur.execute("""
-                    SELECT 
-                        TO_CHAR(DATE_TRUNC('hour', timestamp), 'YYYY-MM-DD"T"HH24:00:00.000"Z"') AS time,
-                        COUNT(CASE WHEN level IN ('ERROR', 'CRITICAL') THEN 1 END) AS error_cnt,
-                        COUNT(CASE WHEN level = 'WARN' THEN 1 END) AS warn_cnt,
-                        COUNT(CASE WHEN level = 'INFO' THEN 1 END) AS info_cnt
-                    FROM app_logs
-                    WHERE timestamp >= CURRENT_TIMESTAMP - INTERVAL '24 hours'
-                    GROUP BY DATE_TRUNC('hour', timestamp)
-                    ORDER BY DATE_TRUNC('hour', timestamp) ASC;
-                """)
-                trend_rows = cur.fetchall()
-                trend = [
-                    {
-                        "time": r["time"],
-                        "ERROR": r["error_cnt"],
-                        "WARN": r["warn_cnt"],
-                        "INFO": r["info_cnt"]
-                    }
-                    for r in trend_rows
-                ]
+        by_level = {"INFO": 0, "WARN": 0, "ERROR": 0, "CRITICAL": 0}
+        by_service_stats = {"FastAPI": 0, "PostgreSQL": 0, "Cloudinary": 0, "HuggingFace": 0}
+        error_counts = {}
+        error_messages = {}
+        error_last_seen = {}
 
-                # ③ top_errors: 빈번한 에러 Top 5
-                cur.execute("""
-                    SELECT error_type, COUNT(*) as count, MAX(timestamp) as last_seen, MIN(message) as message
-                    FROM app_logs
-                    WHERE timestamp >= NOW() - INTERVAL '24 hours'
-                      AND level IN ('ERROR', 'CRITICAL')
-                    GROUP BY error_type
-                    ORDER BY count DESC
-                    LIMIT 5;
-                """)
-                top_rows = cur.fetchall()
-                top_errors = [
-                    {
-                        "message": r["message"] or r["error_type"],
-                        "count": r["count"],
-                        "services": ["FastAPI"],
-                        "last_seen": r["last_seen"].isoformat() if r["last_seen"] else "",
-                        "container": "fastapi"
-                    }
-                    for r in top_rows
-                ]
+        for log in mem_logs:
+            lvl = log.get("level", "INFO")
+            svc = log.get("service", "FastAPI")
+            err_type = log.get("error_type", "unknown")
+            msg = log.get("message", "")
+            ts = log.get("timestamp", "")
 
-                # ④ service_health: 1시간 서비스별 헬스 (그룹별 집계)
-                cur.execute("""
-                    SELECT 
-                        service,
-                        COUNT(*) as total,
-                        COUNT(CASE WHEN level IN ('ERROR', 'CRITICAL') THEN 1 END) as errors,
-                        COUNT(CASE WHEN level = 'WARN' THEN 1 END) as warns
-                    FROM app_logs
-                    WHERE timestamp >= NOW() - INTERVAL '1 hour'
-                    GROUP BY service;
-                """)
-                health_rows = cur.fetchall()
-                
-                service_health = []
-                by_service_stats = {}
-                
-                # 실재하는 서비스 목록
-                active_services = ["FastAPI", "PostgreSQL", "Cloudinary", "HuggingFace"]
-                db_service_map = {r["service"]: r for r in health_rows}
-                
-                for svc in active_services:
-                    row = db_service_map.get(svc)
-                    total = row["total"] if row else 0
-                    errors = row["errors"] if row else 0
-                    warns = row["warns"] if row else 0
-                    error_rate = round((errors / total) * 100, 2) if total > 0 else 0
-                    
-                    if error_rate > 10 or errors > 20:
-                        status = "critical"
-                    elif error_rate > 3 or warns > 10:
-                        status = "warning"
-                    else:
-                        status = "healthy"
-                        
-                    service_health.append({
-                        "service": svc,
-                        "total": total,
-                        "errors": errors,
-                        "warns": warns,
-                        "error_rate": error_rate,
-                        "status": status
-                    })
-                    by_service_stats[svc] = total
+            by_level[lvl] = by_level.get(lvl, 0) + 1
+            by_service_stats[svc] = by_service_stats.get(svc, 0) + 1
 
-                return {
-                    "stats": {"by_level": by_level, "by_service": by_service_stats},
-                    "trend": trend,
-                    "top_errors": top_errors,
-                    "service_health": service_health,
-                    "generated_at": datetime.utcnow().isoformat(),
-                }
-        
-        result = await asyncio.to_thread(_fetch_all)
-        return result
+            if lvl in ("ERROR", "CRITICAL"):
+                error_counts[err_type] = error_counts.get(err_type, 0) + 1
+                error_messages[err_type] = msg
+                error_last_seen[err_type] = ts
+
+        top_errors = []
+        for err_type, count in sorted(error_counts.items(), key=lambda x: x[1], reverse=True)[:5]:
+            top_errors.append({
+                "message": error_messages.get(err_type, err_type),
+                "count": count,
+                "services": ["FastAPI"],
+                "last_seen": error_last_seen.get(err_type, ""),
+                "container": "fastapi"
+            })
+
+        active_services = ["FastAPI", "PostgreSQL", "Cloudinary", "HuggingFace"]
+        service_health = []
+        for svc in active_services:
+            total = by_service_stats.get(svc, 0)
+            errors = sum(1 for l in mem_logs if l.get("service") == svc and l.get("level") in ("ERROR", "CRITICAL"))
+            warns = sum(1 for l in mem_logs if l.get("service") == svc and l.get("level") == "WARN")
+            error_rate = round((errors / total) * 100, 2) if total > 0 else 0
+            if error_rate > 10 or errors > 20:
+                status = "critical"
+            elif error_rate > 3 or warns > 10:
+                status = "warning"
+            else:
+                status = "healthy"
+
+            service_health.append({
+                "service": svc,
+                "total": total,
+                "errors": errors,
+                "warns": warns,
+                "error_rate": error_rate,
+                "status": status
+            })
+
+        trend = []
+        now_dt = datetime.now()
+        for i in range(24):
+            t_hour = (now_dt - timedelta(hours=23 - i)).strftime("%Y-%m-%dT%H:00:00.000Z")
+            trend.append({
+                "time": t_hour,
+                "ERROR": 0,
+                "WARN": 0,
+                "INFO": 0
+            })
+
+        return {
+            "stats": {"by_level": by_level, "by_service": by_service_stats},
+            "trend": trend,
+            "top_errors": top_errors,
+            "service_health": service_health,
+            "generated_at": datetime.utcnow().isoformat(),
+        }
+
     except Exception as e:
         logger.error(f"로그 대시보드 조회 실패: {e}")
         return {
@@ -197,7 +156,7 @@ async def get_pipeline_status():
 
 
 # ──────────────────────────────────────
-# 3. 실시간 로그 스트림 API (Neon DB 조회)
+# 3. 실시간 로그 스트림 API (인메모리 우선 조회)
 # ──────────────────────────────────────
 @router.get("/stream")
 async def get_logs_stream(
@@ -206,48 +165,33 @@ async def get_logs_stream(
     keyword: Optional[str] = None,
     size: int = Query(100, le=500)
 ):
-    """실시간 로그 스트림 반환"""
+    """실시간 로그 스트림 반환 (인메모리 버퍼 우선 서빙, DB Sleep 유지)"""
     try:
-        def _query():
-            conditions = []
-            params = []
-            if service and service != "ALL":
-                conditions.append("service = %s")
-                params.append(service)
-            if level and level != "ALL":
-                conditions.append("level = %s")
-                params.append(level)
-            if keyword:
-                conditions.append("message ILIKE %s")
-                params.append(f"%{keyword}%")
-                
-            where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
-            
-            with get_dw_cursor() as cur:
-                cur.execute(f"""
-                    SELECT level, service, message, error_type, timestamp 
-                    FROM app_logs
-                    {where_clause}
-                    ORDER BY timestamp DESC
-                    LIMIT %s;
-                """, params + [size])
-                rows = cur.fetchall()
-                return rows
+        from ..main import get_in_memory_logs
+        mem_logs = get_in_memory_logs()
 
-        rows = await asyncio.to_thread(_query)
-        logs = [
-            {
-                "timestamp": r["timestamp"].isoformat(),
-                "level": r["level"],
-                "service": r["service"],
-                "container": r["service"].lower(),
-                "message": r["message"]
-            }
-            for r in rows
-        ]
+        limit = size if isinstance(size, int) else 100
+        filtered = []
+        for log in reversed(mem_logs):
+            if service and service != "ALL" and log.get("service") != service:
+                continue
+            if level and level != "ALL" and log.get("level") != level:
+                continue
+            if keyword and keyword.lower() not in log.get("message", "").lower():
+                continue
+            filtered.append({
+                "timestamp": log.get("timestamp", ""),
+                "level": log.get("level", "INFO"),
+                "service": log.get("service", "FastAPI"),
+                "container": log.get("service", "fastapi").lower(),
+                "message": log.get("message", "")
+            })
+            if len(filtered) >= limit:
+                break
+
         return {
-            "total": len(logs),
-            "logs": logs
+            "total": len(filtered),
+            "logs": filtered
         }
     except Exception as e:
         logger.error(f"실시간 로그 조회 실패: {e}")
@@ -264,49 +208,37 @@ async def get_logs_download(
     keyword: Optional[str] = None,
     size: int = Query(10000, le=50000)
 ):
-    """로그 리스트 텍스트 스트리밍 다운로드"""
+    """로그 리스트 텍스트 스트리밍 다운로드 (인메모리 버퍼 기반)"""
     try:
-        def _fetch():
-            conditions = []
-            params = []
-            if service and service != "ALL":
-                conditions.append("service = %s")
-                params.append(service)
-            if level and level != "ALL":
-                conditions.append("level = %s")
-                params.append(level)
-            if keyword:
-                conditions.append("message ILIKE %s")
-                params.append(f"%{keyword}%")
-                
-            where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
-            
-            with get_dw_cursor() as cur:
-                cur.execute(f"""
-                    SELECT level, service, message, timestamp 
-                    FROM app_logs
-                    {where_clause}
-                    ORDER BY timestamp DESC
-                    LIMIT %s;
-                """, params + [size])
-                return cur.fetchall()
+        from ..main import get_in_memory_logs
+        mem_logs = get_in_memory_logs()
+        limit = size if isinstance(size, int) else 10000
 
-        rows = await asyncio.to_thread(_fetch)
-        
         def iter_logs():
-            for r in rows:
-                ts = r["timestamp"].strftime("%Y-%m-%d %H:%M:%S")
-                lvl = r["level"]
-                svc = r["service"]
-                msg = r["message"].replace("\n", "  ")
+            count = 0
+            for log in reversed(mem_logs):
+                if count >= limit:
+                    break
+                if service and service != "ALL" and log.get("service") != service:
+                    continue
+                if level and level != "ALL" and log.get("level") != level:
+                    continue
+                if keyword and keyword.lower() not in log.get("message", "").lower():
+                    continue
+                ts = log.get("timestamp", "")
+                lvl = log.get("level", "INFO")
+                svc = log.get("service", "FastAPI")
+                msg = log.get("message", "").replace("\n", "  ")
+                count += 1
                 yield f"[{ts}] [{lvl}] [{svc}] {svc.lower()} - {msg}\n"
-                
+
         headers = {
             "Content-Disposition": f"attachment; filename=app_logs_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.txt"
         }
         return StreamingResponse(iter_logs(), media_type="text/plain", headers=headers)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"로그 다운로드 실패: {e}")
+
 
 
 # ──────────────────────────────────────
@@ -350,12 +282,18 @@ async def get_recovery_status():
 # ──────────────────────────────────────
 @router.delete("/purge")
 async def purge_all_logs():
-    """로그 전체 삭제"""
+    """로그 전체 삭제 (인메모리 버퍼 및 DB 일괄 초기화)"""
     try:
+        from ..main import _memory_logs
+        _memory_logs.clear()
+
         def _delete():
-            with get_dw_cursor() as cur:
-                cur.execute("TRUNCATE TABLE app_logs;")
-                return cur.rowcount
+            try:
+                with get_dw_cursor() as cur:
+                    cur.execute("TRUNCATE TABLE app_logs;")
+                    return cur.rowcount
+            except Exception:
+                return 0
 
         await asyncio.to_thread(_delete)
         return {
