@@ -59,16 +59,21 @@ class Settings(BaseSettings):
     GEMINI_EMBED_MODEL: str = "text-embedding-004"
 
     # === Neon DB API 설정 ===
+    NEON_KEY_ACCOUNT: str = ""
     NEON_KEY_ACCOUNT_1: str = ""
     NEON_KEY_ACCOUNT_2: str = ""
     NEON_PROD_PROJECT_ID: str = ""
     NEON_PROD_API_KEY: str = ""
     NEON_PROD_DW_PROJECT_ID: str = ""
     NEON_PROD_DW_API_KEY: str = ""
+    NEON_PROD_DW_PROJECT_ID_2: str = ""
+    NEON_PROD_DW_API_KEY_2: str = ""
     NEON_DEV_PROJECT_ID: str = ""
     NEON_DEV_API_KEY: str = ""
     NEON_DEV_DW_PROJECT_ID: str = ""
     NEON_DEV_DW_API_KEY: str = ""
+    NEON_DEV_DW_PROJECT_ID_2: str = ""
+    NEON_DEV_DW_API_KEY_2: str = ""
 
     # === Cloudinary 이미지 저장소 ===
     CLOUDINARY_CLOUD_NAME: str = ""
@@ -78,12 +83,15 @@ class Settings(BaseSettings):
     # === Neon DB 환경별 상세 매핑 설정 ===
     PROD_DATABASE_URL: str = ""
     PROD_DW_DATABASE_URL: str = ""
+    PROD_DW_DATABASE_URL_2: str = ""
     DEV_DATABASE_URL: str = ""
     DEV_DW_DATABASE_URL: str = ""
+    DEV_DW_DATABASE_URL_2: str = ""
 
     # === DB 런타임 적용 필드 ===
     PROD_DATABASE_URL_ACTIVE: str = ""
     DW_DATABASE_URL: str = ""
+    DW_DATABASE_URL_2: str = ""
 
     # === 이미지 업로드 ===
     MAX_UPLOAD_SIZE_MB: int = 10
@@ -128,6 +136,7 @@ class Settings(BaseSettings):
         if mode in ["local", "dev"]:
             self.PROD_DATABASE_URL_ACTIVE = self.DEV_DATABASE_URL or self.DATABASE_URL
             self.DW_DATABASE_URL = self.DEV_DW_DATABASE_URL or self.DEV_DATABASE_URL or self.DATABASE_URL
+            self.DW_DATABASE_URL_2 = self.DEV_DW_DATABASE_URL_2 or self.PROD_DW_DATABASE_URL_2
             
             # Cloudinary 바인딩
             self.CLOUDINARY_FOLDER = "DEV"
@@ -137,12 +146,14 @@ class Settings(BaseSettings):
         else:
             self.PROD_DATABASE_URL_ACTIVE = self.PROD_DATABASE_URL or self.DATABASE_URL
             self.DW_DATABASE_URL = self.PROD_DW_DATABASE_URL or self.DATABASE_URL
+            self.DW_DATABASE_URL_2 = self.PROD_DW_DATABASE_URL_2
             
             # Cloudinary 바인딩
             self.CLOUDINARY_FOLDER = "PROD"
             self.CLOUDINARY_CLOUD_NAME = self.PROD_CLOUDINARY_CLOUD_NAME or self.CLOUDINARY_CLOUD_NAME
             self.CLOUDINARY_API_KEY = self.PROD_CLOUDINARY_API_KEY or self.CLOUDINARY_API_KEY
             self.CLOUDINARY_API_SECRET = self.PROD_CLOUDINARY_API_SECRET or self.CLOUDINARY_API_SECRET
+
             
         return self
 

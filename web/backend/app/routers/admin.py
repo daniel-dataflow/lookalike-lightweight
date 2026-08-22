@@ -49,7 +49,8 @@ _dashboard_cache_time: float = 0
 _DASHBOARD_CACHE_TTL = DB_CACHE_TTL
 
 _system_health_cache: Optional[SystemHealthResponse] = None
-_system_health_bg_task: Optional[asyncio.Task] = None
+_system_health_cache_time: float = 0
+_SYSTEM_HEALTH_CACHE_TTL: float = 600.0  # 10분 온디맨드 캐시
 
 CACHE_FILE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "system_health_cache.json")
 
@@ -75,26 +76,12 @@ def _load_cache_from_file() -> Optional[SystemHealthResponse]:
 
 
 def start_system_health_tracker():
-    """
-    FastAPI lifespan startup 시점에 직접 비동기 백그라운드 갱신 루프를 기동시킵니다.
-    스레드 풀 외부에서 안전하게 이벤트 루프에 태스크를 등록합니다.
-    """
-    global _system_health_bg_task
-    if _system_health_bg_task is None:
-        try:
-            loop = asyncio.get_running_loop()
-            _system_health_bg_task = loop.create_task(_update_system_health_loop())
-            logger.info("✅ 시스템 헬스 백그라운드 자동 갱신 워커 기동 완료 (10분 주기)")
-        except RuntimeError:
-            logger.warning("⚠️ asyncio 이벤트 루프가 가동 중이지 않아 백그라운드 태스크를 시작하지 못했습니다.")
+    """4세대 경량화: 상시 백그라운드 루프를 제거하고 관리자 진입 시 On-Demand 캐시로 전환 (하위 호환성 유지)"""
+    logger.info("✅ 시스템 헬스 모니터링: 4세대 온디맨드 캐싱 모드 활성화 (DB 상시 폴링 0회)")
 
 def stop_system_health_tracker():
-    """FastAPI lifespan shutdown 시점에 백그라운드 태스크를 안전하게 캔슬합니다."""
-    global _system_health_bg_task
-    if _system_health_bg_task:
-        _system_health_bg_task.cancel()
-        _system_health_bg_task = None
-        logger.info("🛑 시스템 헬스 백그라운드 자동 갱신 워커가 중지되었습니다.")
+    """하위 호환성을 위한 스텁 함수"""
+    pass
 
 
 # ──────────────────────────────────────
@@ -138,83 +125,41 @@ async def get_system_health_api():
     return _get_system_health()
 
 
-async def _update_system_health_loop():
-    """10분(600초)마다 백그라운드에서 외부 API 상태 정보를 갱신하는 루프"""
-    global _system_health_cache
-    while True:
-        try:
-            loop = asyncio.get_running_loop()
-            result = await loop.run_in_executor(None, _get_system_health_raw)
-            
-            # API 제한(Rate limit) 혹은 조회 에러가 발생한 경우, 캐시가 존재한다면 상태를 복원합니다.
-            # 단, 눈속임하지 않고 실제 수집된 상태('rate_limited' 또는 'error')는 명확히 유지합니다.
-            cached_stale = _system_health_cache or _load_cache_from_file()
-            if cached_stale:
-                # 1. Cloudinary 지표 복원
-                if result.cloudinary_status in ("rate_limited", "error"):
-                    result.cloudinary_usage_bytes = cached_stale.cloudinary_usage_bytes
-                    result.cloudinary_bandwidth_usage_bytes = cached_stale.cloudinary_bandwidth_usage_bytes
-                    result.cloudinary_bandwidth_limit_bytes = cached_stale.cloudinary_bandwidth_limit_bytes
-                    result.cloudinary_bandwidth_percent = cached_stale.cloudinary_bandwidth_percent
-                    result.cloudinary_credits_usage = cached_stale.cloudinary_credits_usage
-                    result.cloudinary_credits_limit = cached_stale.cloudinary_credits_limit
-                    result.cloudinary_credits_percent = cached_stale.cloudinary_credits_percent
-                    result.cloudinary_resources_count = cached_stale.cloudinary_resources_count
-                    result.cloudinary_transformations_usage = cached_stale.cloudinary_transformations_usage
-                    logger.info(f"⚠️ Cloudinary API 조회 실패({result.cloudinary_status})로 인해 이전 캐시 지표를 보존 표시합니다.")
-                
-                # 2. HuggingFace Space 지표 복원
-                if result.hf_status in ("error", "offline") or not result.hf_runtime_stage or result.hf_runtime_stage == "unknown":
-                    result.hf_status = cached_stale.hf_status
-                    result.hf_model_status = cached_stale.hf_model_status
-                    result.hf_latency_ms = cached_stale.hf_latency_ms
-                    result.hf_used_storage_bytes = cached_stale.hf_used_storage_bytes
-                    result.hf_storage_limit_bytes = cached_stale.hf_storage_limit_bytes
-                    result.hf_hardware = cached_stale.hf_hardware
-                    result.hf_runtime_stage = cached_stale.hf_runtime_stage
-                    result.hf_cpu_usage_pct = cached_stale.hf_cpu_usage_pct
-                    result.hf_mem_used_mb = cached_stale.hf_mem_used_mb
-                    result.hf_mem_total_gb = cached_stale.hf_mem_total_gb
-                
-            _system_health_cache = result
-            
-            # 수집된 최신 정보를 로컬 캐시 파일에 갱신 저장
-            _save_cache_to_file(result)
-                
-        except asyncio.CancelledError:
-            logger.info("🛑 시스템 헬스 백그라운드 자동 갱신 워커 루프 종료")
-            break
-        except Exception as e:
-            logger.error(f"백그라운드 시스템 상태 갱신 실패: {e}")
-        
-        # 10분(600초) 대기
-        await asyncio.sleep(600)
-
-
 def _get_system_health() -> SystemHealthResponse:
     """
-    메모리 또는 로컬 파일의 캐시를 즉시 리턴하여 동기 API 호출로 인한 대기 시간을 0ms로 줄입니다.
-    외부 API 호출은 오직 lifespan에 기동되는 백그라운드 루프에서만 수행되므로,
-    Uvicorn 리로드 시에도 캐시 Stampede나 동기 딜레이가 전혀 발생하지 않습니다.
+    관리자가 어드민 페이지에 접근할 때만 온디맨드로 계산하고,
+    10분(600초) 동안 인메모리 캐시를 유지하여 중복 DB 쿼리를 방지합니다.
     """
-    global _system_health_cache
-    
-    # 1. 메모리 캐시가 날아갔다면 우선 로컬 파일 캐시로부터의 복원 시도
-    if _system_health_cache is None:
-        _system_health_cache = _load_cache_from_file()
-        
-    # 2. 만약 최초 서버 구동 시점에 파일 캐시도 존재하지 않는 극단적 케이스의 경우,
-    #    사용자 대기 방지를 위해 기본 형태의 빈 응답 객체(unknown 상태)를 반환하고
-    #    백그라운드에서 바로 갱신되도록 유도합니다. (즉, 동기 호출로 블로킹하지 않음)
-    if _system_health_cache is None:
-        _system_health_cache = SystemHealthResponse(
+    global _system_health_cache, _system_health_cache_time
+    now = time.time()
+
+    # 1. 10분 이내 캐시가 유효한 경우 즉시 반환
+    if _system_health_cache is not None and (now - _system_health_cache_time < _SYSTEM_HEALTH_CACHE_TTL):
+        return _system_health_cache
+
+    # 2. 캐시 만료 시 온디맨드 수집 실행
+    try:
+        result = _get_system_health_raw()
+        _system_health_cache = result
+        _system_health_cache_time = now
+        _save_cache_to_file(result)
+        return result
+    except Exception as e:
+        logger.error(f"온디맨드 시스템 상태 수집 실패: {e}")
+        if _system_health_cache is not None:
+            return _system_health_cache
+        loaded = _load_cache_from_file()
+        if loaded:
+            _system_health_cache = loaded
+            _system_health_cache_time = now
+            return loaded
+        return SystemHealthResponse(
             server_status="healthy",
             db_status="unknown",
             cloudinary_status="unknown",
             hf_status="unknown"
         )
 
-    return _system_health_cache
 
 
 def _get_system_health_raw() -> SystemHealthResponse:
@@ -424,7 +369,34 @@ def _get_system_health_raw() -> SystemHealthResponse:
     db_dev_total_size_mb = round(db_dev_size_mb + db_dev_dw_size_mb, 2)
     db_prod_total_size_mb = round(db_prod_size_mb + db_prod_dw_size_mb, 2)
 
+    # 1-2. DW 한도 90% 도달 여부 체크 및 보조 DW 자동 페일오버 / 자동 원복(Failback)
+    from ..database import get_active_dw_target, get_active_dw_label, switch_to_secondary_dw, switch_to_primary_dw
+
+    current_dw_target = get_active_dw_target()
+    is_dev_env = settings.APP_ENV.lower() in ["local", "dev"]
+    dw_compute = db_dev_dw_compute_hours if is_dev_env else db_prod_dw_compute_hours
+    dw_network = db_dev_dw_network_gb if is_dev_env else db_prod_dw_network_gb
+    has_secondary = bool(settings.DW_DATABASE_URL_2 or settings.PROD_DW_DATABASE_URL_2 or settings.DEV_DW_DATABASE_URL_2)
+
+    if current_dw_target == "primary":
+        if (dw_compute >= 90.0 or dw_network >= 4.5) and has_secondary:
+            try:
+                switch_to_secondary_dw(
+                    f"DW 사용량 임계치(90%) 도달 (Compute: {dw_compute} CU-hrs / 100, Network: {dw_network} GB / 5)"
+                )
+            except Exception as sw_err:
+                logger.warning(f"보조 DW 스위칭 시도 실패: {sw_err}")
+    elif current_dw_target == "secondary":
+        # 월초 사용량 리셋 등으로 1번 DW 사용량이 80% 미만으로 정상화되면 1번으로 자동 원복 (Failback)
+        dw_url_key = "DEV_DW_DATABASE_URL" if is_dev_env else "PROD_DW_DATABASE_URL"
+        if dw_compute < 80.0 and dw_network < 4.0 and db_urls_neon_status.get(dw_url_key) != "Error":
+            try:
+                switch_to_primary_dw("Primary DW 사용량 정상화(월초 리셋/복구 감지)")
+            except Exception as fb_err:
+                logger.warning(f"Primary DW 자동 원복 시도 실패: {fb_err}")
+
     # 2. Cloudinary 정보 조회
+
     cloudinary_status = "healthy"
     cloudinary_usage_bytes = 0
     cloudinary_bandwidth_usage_bytes = 0
@@ -562,6 +534,8 @@ def _get_system_health_raw() -> SystemHealthResponse:
         db_prod_network_gb=db_prod_network_gb,
         db_prod_dw_compute_hours=db_prod_dw_compute_hours,
         db_prod_dw_network_gb=db_prod_dw_network_gb,
+        active_dw_target=get_active_dw_target(),
+        active_dw_label=get_active_dw_label(),
         cloudinary_status=cloudinary_status,
         cloudinary_usage_bytes=cloudinary_usage_bytes,
         cloudinary_limit_bytes=25 * 1024 * 1024 * 1024, # 25 GB

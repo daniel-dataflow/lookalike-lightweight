@@ -70,36 +70,120 @@ def init_postgres():
         ProdSessionLocal = None
 
     # 2. DW DB 초기화
-    try:
+    init_dw_postgres()
+
+
+_active_dw_target = "primary"  # "primary" | "secondary"
+
+
+def _build_engine_from_url(url: str, name: str = "DW"):
+    settings = get_settings()
+    if url.startswith("postgres://"):
+        url = url.replace("postgres://", "postgresql://", 1)
+
+    connect_args = {}
+    from urllib.parse import urlparse
+    parsed = urlparse(url)
+    hostname = parsed.hostname or ""
+    is_local = any(host in hostname for host in ["localhost", "127.0.0.1", "db", "postgres"])
+    if not is_local:
+        connect_args["sslmode"] = "require"
+        logger.info(f"🔒 원격 {name} 데이터베이스 연결 - sslmode=require 강제 적용")
+
+    return create_engine(
+        url,
+        pool_size=settings.POSTGRES_MIN_CONN,
+        max_overflow=max(0, settings.POSTGRES_MAX_CONN - settings.POSTGRES_MIN_CONN),
+        connect_args=connect_args,
+        pool_pre_ping=True
+    )
+
+
+def init_dw_postgres(target: str = "primary"):
+    """DW DB SQLAlchemy 엔진 및 커넥션 풀 초기화 (primary 또는 secondary 대상)"""
+    global dw_engine, DwSessionLocal, _active_dw_target
+    settings = get_settings()
+
+    secondary_url = settings.DW_DATABASE_URL_2 or settings.PROD_DW_DATABASE_URL_2 or settings.DEV_DW_DATABASE_URL_2
+
+    if target == "secondary" and secondary_url:
+        dw_url = secondary_url
+        target_name = "Secondary DW_2"
+    else:
         dw_url = settings.DW_DATABASE_URL or settings.DATABASE_URL
+        target_name = "Primary DW"
+
+    try:
         if not dw_url:
-            raise ValueError("DW_DATABASE_URL이 설정되지 않았습니다.")
+            raise ValueError(f"{target_name} URL이 설정되지 않았습니다.")
 
-        if dw_url.startswith("postgres://"):
-            dw_url = dw_url.replace("postgres://", "postgresql://", 1)
-
-        connect_args = {}
-        from urllib.parse import urlparse
-        parsed = urlparse(dw_url)
-        hostname = parsed.hostname or ""
-        is_local = any(host in hostname for host in ["localhost", "127.0.0.1", "db", "postgres"])
-        if not is_local:
-            connect_args["sslmode"] = "require"
-            logger.info("🔒 원격 DW 데이터베이스 연결 - sslmode=require 강제 적용")
-
-        dw_engine = create_engine(
-            dw_url,
-            pool_size=settings.POSTGRES_MIN_CONN,
-            max_overflow=max(0, settings.POSTGRES_MAX_CONN - settings.POSTGRES_MIN_CONN),
-            connect_args=connect_args,
-            pool_pre_ping=True
-        )
+        dw_engine = _build_engine_from_url(dw_url, target_name)
         DwSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=dw_engine)
-        logger.info("✅ PostgreSQL DW DB SQLAlchemy 엔진 및 커넥션 풀 초기화 완료")
+        _active_dw_target = target
+        logger.info(f"✅ PostgreSQL {target_name} DB SQLAlchemy 엔진 및 커넥션 풀 초기화 완료")
+        # 전환된 대상 DB의 필수 테이블 스키마 DDL 보장
+        _ensure_infra_metrics_table()
+        _ensure_app_logs_table()
     except Exception as e:
-        logger.error(f"❌ PostgreSQL DW DB 연결 실패: {e}")
-        dw_engine = None
-        DwSessionLocal = None
+        logger.error(f"❌ PostgreSQL {target_name} DB 연결 실패: {e}")
+        # 만약 Primary 초기화 실패 시 Secondary가 있다면 즉시 페일오버 시도
+        if target == "primary" and secondary_url:
+            logger.warning(f"⚠️ Primary DW DB 초기화 실패로 인해 보조 DW DB({secondary_url[:20]}...)로 즉시 페일오버를 시도합니다.")
+            init_dw_postgres("secondary")
+        else:
+            dw_engine = None
+            DwSessionLocal = None
+
+
+def get_active_dw_target() -> str:
+    """현재 활성화된 DW DB 타겟 반환 ('primary' | 'secondary')"""
+    return _active_dw_target
+
+
+def get_active_dw_label() -> str:
+    """현재 활성화된 DW DB의 UI 표기 라벨 반환 (예: DEV_DW_DB vs DEV_DW_DB_2)"""
+    settings = get_settings()
+    mode = settings.APP_ENV.lower()
+    prefix = "DEV_DW_DB" if mode in ["local", "dev"] else "PROD_DW_DB"
+    if _active_dw_target == "secondary":
+        return f"{prefix}_2"
+    return prefix
+
+
+def switch_to_secondary_dw(reason: str = "한도 도달 또는 연결 실패") -> bool:
+    """
+    운영 중 Primary DW DB에 장애(한도 90% 도달, 연결 실패 등)가 감지되었을 때
+    Secondary DW DB(DW_DATABASE_URL_2)로 런타임 스위칭
+    """
+    global _active_dw_target
+    settings = get_settings()
+    secondary_url = settings.DW_DATABASE_URL_2 or settings.PROD_DW_DATABASE_URL_2 or settings.DEV_DW_DATABASE_URL_2
+    if not secondary_url:
+        logger.warning("⚠️ 보조 DW DB(DW_DATABASE_URL_2)가 설정되어 있지 않아 보조 DW 스위칭을 수행할 수 없습니다.")
+        return False
+
+    if _active_dw_target == "secondary":
+        return True
+
+    logger.warning(f"🚨 [DW Failover] {reason} 사유로 보조 DW DB로 자동 스위칭합니다.")
+    init_dw_postgres("secondary")
+    logger.info(f"✅ 보조 DW DB({get_active_dw_label()}) 전환 완료")
+    return _active_dw_target == "secondary"
+
+
+
+def switch_to_primary_dw(reason: str = "Primary DW 복구 완료") -> bool:
+    """
+    월초 리셋이나 1번 DW 복구로 사용량이 정상화되었을 때 1번 DW DB로 런타임 자동 복귀 (Failback)
+    """
+    global _active_dw_target
+    if _active_dw_target == "primary":
+        return True
+
+    logger.info(f"🔄 [DW Failback] {reason} 사유로 1번 원본 DW DB로 자동 복귀(Failback)합니다.")
+    init_dw_postgres("primary")
+    return _active_dw_target == "primary"
+
 
 
 @contextmanager
@@ -135,15 +219,30 @@ def get_prod_cursor(dict_cursor=True):
 
 @contextmanager
 def get_dw_connection():
-    """SQLAlchemy 커넥션 풀에서 raw connection을 획득하여 컨텍스트 매니저로 제공 (DW DB)"""
-    if dw_engine is None:
-        # Fallback to PROD engine if DW DB not separately configured
+    """
+    SQLAlchemy 커넥션 풀에서 raw connection을 획득하여 컨텍스트 매니저로 제공 (DW DB)
+    Primary DW 연결 실패 시 PROD_DW_DATABASE_URL_2로 자동 페일오버 수행
+    """
+    global dw_engine
+    settings = get_settings()
+
+    conn = None
+    if dw_engine is not None:
+        try:
+            conn = dw_engine.raw_connection()
+        except Exception as conn_err:
+            logger.warning(f"⚠️ 현재 DW DB 커넥션 획득 실패 ({conn_err}). 페일오버를 시도합니다.")
+            if _active_dw_target != "secondary" and settings.PROD_DW_DATABASE_URL_2:
+                if switch_to_secondary_dw(f"커넥션 획득 에러: {conn_err}") and dw_engine is not None:
+                    conn = dw_engine.raw_connection()
+
+    if conn is None:
+        # Fallback to PROD engine if DW DB not separately configured or failed
         if prod_engine is not None:
             conn = prod_engine.raw_connection()
         else:
             raise ConnectionError("DW DB 및 PROD DB SQLAlchemy 엔진이 모두 초기화되지 않았습니다")
-    else:
-        conn = dw_engine.raw_connection()
+
     # 세션 타임존을 서울(KST)로 강제 설정
     with conn.cursor() as cur:
         cur.execute("SET TIME ZONE 'Asia/Seoul';")
@@ -172,6 +271,7 @@ def get_dw_cursor(dict_cursor=True):
 # 하위 호환성을 위해 get_pg_connection 및 get_pg_cursor 및 engine을 별칭으로 제공합니다.
 get_pg_connection = get_prod_connection
 get_pg_cursor = get_prod_cursor
+
 
 # engine 및 SessionLocal 하위 호환성 (main.py, auto_recovery.py 등 레거시 대응)
 def get_engine():

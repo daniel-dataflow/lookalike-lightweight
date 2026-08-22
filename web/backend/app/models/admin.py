@@ -96,6 +96,10 @@ class SystemHealthResponse(BaseModel):
     db_prod_dw_compute_hours: Optional[float] = 0.0
     db_prod_dw_network_gb: Optional[float] = 0.0
 
+    # 현재 활성화된 DW DB 타겟 ("primary" | "secondary") 및 UI 표기 라벨
+    active_dw_target: str = "primary"
+    active_dw_label: str = "DEV_DW_DB"
+
     # Cloudinary 이미지 저장소 정보
     cloudinary_status: str = "unknown"
     cloudinary_usage_bytes: int = 0

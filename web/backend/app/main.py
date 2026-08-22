@@ -24,14 +24,22 @@ from .routers.metric_realtime import router as metric_realtime_router
 from .routers.admin_error import router as admin_error_router
 
 # ──────────────────────────────────────
-# NeonLogHandler 구현 및 로깅 설정
+# NeonLogHandler 구현 및 인메모리 로깅 설정 (4세대 Zero-Compute)
 # ──────────────────────────────────────
-import traceback
+from collections import deque
+from datetime import timezone, timedelta, datetime
+
+KST = timezone(timedelta(hours=9))
+_memory_logs = deque(maxlen=200)
+
+def get_in_memory_logs():
+    """인메모리에 적재된 최근 에러 로그 목록 반환"""
+    return list(_memory_logs)
 
 class NeonLogHandler(logging.Handler):
     """
-    FastAPI 에러 로그(WARN 이상)를 Neon PostgreSQL의 app_logs 테이블에 실시간 기록하는 핸들러.
-    동시에 24시간 초과 로그는 즉각 파기하여 DB 용량을 안전하게 보호함.
+    FastAPI 에러 로그(WARN 이상)를 Python 메모리 링 버퍼에 기록하는 4세대 초경량 핸들러.
+    (DB 직접 INSERT를 제거하여 Neon DB Sleep 상태를 100% 보존하며, 심각한 예외는 Sentry가 클라우드에 영구 보존)
     """
     def __init__(self, level=logging.WARN):
         super().__init__(level)
@@ -76,17 +84,20 @@ class NeonLogHandler(logging.Handler):
                 svc_name = "HuggingFace"
 
             level_str = record.levelname
+            now_kst = datetime.now(KST)
 
-            # Neon PostgreSQL DW DB에 로그 삽입 (24시간 주기 삭제는 백그라운드 태스크로 이관)
-            from .database import get_dw_cursor, dw_engine
-            if dw_engine is not None:
-                with get_dw_cursor() as cur:
-                    cur.execute(
-                        "INSERT INTO app_logs (level, service, message, error_type) VALUES (%s, %s, %s, %s);",
-                        (level_str, svc_name, msg, err_type)
-                    )
-        except Exception as e:
-            # 로깅 자체 예외는 재귀 호출 방지를 위해 무시
+            log_entry = {
+                "id": len(_memory_logs) + 1,
+                "level": level_str,
+                "service": svc_name,
+                "message": msg,
+                "error_type": err_type,
+                "timestamp": now_kst.isoformat(),
+                "created_at": now_kst
+            }
+            _memory_logs.append(log_entry)
+        except Exception:
+            # 로깅 자체 예외는 무시
             pass
 
 # 기본 로깅 설정
@@ -108,7 +119,7 @@ try:
         target_logger.addHandler(neon_handler)
         target_logger.propagate = True
     
-    logger.info("✅ NeonLogHandler가 루트 및 Uvicorn/FastAPI 로거에 성공적으로 추가되었습니다.")
+    logger.info("✅ NeonLogHandler(인메모리 모드)가 루트 및 Uvicorn/FastAPI 로거에 성공적으로 추가되었습니다.")
 except Exception as e:
     logger.warning(f"NeonLogHandler 등록 실패: {e}")
 
@@ -163,63 +174,21 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"세션 정리 실패: {e}")
 
-    # 5분 주기 인프라 메트릭 수집 백그라운드 태스크 기동
+    # 5분 주기 인프라 메트릭 수집 백그라운드 태스크 기동 (인메모리 버퍼링, DB 쿼리 0회)
     collector_task = asyncio.create_task(start_metric_collector())
-    logger.info("📊 인프라 메트릭 수집 태스크 시작")
+    logger.info("📊 인프라 메트릭 인메모리 수집 태스크 시작")
 
-    # 시스템 헬스 모니터링 백그라운드 태스크 기동 (10분 주기)
-    from .routers.admin import start_system_health_tracker, stop_system_health_tracker
-    start_system_health_tracker()
-
-    # (로컬 ML 웜업 태스크 삭제됨)
-
-    # HF Space Keep-Alive 백그라운드 태스크 기동
-    # ─────────────────────────────────────────────────
-    # HF Space 무료 플랜: 15분 비활동 시 절전 → 재기동에 30초~1분 소요
-    # 단순 HTTP GET(웹 페이지)으로는 모델이 깨어나지 않음
-    # → 실제 Gradio /predict API를 더미 이미지로 호출해야 웜 상태 유지
+    # HF Space Keep-Alive 백그라운드 태스크 기동 (9분 간격)
     hf_keepalive_task = asyncio.create_task(_hf_space_keepalive_loop())
     logger.info("🔥 HF Space Keep-Alive 태스크 시작 (9분 간격)")
-
-    # 24시간 주기 에러 로그 정리 백그라운드 태스크 기동
-    cleanup_task = asyncio.create_task(_log_cleanup_loop())
-    logger.info("🧹 에러 로그 정리 백그라운드 태스크 시작 (24시간 간격)")
 
     yield
 
     logger.info("앱 종료 - 데이터베이스 연결 해제")
     collector_task.cancel()
     hf_keepalive_task.cancel()
-    cleanup_task.cancel()
-    stop_system_health_tracker()
     close_all_databases()
 
-
-async def _log_cleanup_loop():
-    """
-    24시간 간격으로 24시간이 경과된 에러 로그를 정리하는 백그라운드 루프.
-    에러가 대량 발생해도 디비 호출 횟수를 최소화하여 컴퓨트 아워를 절약합니다.
-    """
-    # 최초 기동 시 30초 대기 후 최초 1회 정리 (서버 완전 기동 후)
-    await asyncio.sleep(30)
-    while True:
-        try:
-            logger.info("🧹 [Cleanup] 24시간 만료된 에러 로그 정리 작업을 시작합니다.")
-            from .database import get_dw_cursor
-            with get_dw_cursor() as cur:
-                cur.execute(
-                    "DELETE FROM app_logs WHERE timestamp < NOW() - INTERVAL '24 hours';"
-                )
-                deleted = cur.rowcount
-                logger.info(f"✅ [Cleanup] 24시간 만료 로그 {deleted}건 정리 완료")
-        except asyncio.CancelledError:
-            logger.info("🛑 [Cleanup] 로그 정리 태스크 종료")
-            break
-        except Exception as e:
-            logger.warning(f"⚠️ [Cleanup] 로그 정리 실패 (무시): {e}")
-
-        # 24시간 대기
-        await asyncio.sleep(24 * 60 * 60)
 
 
 async def _hf_space_keepalive_loop():

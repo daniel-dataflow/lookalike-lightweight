@@ -334,8 +334,11 @@ web/backend/app/main.py
 * **12차 고도화: 프론트엔드 리소스 삼단 분리 및 동일 파일명 1:1 매핑 표준화 (2026-07-03)**
   * **HTML/CSS/JS 삼단 완전 모듈화**: 주요 8개 활성 화면의 인라인 스타일과 스크립트 코드를 모두 걷어내고, 동일한 베이스 파일명을 지닌 외부 독립 CSS/JS 정적 파일 구조로 정돈하였습니다.
   * **Jinja2 템플릿 변수 캡슐화**: 외부 스크립트의 Jinja2 문법 에러를 회피하기 위하여 HTML 루트 컨테이너에 `data-*` 속성으로 데이터 바인딩 우회 아키텍처를 도입했습니다.
-  * **정적 자원 캐시 갱신 전략**: 브라우저 캐싱 오작동을 차단하기 위하여 파일 링킹 부에 난수 기반의 캐시 버스터 파라미터(`?v={{ range(...) }}`)를 전면 적용했습니다.
-  * **공통 리소스(`common.js`) 중복 통합 및 충돌 제어**: `common.js` 에 혼재해 전역 오작동을 유발하던 `teams` 탭 전환 및 파티클 애니메이션 로직을 전용 스크립트로 분리 이관하고, `togglePassword` 유틸 함수를 방어 코드가 포함된 형태로 통폐합했습니다.
-  * **상세 가이드 연동**: 상세한 렌더링 규격 및 소스 관리 표준은 [crawling.md](file:///d:/dev/lookalike-lightweight/docs/renewal/crawling.md#L137-L200) 에 정리했습니다.
+* **13차 최적화: 4세대 절전 친화적(Zero-Compute Idle) 아키텍처 및 Neon DW 자동 페일오버 (2026-08-22)**
+  * **백그라운드 DB 쿼리 제거 및 인메모리 링 버퍼 전환**: 5분 주기 메트릭 수집 및 실시간 에러 로깅으로 인해 Neon DB가 24시간 깨어있던 문제를 해결하기 위해, 메트릭을 `collections.deque(maxlen=12)` 메모리에만 저장하고 DB Write를 전면 차단하여 유휴 시간대 0 CU(절전)를 달성했습니다.
+  * **어드민 온디맨드 헬스체크**: 10분 주기 상시 백그라운드 DB 호출 루프를 제거하고, 관리자가 어드민에 접속할 때만 On-Demand로 상태를 조회하며 10분 인메모리 TTL 캐시를 적용했습니다.
+  * **DW DB 듀얼 계정 및 자동 페일오버**: `PROD_DW_DATABASE_URL`이 한도에 도달(Compute/Network 90% 이상)하거나 차단/연결 실패 시, 설정된 보조 DW DB(`PROD_DW_DATABASE_URL_2`)로 런타임에 무중단 자동 스위칭되도록 구현했습니다.
+  * **상세 가이드 연동**: 상세한 장애 분석 및 아키텍처 사양은 [neon_compute_optimization.md](file:///home/daniel/dev/lookalike-lightweight/docs/renewal/neon_compute_optimization.md) 에 정리했습니다.
+
 
 
